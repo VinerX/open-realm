@@ -2,6 +2,9 @@
 
 #include "mpq.h"
 #include "test.h"
+#ifdef WC3
+#include "games/warcraft-3/common/fs_casc.h"
+#endif
 #include <errno.h>
 #include <stdlib.h>
 #include <time.h>
@@ -81,6 +84,11 @@ static handle_t archives[MAX_ARCHIVES] = { 0 };
 static PATHSTR archiveNames[MAX_ARCHIVES];
 static PATHSTR gameDirs[MAX_GAME_DIRS];
 static handle_t priority_archive; /* optional session overlay; searched before archives[] */
+#ifdef WC3
+#define MAX_CASC_STORAGES MAX_GAME_DIRS
+static fsCascStorage_t *cascStorages[MAX_CASC_STORAGES];
+static PATHSTR cascStorageRoots[MAX_CASC_STORAGES];
+#endif
 
 typedef struct {
     handle_t handle;
@@ -88,13 +96,20 @@ typedef struct {
 
 typedef enum {
     FS_FILE_MPQ,
+#ifdef WC3
+    FS_FILE_CASC,
+#endif
 } fsFileBackend_t;
 
 typedef struct {
     fsFileBackend_t backend;
     union {
         fsMpqFile_t mpq;
+#ifdef WC3
+        fsCascFile_t *casc;
+#endif
     } source;
+    PATHSTR name;
 } fsFile_t;
 
 typedef void (*fsDiskEntryFunc_t)(cstring_t name, cstring_t path, bool isDirectory, bool isFile, void *userData);
@@ -735,6 +750,10 @@ typedef struct {
     PATHSTR *paths;
     uint32_t maxPaths;
     uint32_t count;
+#ifdef WC3
+    bool cascRoot;
+    PATHSTR root;
+#endif
 } fsArchiveScan_t;
 
 static void FS_AddArchiveScanDirectoryEntry(cstring_t name,
@@ -780,19 +799,63 @@ static void FS_AddArchiveScanDirectoryEntry(cstring_t name,
     (void)name;
     (void)isFile;
     if (isDirectory) {
+#ifdef WC3
+        fsArchiveScan_t *scan = userData;
+        if (scan && scan->cascRoot) {
+            PATHSTR root_entry;
+            FS_MakeDiskPath(scan->root, name, root_entry, sizeof(root_entry));
+            if (!strcasecmp(path, root_entry) &&
+                (!strcasecmp(name, "Data") || !strcasecmp(name, ".battle.net") ||
+                 !strcasecmp(name, "_retail_"))) return;
+        }
+#endif
         FS_AddArchiveScanDirectory(path, userData);
     }
 }
 
+#ifdef WC3
+static bool FS_IsCascStorageRoot(cstring_t dirname) {
+    PATHSTR build_info;
+    FS_MakeDiskPath(dirname, ".build.info", build_info, sizeof(build_info));
+    return FS_FileOnDiskExists(build_info);
+}
+
+static bool FS_AddCascStorage(cstring_t root, cstring_t product) {
+    int free_slot = -1;
+    FOR_LOOP(i, MAX_CASC_STORAGES) {
+        if (cascStorages[i] && !strcasecmp(cascStorageRoots[i], root)) return true;
+        if (!cascStorages[i] && free_slot < 0) free_slot = (int)i;
+    }
+    if (free_slot < 0) {
+        fprintf(stderr, "FS_AddDataDirectory: CASC storage limit reached for %s (%s)\n",
+                root, product);
+        return false;
+    }
+    if (!FS_CascOpenStorage(root, product, &cascStorages[free_slot])) {
+        fprintf(stderr, "FS_AddDataDirectory: can't open CASC storage %s product %s (error 0x%08x)\n",
+                root, product, (unsigned)FS_CascLastError());
+        return false;
+    }
+    snprintf(cascStorageRoots[free_slot], sizeof(PATHSTR), "%s", root);
+    fprintf(stderr, "Added CASC storage '%s' product '%s'.\n", root, product);
+    return true;
+}
+#endif
+
 bool FS_AddDataDirectory(cstring_t dirname) {
     PATHSTR archivePaths[MAX_ARCHIVES];
-    fsArchiveScan_t scan = { archivePaths, MAX_ARCHIVES, 0 };
+    fsArchiveScan_t scan = { .paths = archivePaths, .maxPaths = MAX_ARCHIVES };
     uint32_t mountedCount = 0;
 
     if (!FS_DirectoryExists(dirname)) {
         return false;
     }
 
+#ifdef WC3
+    scan.cascRoot = FS_IsCascStorageRoot(dirname);
+    if (scan.cascRoot && !FS_AddCascStorage(dirname, "w3")) return false;
+    if (scan.cascRoot) snprintf(scan.root, sizeof(scan.root), "%s", dirname);
+#endif
     FS_AddGameDirectory(dirname);
     FS_AddArchiveScanDirectory(dirname, &scan);
 
@@ -964,7 +1027,7 @@ static void FS_FindCollectLooseDir(fsFind_t *find, cstring_t root, cstring_t rel
 
 static handle_t FS_OpenNestedLooseFile(cstring_t filename);
 
-static handle_t FS_WrapMpqFile(handle_t mpq_file) {
+static handle_t FS_WrapMpqFile(handle_t mpq_file, cstring_t name) {
     fsFile_t *file;
     if (!mpq_file) return NULL;
     file = MemAlloc(sizeof(*file));
@@ -975,8 +1038,27 @@ static handle_t FS_WrapMpqFile(handle_t mpq_file) {
     }
     file->backend = FS_FILE_MPQ;
     file->source.mpq.handle = mpq_file;
+    snprintf(file->name, sizeof(file->name), "%s", name ? name : "");
     return file;
 }
+
+#ifdef WC3
+static handle_t FS_WrapCascFile(fsCascFile_t *casc_file, cstring_t name) {
+    fsFile_t *file;
+    if (!casc_file) return NULL;
+    file = MemAlloc(sizeof(*file));
+    if (!file) {
+        FS_CascCloseFile(casc_file);
+        filelock = false;
+        return NULL;
+    }
+    memset(file, 0, sizeof(*file));
+    file->backend = FS_FILE_CASC;
+    file->source.casc = casc_file;
+    snprintf(file->name, sizeof(file->name), "%s", name ? name : "");
+    return file;
+}
+#endif
 
 handle_t FS_OpenFile(cstring_t fileName) {
     while (filelock) {
@@ -990,7 +1072,7 @@ handle_t FS_OpenFile(cstring_t fileName) {
     if (priority_archive) {
         handle_t file;
         if (SFileOpenFileEx(priority_archive, fileName, SFILE_OPEN_FROM_MPQ, &file))
-            return FS_WrapMpqFile(file);
+            return FS_WrapMpqFile(file, fileName);
     }
     for (int i = MAX_ARCHIVES - 1; i >= 0; i--) {
         handle_t file;
@@ -1000,12 +1082,19 @@ handle_t FS_OpenFile(cstring_t fileName) {
         if (!FS_ArchiveFileVisible(archiveNames[i], fileName))
             continue;
         if (SFileOpenFileEx(archives[i], fileName, SFILE_OPEN_FROM_MPQ, &file)) {
-            return FS_WrapMpqFile(file);
+            return FS_WrapMpqFile(file, fileName);
         }
     }
+#ifdef WC3
+    for (int i = MAX_CASC_STORAGES - 1; i >= 0; i--) {
+        fsCascFile_t *file = NULL;
+        if (!cascStorages[i] || !FS_CascOpenFile(cascStorages[i], fileName, &file)) continue;
+        return FS_WrapCascFile(file, fileName);
+    }
+#endif
     handle_t looseNestedFile = FS_OpenNestedLooseFile(fileName);
     if (looseNestedFile) {
-        return FS_WrapMpqFile(looseNestedFile);
+        return FS_WrapMpqFile(looseNestedFile, fileName);
     }
     filelock = false;
     return NULL;
@@ -1139,6 +1228,11 @@ void FS_CloseFile(handle_t file) {
             case FS_FILE_MPQ:
                 SFileCloseFile(vfs_file->source.mpq.handle);
                 break;
+#ifdef WC3
+            case FS_FILE_CASC:
+                FS_CascCloseFile(vfs_file->source.casc);
+                break;
+#endif
         }
         MemFree(vfs_file);
     }
@@ -1154,6 +1248,13 @@ bool FS_ReadFileHandle(handle_t file, void *buffer, uint32_t length, uint32_t *b
         case FS_FILE_MPQ:
             ok = SFileReadFile(vfs_file->source.mpq.handle, buffer, length, &read, NULL);
             break;
+#ifdef WC3
+        case FS_FILE_CASC:
+            ok = FS_CascRead(vfs_file->source.casc, buffer, length, &read);
+            if (!ok) fprintf(stderr, "FS_ReadFileHandle: CASC read failed for %s (error 0x%08x)\n",
+                             vfs_file->name, (unsigned)FS_CascLastError());
+            break;
+#endif
         default:
             return false;
     }
@@ -1171,6 +1272,14 @@ bool FS_SetFilePointer(handle_t file, int64_t distance, uint32_t origin) {
                                                     (int32_t)distance, &high, origin);
             return position != SFILE_INVALID_POS;
         }
+#ifdef WC3
+        case FS_FILE_CASC: {
+            bool ok = FS_CascSeek(vfs_file->source.casc, distance, origin);
+            if (!ok) fprintf(stderr, "FS_SetFilePointer: CASC seek failed for %s (error 0x%08x)\n",
+                             vfs_file->name, (unsigned)FS_CascLastError());
+            return ok;
+        }
+#endif
         default:
             return false;
     }
@@ -1187,6 +1296,14 @@ bool FS_GetFileSize(handle_t file, uint64_t *size) {
             *size = ((uint64_t)high << 32) | low;
             return true;
         }
+#ifdef WC3
+        case FS_FILE_CASC: {
+            bool ok = FS_CascSize(vfs_file->source.casc, size);
+            if (!ok) fprintf(stderr, "FS_GetFileSize: CASC size failed for %s (error 0x%08x)\n",
+                             vfs_file->name, (unsigned)FS_CascLastError());
+            return ok;
+        }
+#endif
         default:
             return false;
     }
@@ -1598,6 +1715,13 @@ void FS_Init(void) {
 
 void FS_Shutdown(void) {
     priority_archive = NULL;
+#ifdef WC3
+    FOR_LOOP(i, MAX_CASC_STORAGES) {
+        FS_CascCloseStorage(cascStorages[i]);
+        cascStorages[i] = NULL;
+        cascStorageRoots[i][0] = '\0';
+    }
+#endif
     FOR_LOOP(i, MAX_ARCHIVES) {
         SFileCloseArchive(archives[i]);
         archives[i] = NULL;

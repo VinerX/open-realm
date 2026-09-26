@@ -147,10 +147,10 @@ JASS_HEADERS := $(COMMON_HEADERS) $(CLIENT_HEADERS) $(shell find $(WC3_GAME_DIR)
 $(eval $(call unity_lib_schema,$(JASS_LIB),$(SHARED_LIB) $(JASS_HEADERS) $(shell find $(WC3_JASS_DIR) -name '*.c' -o -name '*.h'),jass,$(WC3_JASS_DIR),,$(WC3_CFLAGS),,-lshared -lm))
 $(eval $(call src_lib_schema,$(SHEET_LIB),$(WC3_SHEET_DIR)/parser.c $(WC3_SHEET_DIR)/sheet.c common/common.h,sheet,$(CFLAGS),$(WC3_SHEET_DIR)/parser.c $(WC3_SHEET_DIR)/sheet.c,))
 $(eval $(call unity_lib_schema,$(RENDERER_LIB),$(RENDERER_BASE_DEPS) $(SHEET_LIB) $(call CSRC,renderer $(WC3_DIR)/renderer),renderer,renderer $(WC3_DIR)/renderer,,$(WC3_CFLAGS),common/mpq.c,$(RENDERER_SHARED_LIBS) -lsheet))
-$(eval $(call unity_lib_schema,$(GAME_LIB),$(GAME_BASE_DEPS) $(JASS_LIB) $(LUA53_LIB) $(LUA53_SRCS) $(SHEET_LIB) $(WORLD_CORE_SRCS) $(WC3_COMMON_SRCS) $(WC3_LUA_HEADERS) $(call CSRC,$(WC3_GAME_DIR)) $(WC3_LUA_SRCS),game,$(WC3_GAME_DIR) $(WC3_DIR)/common $(WC3_LUA_DIR),! -name 'world_w3.c' ! -path '*/tests/*',$(WC3_FDF_CFLAGS) $(LUA53_CFLAGS),common/mpq.c,-lsheet -lshared -ljass -llua53 $(LIBS) -lm -lz))
-$(eval $(call unity_lib_schema,$(MENU_LIB),$(UI_BASE_DEPS) $(MENU_HEADERS) common/mpq.c common/mpq.h $(WC3_COMMON_SRCS) $(call CSRC,$(WC3_DIR)/menu),menu,$(WC3_DIR)/menu $(WC3_DIR)/common,! -name 'world_w3.c',$(WC3_FDF_CFLAGS),common/mpq.c,-lshared -lsheet -lm -lz))
+$(eval $(call unity_lib_schema,$(GAME_LIB),$(GAME_BASE_DEPS) $(JASS_LIB) $(LUA53_LIB) $(LUA53_SRCS) $(SHEET_LIB) $(WORLD_CORE_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(WC3_LUA_HEADERS) $(call CSRC,$(WC3_GAME_DIR)) $(WC3_LUA_SRCS),game,$(WC3_GAME_DIR) $(WC3_DIR)/common $(WC3_LUA_DIR),! -name 'world_w3.c' ! -name 'fs_casc.c' ! -path '*/tests/*',$(WC3_FDF_CFLAGS) $(LUA53_CFLAGS),common/mpq.c,-lsheet -lshared -ljass -llua53 $(LIBS) -lm -lz))
+$(eval $(call unity_lib_schema,$(MENU_LIB),$(UI_BASE_DEPS) $(MENU_HEADERS) common/mpq.c common/mpq.h $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(call CSRC,$(WC3_DIR)/menu),menu,$(WC3_DIR)/menu $(WC3_DIR)/common,! -name 'world_w3.c' ! -name 'fs_casc.c',$(WC3_FDF_CFLAGS),common/mpq.c,-lshared -lsheet -lm -lz))
 # The remote client loads collision data before any game imports exist; compile its format reader into the engine.
-$(eval $(call app_schema,$(BINARY),$(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) $(GAME_LIB) $(RENDERER_LIB) $(MENU_LIB) $(APP_SRCS) $(WC3_COMMON_SRCS) $(CLIENT_HEADERS) $(COMMON_HEADERS),openwarcraft3,$(WC3_FDF_CFLAGS) -DBZ_CLIENT_WORLD,-lsheet -lshared -ljass -lgame -lrenderer -lmenu $(LIBS) $(WC3_FFMPEG_LIBS) -lz,$(WC3_DIR)/common/world_w3.c))
+$(eval $(call app_schema,$(BINARY),$(SHARED_LIB) $(JASS_LIB) $(CASC_LIB) $(SHEET_LIB) $(GAME_LIB) $(RENDERER_LIB) $(MENU_LIB) $(APP_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(CLIENT_HEADERS) $(COMMON_HEADERS),openwarcraft3,$(WC3_FDF_CFLAGS) $(CASC_CFLAGS) -DBZ_CLIENT_WORLD,-lsheet -lshared -ljass -lgame -lrenderer -lmenu $(LIBS) $(WC3_FFMPEG_LIBS) $(CASC_LINK_LIBS),$(WC3_DIR)/common/world_w3.c $(WC3_DIR)/common/fs_casc.c))
 
 # ---------------------------------------------------------------------------
 # In-engine tests (see CONTRIBUTING.md)
@@ -166,8 +166,8 @@ $(eval $(call app_schema,$(BINARY),$(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) $(GAME
 GAME_WC3_TEST_LIB := $(LIB_DIR)/libgame-wc3-test$(LIB_EXT)
 WC3_TEST_BINARY   := $(BIN_DIR)/openwarcraft3-tests$(EXE_EXT)
 
-$(eval $(call unity_lib_schema,$(GAME_WC3_TEST_LIB),$(GAME_BASE_DEPS) $(JASS_LIB) $(LUA53_LIB) $(LUA53_SRCS) $(SHEET_LIB) $(WORLD_CORE_SRCS) $(WC3_COMMON_SRCS) $(WC3_LUA_HEADERS) $(call CSRC,$(WC3_GAME_DIR)) $(WC3_LUA_SRCS),game-wc3-test,$(WC3_GAME_DIR) $(WC3_DIR)/common $(WC3_LUA_DIR),! -name 'world_w3.c' ! -path '*/lua/tests/*',$(WC3_FDF_CFLAGS) $(LUA53_CFLAGS) -DBZ_TESTS,common/mpq.c,-lsheet -lshared -ljass -llua53 $(LIBS) -lm -lz))
-$(eval $(call app_schema,$(WC3_TEST_BINARY),$(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) $(GAME_WC3_TEST_LIB) $(RENDERER_LIB) $(MENU_LIB) $(APP_SRCS) $(WC3_COMMON_SRCS) $(CLIENT_HEADERS) $(COMMON_HEADERS) $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c,openwarcraft3-tests,$(WC3_FDF_CFLAGS) -DBZ_CLIENT_WORLD -DBZ_TESTS,-lsheet -lshared -ljass -lgame-wc3-test -lrenderer -lmenu $(LIBS) $(WC3_FFMPEG_LIBS) -lz,$(WC3_DIR)/common/world_w3.c $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c))
+$(eval $(call unity_lib_schema,$(GAME_WC3_TEST_LIB),$(GAME_BASE_DEPS) $(JASS_LIB) $(LUA53_LIB) $(LUA53_SRCS) $(SHEET_LIB) $(WORLD_CORE_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(WC3_LUA_HEADERS) $(call CSRC,$(WC3_GAME_DIR)) $(WC3_LUA_SRCS),game-wc3-test,$(WC3_GAME_DIR) $(WC3_DIR)/common $(WC3_LUA_DIR),! -name 'world_w3.c' ! -name 'fs_casc.c' ! -path '*/lua/tests/*',$(WC3_FDF_CFLAGS) $(LUA53_CFLAGS) -DBZ_TESTS,common/mpq.c,-lsheet -lshared -ljass -llua53 $(LIBS) -lm -lz))
+$(eval $(call app_schema,$(WC3_TEST_BINARY),$(SHARED_LIB) $(JASS_LIB) $(CASC_LIB) $(SHEET_LIB) $(GAME_WC3_TEST_LIB) $(RENDERER_LIB) $(MENU_LIB) $(APP_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(CLIENT_HEADERS) $(COMMON_HEADERS) $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c,openwarcraft3-tests,$(WC3_FDF_CFLAGS) $(CASC_CFLAGS) -DBZ_CLIENT_WORLD -DBZ_TESTS,-lsheet -lshared -ljass -lgame-wc3-test -lrenderer -lmenu $(LIBS) $(WC3_FFMPEG_LIBS) $(CASC_LINK_LIBS),$(WC3_DIR)/common/world_w3.c $(WC3_DIR)/common/fs_casc.c $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c))
 
 openwarcraft3-tests: $(WC3_TEST_BINARY)
 
@@ -175,6 +175,19 @@ WC3_PATTERN ?= *
 test-wc3-engine: $(WC3_TEST_BINARY) test-assets | $(TEST_JUNIT_DIR)
 	TEST_JUNIT="$(TEST_JUNIT_DIR)/test-wc3-engine-classic.xml" TEST_JUNIT_SUITE="test-wc3-engine-classic" $(WC3_TEST_BINARY) -data $(TESTS_DIR) +dedicated 1 +test '$(WC3_PATTERN)'
 	TEST_JUNIT="$(TEST_JUNIT_DIR)/test-wc3-engine-tft.xml" TEST_JUNIT_SUITE="test-wc3-engine-tft" $(WC3_TEST_BINARY) -data $(TESTS_DIR) -tft +dedicated 1 +test '$(WC3_PATTERN)'
+
+.PHONY: test-wc3-casc-vfs
+ifeq ($(strip $(WC3_CASC_DATA)),)
+test-wc3-casc-vfs:
+	$(error WC3_CASC_DATA must point to a Warcraft III CASC installation)
+else
+test-wc3-casc-vfs: $(WC3_TEST_BINARY) test-assets | $(TEST_JUNIT_DIR)
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.casc_file_exists_and_reads_manifest_path'
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.map_priority_mpq_overrides_casc'
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.non_casc_data_directory_stays_mountable'
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.recognized_invalid_casc_root_fails'
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.casc_storage_reopens_after_reset'
+endif
 
 .PHONY: test-client-camera
 test-client-camera: $(WC3_TEST_BINARY) test-assets | $(TEST_JUNIT_DIR)

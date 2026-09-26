@@ -20,7 +20,8 @@ MPQ-packed map against real game data. The initial acceptance installation is
   fail data-directory setup. Do not silently continue as if the game data were
   mounted.
 - Preserve the current behavior for directories that are not CASC roots.
-- Do not assume Warcraft III uses CascLib's WoW-only locale mask parameter.
+- Use CascLib's storage-default locale selection unless Warcraft III-specific
+  data proves that an explicit locale is needed.
 - Keep OpenRealm's VFS independent from CascLib types and handles.
 
 ## Architecture
@@ -119,8 +120,8 @@ choosing another library or revision.
 - CASC creation or mutation.
 - Listing every CASC file or enumerating maps from CASC.
 - Replacing StormLib or converting Warcraft III map archives away from MPQ.
-- Generalized locale selection before Warcraft III's actual storage behavior
-  is verified.
+- Explicit locale overrides unless Warcraft III's actual storage behavior
+  proves that they are needed.
 
 ## References
 

@@ -186,6 +186,7 @@ CASC_PLATFORM_LIBS := -lwininet -lws2_32
 else
 CASC_PLATFORM_LIBS := -pthread
 endif
+CASC_LINK_LIBS := -lcasc -lstdc++ $(CASC_PLATFORM_LIBS) -lz
 
 $(LIB_DIR)/casc-%.o: $(CASC_DIR)/src/%.cpp $(shell find $(CASC_DIR)/src -type f -name '*.h' | sort) | $(LIB_DIR)
 	@mkdir -p $(dir $@)
@@ -200,7 +201,7 @@ $(CASC_LIB): $(CASC_OBJS) $(shell find $(CASC_DIR)/src -type f -name '*.h' | sor
 	@ar rcs $@ $(CASC_OBJS)
 
 $(BIN_DIR)/casc_probe$(EXE_EXT): tools/casc_probe.c $(CASC_LIB) | $(BIN_DIR)
-	@$(CC) $(CFLAGS) $(CASC_CFLAGS) -o $@ $< $(LDFLAGS) -L$(LIB_DIR) -lcasc -lstdc++ $(CASC_PLATFORM_LIBS) -lz
+	@$(CC) $(CFLAGS) $(CASC_CFLAGS) -o $@ $< $(LDFLAGS) -L$(LIB_DIR) $(CASC_LINK_LIBS)
 
 .PHONY: casc-probe
 casc-probe: $(BIN_DIR)/casc_probe$(EXE_EXT)

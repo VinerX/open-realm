@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     }
     open_args.szLocalPath = storage_path;
     open_args.szCodeName = argv[2];
-    open_args.dwLocaleMask = CASC_LOCALE_RURU;
+    open_args.dwLocaleMask = CASC_LOCALE_NONE;
     if (!CascOpenStorageEx(NULL, &open_args, false, &storage)) {
         PrintCascError("open storage", storage_path);
         return 1;
