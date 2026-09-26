@@ -40,6 +40,20 @@ static int LuaDefineStartLocation(lua_State *L) {
     return 0;
 }
 
+static int LuaInitHashtable(lua_State *L) {
+    hashtable_t *table = G_AllocHashtable();
+    if (!table) return luaL_error(L, "InitHashtable: table registry is full");
+    lua_pushlightuserdata(L, table);
+    return 1;
+}
+
+static int LuaCreateTimer(lua_State *L) {
+    gtimer_t *timer = G_AllocJassTimer();
+    if (!timer) return luaL_error(L, "CreateTimer: timer registry is full");
+    lua_pushlightuserdata(L, timer);
+    return 1;
+}
+
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetMapName", LuaSetMapName);
     WC3_LuaRegisterNative(L, "SetMapDescription", LuaSetMapDescription);
@@ -47,5 +61,13 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetTeams", LuaSetTeams);
     WC3_LuaRegisterNative(L, "SetGamePlacement", LuaSetGamePlacement);
     WC3_LuaRegisterNative(L, "DefineStartLocation", LuaDefineStartLocation);
+    WC3_LuaRegisterNative(L, "InitHashtable", LuaInitHashtable);
+    WC3_LuaRegisterNative(L, "CreateTimer", LuaCreateTimer);
     WC3_LuaRegisterInteger(L, "MAP_PLACEMENT_TEAMS_TOGETHER", 3);
+}
+
+bool G_LoadLuaMapScript(wc3Lua_t *L, cstring_t source, cstring_t chunk_name) {
+    if (!L) return false;
+    G_RegisterLuaMapConfigNatives(L);
+    return WC3_LuaLoadBuffer(L, source, chunk_name);
 }

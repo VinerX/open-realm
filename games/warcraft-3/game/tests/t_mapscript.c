@@ -301,4 +301,29 @@ TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
     world.info.num_originalAbilities = world.info.num_userCreatedAbilities = 0;
 }
 
+TEST(wc3_mapscript, lua_init_hashtable_returns_engine_handle) {
+    wc3Lua_t *lua;
+    double handle_type;
+    uint32_t timer_count;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_ASSERT(lua != NULL);
+    if (!lua) return;
+    timer_count = level.num_timers;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "lua_table = InitHashtable()\n"
+        "lua_timer = CreateTimer()\n"
+        "function hashtable_type()\n"
+        "  return lua_table ~= nil and type(lua_table) == 'userdata' and "
+        "lua_timer ~= nil and type(lua_timer) == 'userdata' and 1 or 0\n"
+        "end\n", "=(hashtable-test)"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "hashtable_type", &handle_type));
+    T_EQ(handle_type, 1.0);
+    T_EQ(level.num_timers, timer_count + 1);
+    WC3_LuaClose(lua);
+    G_ClearHashtableRegistry();
+}
+
 #endif /* BZ_TESTS */

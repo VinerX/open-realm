@@ -2050,6 +2050,7 @@ typedef struct {
 player_t *G_GetPlayerByNumber(uint32_t);
 void G_InitJassHost(void);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
+bool G_LoadLuaMapScript(wc3Lua_t *lua, cstring_t source, cstring_t chunk_name);
 edict_t *G_GetPlayerEntityByNumber(uint32_t);
 gameClient_t *G_GetPlayerClientByNumber(uint32_t);
 void G_SetClientConnected(edict_t *player, bool connected);

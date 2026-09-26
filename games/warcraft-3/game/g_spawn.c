@@ -771,12 +771,11 @@ void G_SpawnEntities(void) {
         if (!level.lua_vm) {
             fprintf(stderr, "G_SpawnEntities: could not create Lua 5.3 state for %s\n",
                     gi.CvarString("map", "(unknown)"));
-        } else if (!WC3_LuaLoadBuffer(level.lua_vm, level.mapinfo->mapscript, "war3map.lua")) {
+        } else if (!G_LoadLuaMapScript(level.lua_vm, level.mapinfo->mapscript, "war3map.lua")) {
             fprintf(stderr, "G_SpawnEntities: Lua load failed for %s: %s\n",
                     gi.CvarString("map", "(unknown)"),
                     WC3_LuaErrorMessage(level.lua_vm));
         }
-        G_RegisterLuaMapConfigNatives(level.lua_vm);
     } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && level.mapinfo->mapscript) {
         G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
         jass_dobuffer(level.vm, level.mapinfo->mapscript);
