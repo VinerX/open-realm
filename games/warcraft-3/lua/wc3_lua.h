@@ -10,6 +10,7 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct wc3Lua_s wc3Lua_t;
 /* Forward declaration matches Lua's own lua_State tag, so C natives keep the

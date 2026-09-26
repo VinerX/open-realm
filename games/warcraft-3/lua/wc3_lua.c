@@ -42,6 +42,20 @@ static void WC3_LuaCaptureError(wc3Lua_t *state, const char *phase) {
     lua_pop(state->L, 1);
 }
 
+static int WC3_LuaTraceback(lua_State *L) {
+    const char *message = lua_tostring(L, 1);
+    if (!message) message = "(non-string Lua error)";
+    luaL_traceback(L, L, message, 1);
+    return 1;
+}
+
+static int WC3_LuaPCall(lua_State *L, int nargs, int nresults) {
+    int const handler = lua_gettop(L) - nargs;
+    lua_pushcfunction(L, WC3_LuaTraceback);
+    lua_insert(L, handler);
+    return lua_pcall(L, nargs, nresults, handler);
+}
+
 wc3Lua_t *WC3_LuaNewState(void) {
     wc3Lua_t *state = (wc3Lua_t *)calloc(1, sizeof(*state));
 
@@ -76,11 +90,13 @@ bool WC3_LuaLoadBuffer(wc3Lua_t *state, const char *source, const char *chunk_na
         WC3_LuaCaptureError(state, "load");
         return false;
     }
-    status = lua_pcall(state->L, 0, 0, 0);
+    status = WC3_LuaPCall(state->L, 0, 0);
     if (status != LUA_OK) {
         WC3_LuaCaptureError(state, "exec");
+        lua_remove(state->L, -1);
         return false;
     }
+    lua_remove(state->L, -1);
     WC3_LuaClearError(state);
     return true;
 }
@@ -93,10 +109,12 @@ bool WC3_LuaCall(wc3Lua_t *state, const char *function_name) {
         WC3_LuaSetError(state, function_name, "not a function");
         return false;
     }
-    if (lua_pcall(state->L, 0, 0, 0) != LUA_OK) {
+    if (WC3_LuaPCall(state->L, 0, 0) != LUA_OK) {
         WC3_LuaCaptureError(state, function_name);
+        lua_remove(state->L, -1);
         return false;
     }
+    lua_remove(state->L, -1);
     WC3_LuaClearError(state);
     return true;
 }
@@ -111,12 +129,14 @@ bool WC3_LuaCallNumber(wc3Lua_t *state, const char *function_name, double *out) 
         WC3_LuaSetError(state, function_name, "not a function");
         return false;
     }
-    if (lua_pcall(state->L, 0, 1, 0) != LUA_OK) {
+    if (WC3_LuaPCall(state->L, 0, 1) != LUA_OK) {
         WC3_LuaCaptureError(state, function_name);
+        lua_remove(state->L, -1);
         return false;
     }
     value = lua_tonumber(state->L, -1);
     lua_pop(state->L, 1);
+    lua_remove(state->L, -1);
     if (out) *out = value;
     WC3_LuaClearError(state);
     return true;

@@ -75,6 +75,8 @@ static void test_runtime_error_preserves_state(void) {
     assert(WC3_LuaErrorPending(L));
     printf("runtime error: %s\n", WC3_LuaErrorMessage(L));
     assert(strstr(WC3_LuaErrorMessage(L), "kaboom") != NULL);
+    assert(strstr(WC3_LuaErrorMessage(L), "stack traceback") != NULL);
+    assert(strstr(WC3_LuaErrorMessage(L), "boom") != NULL);
     assert(!WC3_LuaCall(L, "does_not_exist"));
     assert(strstr(WC3_LuaErrorMessage(L), "not a function") != NULL);
     WC3_LuaClose(L);
