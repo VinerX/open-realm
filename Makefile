@@ -154,6 +154,22 @@ $(LUA_LIB): $(LUA_SRCS) $(wildcard $(LUA_DIR)/*.h) | $(LIB_DIR)
 		$(CC) $(CFLAGS) $(LUA_CFLAGS) -c -x c -o $(LUA_OBJ) -
 	@ar rcs $@ $(LUA_OBJ)
 
+# Vendored Lua 5.3 (checked in under vendor/lua53) backs the Warcraft III map
+# runtime.  Blizzard's Lua map mode is Lua 5.3; the WoW UI keeps the separate
+# 5.4 library above.  Build the VM only, excluding the interpreter/compiler
+# drivers, into a static archive linked by the WC3 game module.
+LUA53_DIR    := vendor/lua53/src
+LUA53_SRCS   := $(filter-out $(LUA53_DIR)/lua.c $(LUA53_DIR)/luac.c, $(wildcard $(LUA53_DIR)/*.c))
+LUA53_OBJ    := $(LIB_DIR)/lua53.o
+LUA53_LIB    := $(LIB_DIR)/liblua53.a
+LUA53_CFLAGS := -I$(LUA53_DIR)
+
+$(LUA53_LIB): $(LUA53_SRCS) $(wildcard $(LUA53_DIR)/*.h) | $(LIB_DIR)
+	@echo "[lua53]"
+	@$(call UNITY,$(LUA53_DIR),! -name 'lua.c' ! -name 'luac.c') | \
+		$(CC) $(CFLAGS) $(LUA53_CFLAGS) -c -x c -o $(LUA53_OBJ) -
+	@ar rcs $@ $(LUA53_OBJ)
+
 TOOL_SRCS := $(shell find tools -maxdepth 1 -name '*.c' ! -name 'jass.c' | sort)
 TOOL_NAMES := $(patsubst tools/%.c,%,$(TOOL_SRCS))
 TOOL_BINS := $(addprefix $(BIN_DIR)/,$(addsuffix $(EXE_EXT),$(TOOL_NAMES)))
