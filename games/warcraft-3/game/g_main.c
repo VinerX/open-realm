@@ -506,7 +506,8 @@ static void G_InitGame(void) {
     }
 
     game.max_clients = globals.max_clients;
-    game.clients = gi.MemAlloc(game.max_clients * sizeof(gameClient_t));
+    game.player_slots = WC3_MAX_PLAYER_SLOTS;
+    game.clients = gi.MemAlloc(game.player_slots * sizeof(gameClient_t));
     game.data_prefix[0] = '\0';
     Stb_IniCacheLoad(&game.config.theme, "UI\\war3skins.txt");
     InitConstants();
@@ -528,6 +529,7 @@ static void G_ShutdownGame(void) {
     gi.SetPaused(false);
     G_BotShutdown();
     if (level.vm) { jass_close(level.vm); level.vm = NULL; }
+    if (level.lua_vm) { WC3_LuaClose(level.lua_vm); level.lua_vm = NULL; }
     G_ClearJassGroupRegistry();
     G_ClearRegionRegistry();
     G_FowShutdown();
@@ -809,7 +811,16 @@ static void G_StartScripts(void) {
      */
     G_SetDestructableScriptBinding(true);
 
-    jass_callbyname(level.vm, "main", true);
+    if (level.mapinfo && level.mapinfo->scriptKind == WC3_SCRIPT_LUA) {
+        if (!level.lua_vm || !WC3_LuaCall(level.lua_vm, "main")) {
+            fprintf(stderr, "G_StartScripts: Lua main failed for %s: %s\n",
+                    level.map_path, level.lua_vm ? WC3_LuaErrorMessage(level.lua_vm) : "Lua state unavailable");
+            G_SetDestructableScriptBinding(false);
+            return;
+        }
+    } else {
+        jass_callbyname(level.vm, "main", true);
+    }
     level.scriptsStarted = true;
     jass_runevents(level.vm);
 
@@ -820,7 +831,7 @@ bool G_IsSinglePlayer(void) {
     uint32_t humans = 0;
 
     if (!level.mapinfo) return true;
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) {
         mapPlayer_t const *player = level.mapinfo->players + i;
         if (player->used && player->playerType == kPlayerTypeHuman) humans++;
     }
@@ -988,23 +999,23 @@ edict_t *G_GetPlayerEntityByNumber(uint32_t number) {
 }
 
 gameClient_t *G_GetPlayerClientByNumber(uint32_t number) {
-    FOR_LOOP(i, game.max_clients) {
+    FOR_LOOP(i, game.player_slots) {
         gameClient_t *cl = game.clients+i;
         if (cl->ps.number == number) {
             return cl;
         }
     }
-    return &game.clients[MAX_PLAYERS-1];
+    return &game.clients[WC3_MAX_PLAYER_SLOTS-1];
 //    return NULL;
 }
 
 player_t *G_GetPlayerByNumber(uint32_t number) {
-    FOR_LOOP(i, game.max_clients) {
+    FOR_LOOP(i, game.player_slots) {
         if (game.clients[i].ps.number == number) {
             return &game.clients[i].ps;
         }
     }
-    return &game.clients[MAX_PLAYERS-1].ps;
+    return &game.clients[WC3_MAX_PLAYER_SLOTS-1].ps;
 //    return NULL;
 }
 
@@ -1075,7 +1086,7 @@ void G_PublishSummonEvents(edict_t *summoner, edict_t *summoned) {
  * context" for callbacks (death, research, spell) that share the trigger. */
 void G_PublishChangeOwnerEvents(edict_t *unit, uint32_t old_player) {
     int32_t value;
-    if (!unit || old_player > MAX_PLAYERS) return;
+    if (!unit || old_player > WC3_MAX_PLAYER_SLOTS) return;
     value = (int32_t)old_player + 1;
     G_PublishEventWithValue(unit, EVENT_PLAYER_UNIT_CHANGE_OWNER, NULL, value);
     G_PublishEventWithValue(unit, EVENT_UNIT_CHANGE_OWNER, NULL, value);

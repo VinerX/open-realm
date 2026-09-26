@@ -43,7 +43,7 @@ static bool G_FowReady(void) {
 }
 
 bool G_FowPlayersShareVision(uint32_t viewer, uint32_t owner) {
-    if (viewer >= MAX_PLAYERS || owner >= MAX_PLAYERS) {
+    if (viewer >= WC3_MAX_PLAYER_SLOTS || owner >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     /* SetPlayerAlliance(source, other, shared vision) means source shares its
@@ -55,18 +55,18 @@ bool G_FowPlayersShareVision(uint32_t viewer, uint32_t owner) {
 }
 
 void G_AddUnitForcedVisibility(edict_t *unit, uint32_t viewer) {
-    if (unit && viewer < MAX_PLAYERS && unit->forced_visibility_count[viewer] != 0xffffu)
+    if (unit && viewer < WC3_MAX_PLAYER_SLOTS && unit->forced_visibility_count[viewer] != 0xffffu)
         unit->forced_visibility_count[viewer]++;
 }
 
 void G_RemoveUnitForcedVisibility(edict_t *unit, uint32_t viewer) {
-    if (unit && viewer < MAX_PLAYERS && unit->forced_visibility_count[viewer])
+    if (unit && viewer < WC3_MAX_PLAYER_SLOTS && unit->forced_visibility_count[viewer])
         unit->forced_visibility_count[viewer]--;
 }
 
 bool G_UnitIsForcedVisibleToPlayer(edict_t const *unit, uint32_t viewer) {
-    if (!unit || viewer >= MAX_PLAYERS) return false;
-    FOR_LOOP(owner, MAX_PLAYERS)
+    if (!unit || viewer >= WC3_MAX_PLAYER_SLOTS) return false;
+    FOR_LOOP(owner, WC3_MAX_PLAYER_SLOTS)
         if (unit->forced_visibility_count[owner] && G_FowPlayersShareVision(viewer, owner)) return true;
     return false;
 }
@@ -494,7 +494,7 @@ static void G_FowRevealCircle(uint32_t player, edict_t const *ent, float radius)
     uint32_t cx, cy;
     int radius_cells;
 
-    if (player >= MAX_PLAYERS || !ent || radius <= 0.0f || !G_FowReady()) {
+    if (player >= WC3_MAX_PLAYER_SLOTS || !ent || radius <= 0.0f || !G_FowReady()) {
         return;
     }
 
@@ -551,7 +551,7 @@ static float G_FowEntitySightRadius(edict_t const *ent) {
 }
 
 static bool G_FowEntityIsRevealer(edict_t const *ent) {
-    if (!ent || !ent->inuse || ent->s.player >= MAX_PLAYERS) {
+    if (!ent || !ent->inuse || ent->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     if (ent->svflags & SVF_NOCLIENT) {
@@ -758,7 +758,7 @@ static void G_FowRebuildBlockers(void) {
 
 /* Reveal directly into connected viewer grids; source-owner grids are irrelevant when nobody consumes them. */
 static void G_FowRevealForViewers(edict_t const *ent, float radius, uint32_t viewers) {
-    FOR_LOOP(viewer, MAX_PLAYERS)
+    FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS)
         if (viewers & (1u << viewer))
             G_FowRevealCircle(viewer, ent, radius);
 }
@@ -779,10 +779,10 @@ static void G_FowApplyModifierForPlayer(uint32_t player, fogModifier_t const *mo
  * modifier is gone before the next simulation fog update. */
 static void G_FowApplyModifierImmediately(fogModifier_t const *mod) {
     if (!mod || !G_FowReady() || !G_FowStateValid(mod->state) ||
-        mod->player >= MAX_PLAYERS) {
+        mod->player >= WC3_MAX_PLAYER_SLOTS) {
         return;
     }
-    FOR_LOOP(viewer, MAX_PLAYERS) {
+    FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS) {
         if (viewer != mod->player &&
             (!mod->use_shared_vision || !G_FowPlayersShareVision(viewer, mod->player))) {
             continue;
@@ -844,10 +844,10 @@ static void G_FowSetBoxState(fowPlayerGrid_t *grid, box2_t const *box, uint32_t 
 
 /* Immediate JASS writes persist in the target grid even when no client currently consumes it. */
 void G_FowSetStateRect(fogWrite_t const *fog, box2_t const *box) {
-    if (!fog || fog->player >= MAX_PLAYERS || !box ||
+    if (!fog || fog->player >= WC3_MAX_PLAYER_SLOTS || !box ||
         !G_FowReady() || !G_FowStateValid(fog->state))
         return;
-    FOR_LOOP(viewer, MAX_PLAYERS) {
+    FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS) {
         if (viewer != fog->player && (!fog->shared || !G_FowPlayersShareVision(viewer, fog->player)))
             continue;
         G_FowSetBoxState(&level.fow.players[viewer], box, fog->state);
@@ -858,7 +858,7 @@ void G_FowSetStateRect(fogWrite_t const *fog, box2_t const *box) {
 void G_FowSetStateRadius(fogWrite_t const *fog, vec2_t const *center, float radius) {
     uint32_t cx, cy;
     int cells;
-    if (!fog || fog->player >= MAX_PLAYERS || !center ||
+    if (!fog || fog->player >= WC3_MAX_PLAYER_SLOTS || !center ||
         !G_FowReady() || !G_FowStateValid(fog->state))
         return;
     cx = G_FowWorldToCellX(center->x);
@@ -867,7 +867,7 @@ void G_FowSetStateRadius(fogWrite_t const *fog, vec2_t const *center, float radi
         return;
     cells = G_FowRadiusCells(radius);
     fogDisk_t disk = { cx, cy, fog->state, cells };
-    FOR_LOOP(viewer, MAX_PLAYERS) {
+    FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS) {
         if (viewer != fog->player && (!fog->shared || !G_FowPlayersShareVision(viewer, fog->player)))
             continue;
         G_FowSetDiskState(&level.fow.players[viewer], &disk);
@@ -897,10 +897,10 @@ static void G_FowApplyModifiers(uint32_t viewers) {
     FOR_LOOP(i, g_num_fog_modifiers) {
         fogModifier_t const *mod = g_fog_modifiers[i];
         if (!mod || !mod->started || !G_FowStateValid(mod->state) ||
-            mod->player >= MAX_PLAYERS) {
+            mod->player >= WC3_MAX_PLAYER_SLOTS) {
             continue;
         }
-        FOR_LOOP(viewer, MAX_PLAYERS)
+        FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS)
             if ((viewers & (1u << viewer)) &&
                 (viewer == mod->player || (mod->use_shared_vision && G_FowPlayersShareVision(viewer, mod->player))))
                 G_FowApplyModifierForPlayer(viewer, mod);
@@ -908,7 +908,7 @@ static void G_FowApplyModifiers(uint32_t viewers) {
 }
 
 void G_FowShutdown(void) {
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
         SAFE_DELETE(grid->visible, gi.MemFree);
         SAFE_DELETE(grid->explored, gi.MemFree);
@@ -954,7 +954,7 @@ void G_FowInit(void) {
     }
     memset(level.fow.blocked, 0, cells);
 
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
         grid->visible = gi.MemAlloc(cells);
         grid->explored = gi.MemAlloc(cells);
@@ -989,19 +989,19 @@ void G_FowInit(void) {
 
 /* Mark a player grid as consumed before its first authoritative update. */
 void G_FowConnectPlayer(uint32_t player) {
-    if (player < MAX_PLAYERS)
+    if (player < WC3_MAX_PLAYER_SLOTS)
         level.fow.players[player].client_connected = true;
 }
 
 void G_FowUpdate(void) {
-    uint32_t owner_viewers[MAX_PLAYERS] = { 0 };
+    uint32_t owner_viewers[WC3_MAX_PLAYER_SLOTS] = { 0 };
     uint32_t viewers = 0;
 
     if (!G_FowReady()) {
         return;
     }
 
-    FOR_LOOP(player, MAX_PLAYERS)
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS)
         if (level.fow.players[player].client_connected)
             viewers |= 1u << player;
     if (!viewers)
@@ -1009,15 +1009,15 @@ void G_FowUpdate(void) {
 #ifdef WC3_FOW_PACKED_MASK
     g_fow_fast = atoi(gi.CvarString("wc3_fow_fast", "0"));
 #endif
-    FOR_LOOP(owner, MAX_PLAYERS)
-        FOR_LOOP(viewer, MAX_PLAYERS)
+    FOR_LOOP(owner, WC3_MAX_PLAYER_SLOTS)
+        FOR_LOOP(viewer, WC3_MAX_PLAYER_SLOTS)
             if ((viewers & (1u << viewer)) && G_FowPlayersShareVision(viewer, owner))
                 owner_viewers[owner] |= 1u << viewer;
 
     if (G_FowBlockersChanged()) {
         G_FowRebuildBlockers();
     }
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         fowPlayerGrid_t *grid = &level.fow.players[player];
         if (!(viewers & (1u << player))) {
             continue;
@@ -1029,7 +1029,7 @@ void G_FowUpdate(void) {
         edict_t const *ent = &g_edicts[i];
         float radius;
 
-        if (ent->s.player >= MAX_PLAYERS || !owner_viewers[ent->s.player] || !G_FowEntityIsRevealer(ent)) {
+        if (ent->s.player >= WC3_MAX_PLAYER_SLOTS || !owner_viewers[ent->s.player] || !G_FowEntityIsRevealer(ent)) {
             continue;
         }
         radius = G_FowEntitySightRadius(ent);
@@ -1042,7 +1042,7 @@ void G_FowUpdate(void) {
      * here, after unit sight and before script fog modifiers. */
     FOR_LOOP(i, globals.num_edicts) {
         edict_t const *ent = &g_edicts[i];
-        if (!ent->inuse || ent->think != far_sight_think || ent->s.player >= MAX_PLAYERS ||
+        if (!ent->inuse || ent->think != far_sight_think || ent->s.player >= WC3_MAX_PLAYER_SLOTS ||
             G_Time() >= ent->spawn_time || ent->collision <= 0.0f) {
             continue;
         }
@@ -1070,10 +1070,10 @@ bool G_FowPlayerCanHoverEntity(uint32_t player, edict_t const *ent) {
     uint32_t x, y, index;
     fowPlayerGrid_t const *grid;
 
-    if (!ent || player >= MAX_PLAYERS || !G_FowReady()) {
+    if (!ent || player >= WC3_MAX_PLAYER_SLOTS || !G_FowReady()) {
         return true;
     }
-    if (ent->s.player < MAX_PLAYERS && G_FowPlayersShareVision(player, ent->s.player)) {
+    if (ent->s.player < WC3_MAX_PLAYER_SLOTS && G_FowPlayersShareVision(player, ent->s.player)) {
         return true;
     }
     if (G_UnitIsForcedVisibleToPlayer(ent, player)) return true;
@@ -1101,10 +1101,10 @@ bool G_FowPlayerCanSeeEntity(uint32_t player, edict_t const *ent) {
     uint32_t x, y, index;
     fowPlayerGrid_t const *grid;
 
-    if (!ent || player >= MAX_PLAYERS || !G_FowReady()) {
+    if (!ent || player >= WC3_MAX_PLAYER_SLOTS || !G_FowReady()) {
         return true;
     }
-    if (ent->s.player < MAX_PLAYERS && G_FowPlayersShareVision(player, ent->s.player)) {
+    if (ent->s.player < WC3_MAX_PLAYER_SLOTS && G_FowPlayersShareVision(player, ent->s.player)) {
         return true;
     }
     if (G_UnitIsForcedVisibleToPlayer(ent, player)) return true;
@@ -1196,7 +1196,7 @@ static void G_FowWriteRows(edict_t *ent, uint32_t player, uint32_t flags, uint32
     uint32_t payload_bytes;
     pfWriteData_t data;
 
-    if (!ent || player >= MAX_PLAYERS || !G_FowReady() || row_count == 0 ||
+    if (!ent || player >= WC3_MAX_PLAYER_SLOTS || !G_FowReady() || row_count == 0 ||
         first_row >= level.fow.height) {
         return;
     }
@@ -1256,7 +1256,7 @@ void G_FowSendFull(edict_t *ent) {
         return;
     }
     player = ent->client->ps.number;
-    if (player >= MAX_PLAYERS) {
+    if (player >= WC3_MAX_PLAYER_SLOTS) {
         return;
     }
     G_FowConnectPlayer(player);
@@ -1305,7 +1305,7 @@ void G_FowSendDeltas(void) {
         return;
     }
 
-    FOR_LOOP(player, MIN((uint32_t)game.max_clients, (uint32_t)MAX_PLAYERS)) {
+    FOR_LOOP(player, MIN((uint32_t)game.max_clients, (uint32_t)WC3_MAX_PLAYER_SLOTS)) {
         edict_t *ent = G_GetPlayerEntityByNumber(player);
         if (!level.fow.players[player].client_connected || !ent || !ent->client) {
             continue;

@@ -37,5 +37,6 @@ void WC3_LuaClearError(wc3Lua_t *L);
 
 /* Register a native function under a global name. */
 void WC3_LuaRegisterNative(wc3Lua_t *L, const char *name, wc3LuaCFunction fn);
+void WC3_LuaRegisterInteger(wc3Lua_t *L, const char *name, int64_t value);
 
 #endif

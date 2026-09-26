@@ -2913,7 +2913,7 @@ TEST(wc3_game, fow_static_scenery_persists_after_unit_vision_leaves) {
     revealer->s.player = 0;
     revealer->runtime.sight_radius.day = 128.0f;
     revealer->health.value = revealer->health.max_value = 1.0f;
-    tree->s.player = unseen->s.player = unit->s.player = building->s.player = MAX_PLAYERS;
+    tree->s.player = unseen->s.player = unit->s.player = building->s.player = WC3_MAX_PLAYER_SLOTS;
     tree->svflags = unseen->svflags = SVF_STATIC_SCENERY;
     building->runtime.flags |= UNIT_BALANCE_BUILDING;
 

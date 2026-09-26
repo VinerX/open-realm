@@ -1693,7 +1693,7 @@ static bool ReadClient(FILE *f, gameClient_t *client, int *target) {
     client->ps.name = client->jass.name;
     FOR_LOOP(i, PLAYERTEXT_COUNT) client->ps.texts[i] = client->playerTextCursor[i] ?
         client->playerTextStorage[i][client->playerTextCursor[i] & PLAYER_TEXT_MASK] : NULL;
-    client->mapplayer = level.mapinfo && client->ps.number < MAX_PLAYERS ? level.mapinfo->players + client->ps.number : NULL;
+    client->mapplayer = level.mapinfo && client->ps.number < WC3_MAX_PLAYER_SLOTS ? level.mapinfo->players + client->ps.number : NULL;
     client->menu.on_entity_selected = NULL; client->menu.on_location_selected = NULL;
     client->menu.cmdbutton = NULL; client->menu.refresh = NULL;
     client->menu.supports_order_queue = false;
@@ -1899,7 +1899,7 @@ bool ReadGame(cstring_t filename) {
      * the snapshot version rejects older layouts before reconstruction. */
     if (!ReadJass(f)) { fprintf(stderr, "WC3 LoadGame: failed at jass\n"); fclose(f); return false; }
     G_ResetSelectionSoundState();
-    FOR_LOOP(i, game.max_clients) g_edicts[i].client = game.clients + i;
+    FOR_LOOP(i, game.player_slots) g_edicts[i].client = game.clients + i;
     FOR_LOOP(i, game.max_clients) game.clients[i].camera.target_controller = targets[i] < 0 ? NULL : g_edicts + targets[i];
     FOR_LOOP(i, globals.num_edicts) {
         edict_t *ent = g_edicts + i;

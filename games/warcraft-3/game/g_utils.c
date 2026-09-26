@@ -593,7 +593,7 @@ void G_InitPlayerAlliances(mapInfo_t const *mapinfo) {
      * with every player.  Keep this in the normal directional alliance table
      * so triggers can subsequently revoke/change the relation instead of
      * relying on owner-ID special cases in every consumer. */
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         level.alliances[player][PLAYER_NEUTRAL_PASSIVE] |= passive;
         level.alliances[PLAYER_NEUTRAL_PASSIVE][player] |= passive;
     }
@@ -605,7 +605,7 @@ void G_InitPlayerAlliances(mapInfo_t const *mapinfo) {
     if (!mapinfo) return;
     FOR_LOOP(neutral, PLAYER_NEUTRAL_AGGRESSIVE) {
         if (mapinfo->players[neutral].playerType != kPlayerTypeNeutral) continue;
-        FOR_LOOP(player, MAX_PLAYERS) {
+        FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
             level.alliances[neutral][player] |= passive;
             level.alliances[player][neutral] |= passive;
         }
@@ -633,7 +633,7 @@ bool G_GetPlayerAlliance(player_t const *p1, player_t const *p2, PLAYERALLIANCE 
 }
 
 bool G_PlayerTreatsPlayerAsAlly(uint32_t source, uint32_t other) {
-    if (source >= MAX_PLAYERS || other >= MAX_PLAYERS) return false;
+    if (source >= WC3_MAX_PLAYER_SLOTS || other >= WC3_MAX_PLAYER_SLOTS) return false;
     if (source == other) return true;
     return (level.alliances[source][other] & (1u << ALLIANCE_PASSIVE)) != 0;
 }

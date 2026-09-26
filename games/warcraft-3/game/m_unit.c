@@ -400,14 +400,14 @@ void unit_die(edict_t *self, edict_t *attacker) {
      * a dead icon until another explicit selection occurs. */
     FOR_LOOP(i, game.max_clients) {
         gameClient_t *client = game.clients + i;
-        if (client->connected && client->ps.number < MAX_PLAYERS &&
+        if (client->connected && client->ps.number < WC3_MAX_PLAYER_SLOTS &&
             (selected_mask & (1u << client->ps.number)))
             G_SyncClientSelection(client);
     }
 
     owner = G_GetPlayerClientByNumber(self->s.player);
     if (owner && owner->ps.number == self->s.player &&
-        (!owner->connected || owner->ps.number >= MAX_PLAYERS ||
+        (!owner->connected || owner->ps.number >= WC3_MAX_PLAYER_SLOTS ||
          !(selected_mask & (1u << owner->ps.number))))
         G_InvalidateCommands(owner);
 }
@@ -421,7 +421,7 @@ void unit_birth(edict_t *self) {
 static bool unit_smart_target_is_enemy(edict_t *self, edict_t *target) {
     uint32_t owner;
 
-    if (!self || !target || self->s.player >= MAX_PLAYERS || target->s.player >= MAX_PLAYERS) {
+    if (!self || !target || self->s.player >= WC3_MAX_PLAYER_SLOTS || target->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     owner = target->s.player;
@@ -438,7 +438,7 @@ static bool unit_smart_target_is_enemy(edict_t *self, edict_t *target) {
 static bool unit_smart_target_is_followable(edict_t *self, edict_t *target) {
     uint32_t owner;
 
-    if (!self || !target || self->s.player >= MAX_PLAYERS || target->s.player >= MAX_PLAYERS) {
+    if (!self || !target || self->s.player >= WC3_MAX_PLAYER_SLOTS || target->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     owner = target->s.player;
@@ -1902,7 +1902,7 @@ static bool G_HeroReceivesKillXP(edict_t const *hero, edict_t const *victim, edi
     if (hero->s.player == killer->s.player) {
         return true;
     }
-    return hero->s.player < MAX_PLAYERS && killer->s.player < MAX_PLAYERS &&
+    return hero->s.player < WC3_MAX_PLAYER_SLOTS && killer->s.player < WC3_MAX_PLAYER_SLOTS &&
            (level.alliances[killer->s.player][hero->s.player] & (1 << ALLIANCE_SHARED_XP));
 }
 

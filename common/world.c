@@ -138,7 +138,7 @@ static bool CM_ReadInfoInto(handle_t archive, mapInfo_t *info, bool setup_only) 
         mapPlayer_t *player;
 
         SFileReadFile(file, &playerNumber, sizeof(uint32_t), NULL, NULL);
-        player = playerNumber < MAX_PLAYERS ? info->players + playerNumber : &scratch;
+        player = playerNumber < WC3_MAX_MAP_PLAYERS ? info->players + playerNumber : &scratch;
         player->used = true;
         SFileReadFile(file, &player->playerType, sizeof(playerType_t), NULL, NULL);
         SFileReadFile(file, &player->playerRace, sizeof(playerRace_t), NULL, NULL);
@@ -258,7 +258,7 @@ void CM_FreeMapInfo(mapInfo_t *mapInfo) {
     if (!mapInfo) {
         return;
     }
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) {
         SAFE_DELETE(mapInfo->players[i].playerName, MemFree);
     }
     FOR_LOOP(i, mapInfo->num_teams) {
@@ -719,23 +719,33 @@ static void __attribute__((unused)) CM_ReadHeightmap(handle_t archive) {
     SFileCloseFile(file);
 }
 
-void CM_ReadModification(handle_t file, unitModification_t *mod) {
-    SFileReadFile(file, &mod->modID, 4, NULL, NULL);
-    SFileReadFile(file, &mod->type, 4, NULL, NULL);
+static bool CM_ReadModification(handle_t file, unitModification_t *mod, bool has_level_pointer) {
+    if (!SFileReadFile(file, &mod->modID, 4, NULL, NULL) ||
+        !SFileReadFile(file, &mod->type, 4, NULL, NULL)) {
+        fprintf(stderr, "CM_ReadModification: truncated field header\n");
+        return false;
+    }
     mod->level = 0;
     mod->dataPointer = 0;
+    if (has_level_pointer &&
+        (!SFileReadFile(file, &mod->level, 4, NULL, NULL) ||
+         !SFileReadFile(file, &mod->dataPointer, 4, NULL, NULL))) {
+        fprintf(stderr, "CM_ReadModification: truncated level/data pointer for %.4s\n",
+                (cstring_t)&mod->modID);
+        return false;
+    }
     uint32_t strlength = 0;
     switch (mod->type) {
         case mod_int:
         case mod_real:
         case mod_unreal:
             mod->data = MemAlloc(4);
-            SFileReadFile(file, mod->data, 4, NULL, NULL);
+            if (!SFileReadFile(file, mod->data, 4, NULL, NULL)) return false;
             break;
         case mod_bool:
         case mod_char:
             mod->data = MemAlloc(1);
-            SFileReadFile(file, mod->data, 1, NULL, NULL);
+            if (!SFileReadFile(file, mod->data, 1, NULL, NULL)) return false;
             break;
         case mod_string:
         case mod_unitList:
@@ -755,142 +765,183 @@ void CM_ReadModification(handle_t file, unitModification_t *mod) {
         case mod_attributeType:
         case mod_attackBits:
             strlength = SFileReadStringLength(file);
+            if (!strlength || strlength > SFileBytesRemaining(file)) {
+                fprintf(stderr, "CM_ReadModification: invalid string length for field %.4s\n",
+                        (cstring_t)&mod->modID);
+                return false;
+            }
             mod->data = MemAlloc(strlength);
-            SFileReadFile(file, mod->data, strlength, NULL, NULL);
+            if (!SFileReadFile(file, mod->data, strlength, NULL, NULL)) return false;
             break;
         default:
-            assert(false);
-            break;
+            fprintf(stderr, "CM_ReadModification: unsupported type=%u field=%.4s\n",
+                    (unsigned)mod->type, (cstring_t)&mod->modID);
+            return false;
     }
+    return true;
 }
 
-static unitData_t *CM_ReadObjectOverrides(handle_t file, uint32_t *numObjects) {
-    uint32_t unknown;
-    SFileReadFile(file, numObjects, 4, NULL, NULL);
-    unitData_t *objects = MemAlloc(*numObjects * sizeof(unitData_t));
-    for (unitData_t *object = objects; object - objects < *numObjects; object++) {
-        SFileReadFile(file, &object->originalUnitID, 4, NULL, NULL);
-        SFileReadFile(file, &object->newUnitID, 4, NULL, NULL);
-        SFileReadFile(file, &object->numbeOfModifications, 4, NULL, NULL);
-        object->modifications = MemAlloc(object->numbeOfModifications * sizeof(unitModification_t));
-        FOR_LOOP(j, object->numbeOfModifications) {
-            CM_ReadModification(file, &object->modifications[j]);
-            SFileReadFile(file, &unknown, 4, NULL, NULL);
+static void CM_FreeObjectOverrides(uint32_t count, unitData_t *objects) {
+    if (!objects) return;
+    FOR_LOOP(i, count) {
+        if (objects[i].modifications) {
+            FOR_LOOP(j, objects[i].numbeOfModifications)
+                SAFE_DELETE(objects[i].modifications[j].data, MemFree);
+            MemFree(objects[i].modifications);
+        }
+    }
+    MemFree(objects);
+}
+
+static bool CM_ReadObjectSet(handle_t file, unitData_t *object, bool retain,
+                             bool has_level_pointer, cstring_t context) {
+    uint32_t mod_count;
+
+    if (!CM_ReadCount(file, 12, &mod_count, context) || mod_count > UINT16_MAX) {
+        fprintf(stderr, "CM_ReadObjectSet: invalid modification count for %s\n", context);
+        return false;
+    }
+    if (retain && mod_count) {
+        object->modifications = MemAlloc(mod_count * sizeof(*object->modifications));
+        memset(object->modifications, 0, mod_count * sizeof(*object->modifications));
+        object->numbeOfModifications = (uint16_t)mod_count;
+    }
+    for (uint32_t i = 0; i < mod_count; ++i) {
+        unitModification_t discarded = {0};
+        unitModification_t *mod = retain ? object->modifications + i : &discarded;
+        uint32_t end_token;
+
+        if (!CM_ReadModification(file, mod, has_level_pointer) ||
+            !SFileReadFile(file, &end_token, 4, NULL, NULL)) {
+            SAFE_DELETE(mod->data, MemFree);
+            if (retain) object->numbeOfModifications = (uint16_t)i;
+            fprintf(stderr, "CM_ReadObjectSet: truncated modification in %s\n", context);
+            return false;
+        }
+        if (!retain) SAFE_DELETE(discarded.data, MemFree);
+    }
+    return true;
+}
+
+static unitData_t *CM_ReadObjectOverrides(handle_t file, uint32_t version,
+                                          uint32_t *numObjects, bool has_level_pointer,
+                                          cstring_t table) {
+    uint32_t object_count;
+    unitData_t *objects;
+
+    *numObjects = UINT32_MAX;
+    if (!CM_ReadCount(file, 8, &object_count, table)) return NULL;
+    objects = object_count ? MemAlloc(object_count * sizeof(*objects)) : NULL;
+    if (object_count && !objects) {
+        *numObjects = UINT32_MAX;
+        return NULL;
+    }
+    if (objects) memset(objects, 0, object_count * sizeof(*objects));
+    *numObjects = object_count;
+
+    for (uint32_t i = 0; i < object_count; ++i) {
+        unitData_t *object = objects + i;
+        uint32_t set_count = 1;
+        bool default_set_seen = false;
+        char context[128];
+
+        snprintf(context, sizeof(context), "%s object %u", table, (unsigned)i);
+        if (!SFileReadFile(file, &object->originalUnitID, 4, NULL, NULL) ||
+            !SFileReadFile(file, &object->newUnitID, 4, NULL, NULL)) {
+            fprintf(stderr, "CM_ReadObjectOverrides: truncated IDs in %s\n", context);
+            goto fail;
+        }
+        if (version >= 3 && !CM_ReadCount(file, 8, &set_count, context)) goto fail;
+        if (!set_count) {
+            fprintf(stderr, "CM_ReadObjectOverrides: empty set list in %s\n", context);
+            goto fail;
+        }
+
+        for (uint32_t set = 0; set < set_count; ++set) {
+            uint32_t flag = 0;
+            bool retain;
+
+            if (version >= 3 && !SFileReadFile(file, &flag, 4, NULL, NULL)) {
+                fprintf(stderr, "CM_ReadObjectOverrides: truncated set flag in %s\n", context);
+                goto fail;
+            }
+            retain = version < 3 || flag == 0;
+            if (version >= 3 && flag != 0) {
+                fprintf(stderr, "CM_ReadObjectOverrides: unsupported set flag %u in %s\n",
+                        (unsigned)flag, context);
+            }
+            if (retain && default_set_seen) {
+                fprintf(stderr, "CM_ReadObjectOverrides: duplicate default set in %s\n", context);
+                goto fail;
+            }
+            if (retain) default_set_seen = true;
+            if (!CM_ReadObjectSet(file, object, retain, has_level_pointer, context)) goto fail;
+        }
+        if (version >= 3 && !default_set_seen) {
+            fprintf(stderr, "CM_ReadObjectOverrides: missing default set in %s\n", context);
+            goto fail;
         }
     }
     return objects;
+
+fail:
+    CM_FreeObjectOverrides(object_count, objects);
+    *numObjects = UINT32_MAX;
+    return NULL;
 }
 
 static void CM_ReadObjectData(handle_t archive, cstring_t filename,
                               uint32_t *num_original, unitData_t **original,
-                              uint32_t *num_custom, unitData_t **custom) {
+                              uint32_t *num_custom, unitData_t **custom,
+                              bool has_level_pointer) {
     uint32_t version;
     handle_t file;
 
+    *num_original = *num_custom = 0;
+    *original = *custom = NULL;
+
     if (!SFileOpenFileEx(archive, filename, SFILE_OPEN_FROM_MPQ, &file)) {
-        *num_original = *num_custom = 0;
-        *original = *custom = NULL;
         return;
     }
-    SFileReadFile(file, &version, 4, NULL, NULL);
-    *original = CM_ReadObjectOverrides(file, num_original);
-    *custom = CM_ReadObjectOverrides(file, num_custom);
+    if (!SFileReadFile(file, &version, 4, NULL, NULL) || version > 3) {
+        fprintf(stderr, "CM_ReadObjectData: unsupported %s version\n", filename);
+        SFileCloseFile(file);
+        return;
+    }
+    *original = CM_ReadObjectOverrides(file, version, num_original, has_level_pointer, filename);
+    if (*num_original == UINT32_MAX) {
+        fprintf(stderr, "CM_ReadObjectData: failed reading original table in %s\n", filename);
+        SFileCloseFile(file);
+        return;
+    }
+    *custom = CM_ReadObjectOverrides(file, version, num_custom, has_level_pointer, filename);
+    if (*num_custom == UINT32_MAX) {
+        fprintf(stderr, "CM_ReadObjectData: failed reading custom table in %s\n", filename);
+        CM_FreeObjectOverrides(*num_original, *original);
+        *original = NULL;
+        *num_original = 0;
+        *custom = NULL;
+        *num_custom = 0;
+    }
     SFileCloseFile(file);
-}
-
-/* Ability/doodad/upgrade object files insert level + data-pointer ints before the value. */
-void CM_ReadAbilityModification(handle_t file, unitModification_t *mod) {
-    SFileReadFile(file, &mod->modID, 4, NULL, NULL);
-    SFileReadFile(file, &mod->type, 4, NULL, NULL);
-    SFileReadFile(file, &mod->level, 4, NULL, NULL);
-    SFileReadFile(file, &mod->dataPointer, 4, NULL, NULL);
-    uint32_t strlength = 0;
-    switch (mod->type) {
-        case mod_int:
-        case mod_real:
-        case mod_unreal:
-            mod->data = MemAlloc(4);
-            SFileReadFile(file, mod->data, 4, NULL, NULL);
-            break;
-        case mod_bool:
-        case mod_char:
-            mod->data = MemAlloc(1);
-            SFileReadFile(file, mod->data, 1, NULL, NULL);
-            break;
-        case mod_string:
-        case mod_unitList:
-        case mod_itemList:
-        case mod_regenType:
-        case mod_attackType:
-        case mod_weaponType:
-        case mod_targetType:
-        case mod_moveType:
-        case mod_defenseType:
-        case mod_pathingTexture:
-        case mod_upgradeList:
-        case mod_stringList:
-        case mod_abilityList:
-        case mod_heroAbilityList:
-        case mod_missileArt:
-        case mod_attributeType:
-        case mod_attackBits:
-            strlength = SFileReadStringLength(file);
-            mod->data = MemAlloc(strlength);
-            SFileReadFile(file, mod->data, strlength, NULL, NULL);
-            break;
-        default:
-            fprintf(stderr, "CM_ReadAbilityModification: unknown type %u for '%.4s'\n",
-                    (unsigned)mod->type, (cstring_t)&mod->modID);
-            mod->data = NULL;
-            break;
-    }
-}
-
-static unitData_t *CM_ReadAbilityOverrides(handle_t file, uint32_t *numUnits) {
-    uint32_t unknown;
-    SFileReadFile(file, numUnits, 4, NULL, NULL);
-    unitData_t *units = MemAlloc(*numUnits * sizeof(unitData_t));
-    for (unitData_t *unit = units; unit - units < *numUnits; unit++) {
-        uint32_t mod_count = 0;
-        SFileReadFile(file, &unit->originalUnitID, 4, NULL, NULL);
-        SFileReadFile(file, &unit->newUnitID, 4, NULL, NULL);
-        SFileReadFile(file, &mod_count, 4, NULL, NULL);
-        unit->numbeOfModifications = (uint16_t)mod_count;
-        unit->modifications = MemAlloc(unit->numbeOfModifications * sizeof(unitModification_t));
-        FOR_LOOP(j, unit->numbeOfModifications) {
-            CM_ReadAbilityModification(file, &unit->modifications[j]);
-            SFileReadFile(file, &unknown, 4, NULL, NULL);
-        }
-    }
-    return units;
 }
 
 void CM_ReadUnits(handle_t archive) {
     CM_ReadObjectData(archive, "war3map.w3u",
                       &world.info.num_originalUnits, &world.info.originalUnits,
-                      &world.info.num_userCreatedUnits, &world.info.userCreatedUnits);
+                      &world.info.num_userCreatedUnits, &world.info.userCreatedUnits, false);
 }
 
 void CM_ReadItems(handle_t archive) {
     CM_ReadObjectData(archive, "war3map.w3t",
                       &world.info.num_originalItems, &world.info.originalItems,
-                      &world.info.num_userCreatedItems, &world.info.userCreatedItems);
+                      &world.info.num_userCreatedItems, &world.info.userCreatedItems, false);
 }
 
 void CM_ReadAbilities(handle_t archive) {
-    uint32_t version;
-    handle_t file;
-    if (!SFileOpenFileEx(archive, "war3map.w3a", SFILE_OPEN_FROM_MPQ, &file)) {
-        world.info.num_originalAbilities = 0;
-        world.info.num_userCreatedAbilities = 0;
-        world.info.originalAbilities = NULL;
-        world.info.userCreatedAbilities = NULL;
-        return;
-    }
-    SFileReadFile(file, &version, 4, NULL, NULL);
-    world.info.originalAbilities = CM_ReadAbilityOverrides(file, &world.info.num_originalAbilities);
-    world.info.userCreatedAbilities = CM_ReadAbilityOverrides(file, &world.info.num_userCreatedAbilities);
-    SFileCloseFile(file);
+    CM_ReadObjectData(archive, "war3map.w3a",
+                      &world.info.num_originalAbilities, &world.info.originalAbilities,
+                      &world.info.num_userCreatedAbilities, &world.info.userCreatedAbilities, true);
 }
 
 string_t FS_ReadArchiveFileIntoString(handle_t archive, cstring_t filename) {
@@ -1109,7 +1160,7 @@ doodad_t *CM_GetDoodads(void) {
 }
 
 uint32_t CM_GetLocalPlayerNumber(void) {
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) {
         mapPlayer_t const *player = world.info.players + i;
         if (player->playerType == kPlayerTypeHuman)
             return i;

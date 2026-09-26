@@ -60,7 +60,7 @@ static inline wc3MinimapColorKind_t wc3_minimap_ordinary_color_kind(wc3MinimapCo
     if (!p) return WC3_MINIMAP_COLOR_TEAM;
     if (p->owner == p->viewer) return WC3_MINIMAP_COLOR_SELF_WHITE;
     if (p->filter < WC3_MINIMAP_ALLY_COLOR_MINIMAP) return WC3_MINIMAP_COLOR_TEAM;
-    if (p->owner >= PLAYER_NEUTRAL_AGGRESSIVE && p->owner < MAX_PLAYERS)
+    if (p->owner >= PLAYER_NEUTRAL_AGGRESSIVE && p->owner < WC3_MAX_PLAYER_SLOTS)
         return WC3_MINIMAP_COLOR_NEUTRAL_BLACK;
     if (p->hostile) return WC3_MINIMAP_COLOR_ENEMY_RED;
     return WC3_MINIMAP_COLOR_ALLY_TEAL;

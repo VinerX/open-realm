@@ -97,7 +97,7 @@ void G_ApplyMapUnitTeamColor(edict_t *unit, doodad_t const *placement) {
 
 /* Recolor only units whose presentation still belongs to the changing player. */
 void G_ChangePlayerTeamColor(player_t *player, uint32_t previous_color, uint32_t new_color) {
-    uint32_t const player_num = player ? PLAYER_NUM(player) : MAX_PLAYERS;
+    uint32_t const player_num = player ? PLAYER_NUM(player) : WC3_MAX_PLAYER_SLOTS;
 
     if (!player || previous_color == new_color) return;
     FILTER_EDICTS(unit, (unit->svflags & SVF_MONSTER) && unit->s.player == player_num) {

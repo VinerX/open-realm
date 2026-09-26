@@ -9,12 +9,12 @@
 
 typedef struct {
     bool active;
-    uint16_t alliances[MAX_PLAYERS];
+    uint16_t alliances[WC3_MAX_PLAYER_SLOTS];
     bool allied_victory;
 } alliesDraft_t;
 
 static AllianceSlot_t alliance_slots[ALLIES_MAX_TARGETS];
-static alliesDraft_t allies_drafts[MAX_PLAYERS];
+static alliesDraft_t allies_drafts[WC3_MAX_PLAYER_SLOTS];
 static bool alliance_loaded;
 
 static bool AlliesEnsureLoaded(void);
@@ -193,7 +193,7 @@ static alliesDraft_t *AlliesDraft(edict_t *ent) {
     uint32_t player;
     if (!ent || !ent->client) return NULL;
     player = ent->client->ps.number;
-    return player < MAX_PLAYERS ? &allies_drafts[player] : NULL;
+    return player < WC3_MAX_PLAYER_SLOTS ? &allies_drafts[player] : NULL;
 }
 
 static void AlliesBeginDraft(edict_t *ent) {
@@ -309,10 +309,10 @@ void UI_ShowAllies(edict_t *ent) {
 
 void UI_AlliesToggle(edict_t *ent, uint32_t target, PLAYERALLIANCE type) {
     alliesDraft_t *draft = AlliesDraft(ent);
-    uint32_t const player = ent && ent->client ? ent->client->ps.number : MAX_PLAYERS;
+    uint32_t const player = ent && ent->client ? ent->client->ps.number : WC3_MAX_PLAYER_SLOTS;
     uint32_t flag;
 
-    if (!draft || !draft->active || player >= MAX_PLAYERS ||
+    if (!draft || !draft->active || player >= WC3_MAX_PLAYER_SLOTS ||
         (level.setup.map_flags & (WC3_MAP_LOCK_ALLIANCE_CHANGES | WC3_MAP_ALLIANCE_CHANGES_HIDDEN)) ||
         !AlliesTargetAvailable(player, target)) return;
     if (type != ALLIANCE_PASSIVE && type != ALLIANCE_SHARED_VISION && type != ALLIANCE_SHARED_CONTROL) return;
@@ -338,9 +338,9 @@ void UI_AlliesToggleVictory(edict_t *ent) {
 
 void UI_AlliesAccept(edict_t *ent) {
     alliesDraft_t *draft = AlliesDraft(ent);
-    uint32_t const player = ent && ent->client ? ent->client->ps.number : MAX_PLAYERS;
+    uint32_t const player = ent && ent->client ? ent->client->ps.number : WC3_MAX_PLAYER_SLOTS;
 
-    if (!draft || !draft->active || player >= MAX_PLAYERS) return;
+    if (!draft || !draft->active || player >= WC3_MAX_PLAYER_SLOTS) return;
     if (!(level.setup.map_flags & (WC3_MAP_LOCK_ALLIANCE_CHANGES | WC3_MAP_ALLIANCE_CHANGES_HIDDEN))) {
         FOR_LOOP(target, PLAYER_NEUTRAL_AGGRESSIVE) {
             gameClient_t *target_client;

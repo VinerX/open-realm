@@ -1,6 +1,7 @@
 #include "wc3_lua.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,6 +16,18 @@ struct wc3Lua_s {
     char error[WC3_LUA_ERROR_MAX];
     bool error_pending;
 };
+
+static int WC3_LuaFourCC(lua_State *L) {
+    size_t len = 0;
+    const unsigned char *text = (const unsigned char *)luaL_checklstring(L, 1, &len);
+    uint32_t code = 0;
+    size_t i;
+
+    if (len != 4) return luaL_error(L, "FourCC expects a four-byte string");
+    for (i = 0; i < 4; ++i) code |= (uint32_t)text[i] << (i * 8);
+    lua_pushinteger(L, (lua_Integer)code);
+    return 1;
+}
 
 static void WC3_LuaSetError(wc3Lua_t *state, const char *phase, const char *message) {
     snprintf(state->error, sizeof(state->error), "%s: %s", phase ? phase : "error",
@@ -39,6 +52,7 @@ wc3Lua_t *WC3_LuaNewState(void) {
         return NULL;
     }
     luaL_openlibs(state->L);
+    WC3_LuaRegisterNative(state, "FourCC", WC3_LuaFourCC);
     return state;
 }
 
@@ -125,5 +139,11 @@ void WC3_LuaClearError(wc3Lua_t *state) {
 void WC3_LuaRegisterNative(wc3Lua_t *state, const char *name, wc3LuaCFunction fn) {
     if (!state || !state->L || !name) return;
     lua_pushcfunction(state->L, fn);
+    lua_setglobal(state->L, name);
+}
+
+void WC3_LuaRegisterInteger(wc3Lua_t *state, const char *name, int64_t value) {
+    if (!state || !state->L || !name) return;
+    lua_pushinteger(state->L, (lua_Integer)value);
     lua_setglobal(state->L, name);
 }

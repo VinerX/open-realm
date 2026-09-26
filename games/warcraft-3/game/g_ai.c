@@ -110,7 +110,7 @@ static bool unit_has_attack(edict_t const *self);
 
 static bool filter_sight(edict_t const *ent) {
     if (!(ent->svflags & SVF_MONSTER) || !ai_current_entity ||
-        ai_current_entity->s.player >= MAX_PLAYERS || ent->s.player >= MAX_PLAYERS ||
+        ai_current_entity->s.player >= WC3_MAX_PLAYER_SLOTS || ent->s.player >= WC3_MAX_PLAYER_SLOTS ||
         ent->s.player == ai_current_entity->s.player)
         return false;
     /* Friend/enemy is the acquiring player's directional PASSIVE alliance.

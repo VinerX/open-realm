@@ -186,18 +186,18 @@ bool S_UnitUsesInvisibilityRenderFlag(edict_t const *unit) {
 }
 
 static bool detector_shared_with_player(edict_t const *detector, uint32_t player) {
-	return detector && detector->s.player < MAX_PLAYERS &&
+	return detector && detector->s.player < WC3_MAX_PLAYER_SLOTS &&
 		G_FowPlayersShareVision(player, detector->s.player);
 }
 
 /* Player-local true sight.  Detector ownership/shared vision determines who
  * receives the reveal; the hidden entity itself is never globally unhidden. */
 bool S_UnitIsDetectedByPlayer(edict_t const *unit, uint32_t player) {
-	if (!unit || !unit->inuse || player >= MAX_PLAYERS) return false;
+	if (!unit || !unit->inuse || player >= WC3_MAX_PLAYER_SLOTS) return false;
 
 	/* Far Sight owns an independent timed thinker after the caster is gone. */
 	FILTER_EDICTS(sight, sight->inuse && sight->think == far_sight_think &&
-	              sight->s.player < MAX_PLAYERS && G_Time() < sight->spawn_time &&
+	              sight->s.player < WC3_MAX_PLAYER_SLOTS && G_Time() < sight->spawn_time &&
 	              sight->collision > 0.0f && detector_shared_with_player(sight, player)) {
 		if (Vector2_distance(&sight->s.origin2, &unit->s.origin2) <= sight->collision) return true;
 	}
@@ -219,8 +219,8 @@ bool S_UnitIsDetectedByPlayer(edict_t const *unit, uint32_t player) {
  * need a detector covering the target. Non-invisibility RF_HIDDEN states are
  * deliberately outside this predicate. */
 bool S_UnitIsInvisibleToPlayer(edict_t const *unit, uint32_t player) {
-	if (!unit || !unit->inuse || player >= MAX_PLAYERS) return false;
-	if (unit->s.player < MAX_PLAYERS && G_FowPlayersShareVision(player, unit->s.player)) return false;
+	if (!unit || !unit->inuse || player >= WC3_MAX_PLAYER_SLOTS) return false;
+	if (unit->s.player < WC3_MAX_PLAYER_SLOTS && G_FowPlayersShareVision(player, unit->s.player)) return false;
 	if (!S_PermanentInvisibilityActive(unit) && !S_UnitUsesInvisibilityRenderFlag(unit)) return false;
 	return !S_UnitIsDetectedByPlayer(unit, player);
 }
@@ -229,7 +229,7 @@ bool S_UnitIsInvisibleToPlayer(edict_t const *unit, uint32_t player) {
  * whether any player's detector currently covers the unit. */
 bool S_UnitIsDetected(edict_t const *unit) {
 	if (!unit || !unit->inuse) return false;
-	FOR_LOOP(player, MAX_PLAYERS)
+	FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS)
 		if (S_UnitIsDetectedByPlayer(unit, player)) return true;
 	return false;
 }

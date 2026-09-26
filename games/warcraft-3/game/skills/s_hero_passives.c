@@ -238,7 +238,7 @@ static bool aura_allows_target(edict_t *source, edict_t *target, cstring_t targe
     is_self = source == target;
     is_friend = S_SpellIsFriend(source, target);
     is_enemy = S_SpellIsEnemy(source, target);
-    is_neutral = target->s.player < MAX_PLAYERS && level.mapinfo &&
+    is_neutral = target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
         level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral;
     bool const wants_relation = aura_target_has_token(targets, "friend", "frie") ||
         aura_target_has_token(targets, "allies", "alli") ||

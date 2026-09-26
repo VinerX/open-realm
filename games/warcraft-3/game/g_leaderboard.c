@@ -31,7 +31,7 @@ leaderboard_t *G_AllocLeaderboard(void) {
 void G_FreeLeaderboard(leaderboard_t *board) {
     int32_t index = leaderboard_index(board);
     if (index < 0) return;
-    FOR_LOOP(i, MAX_PLAYERS) if (level.player_leaderboards[i] == index) {
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) if (level.player_leaderboards[i] == index) {
         level.player_leaderboards[i] = -1;
         level.leaderboard_dirty_clients |= leaderboard_client_mask(i);
     }
@@ -40,13 +40,13 @@ void G_FreeLeaderboard(leaderboard_t *board) {
 
 leaderboard_t *G_PlayerLeaderboard(uint32_t player) {
     int32_t index;
-    if (player >= MAX_PLAYERS || (index = level.player_leaderboards[player]) < 0 || index >= MAX_LEADERBOARDS) return NULL;
+    if (player >= WC3_MAX_PLAYER_SLOTS || (index = level.player_leaderboards[player]) < 0 || index >= MAX_LEADERBOARDS) return NULL;
     return level.leaderboards[index].inuse ? &level.leaderboards[index] : NULL;
 }
 
 void G_SetPlayerLeaderboard(uint32_t player, leaderboard_t *board) {
     int32_t index;
-    if (player >= MAX_PLAYERS) return;
+    if (player >= WC3_MAX_PLAYER_SLOTS) return;
     index = board ? leaderboard_index(board) : -1;
     if (board && index < 0) return;
     level.player_leaderboards[player] = index;
@@ -73,7 +73,7 @@ bool G_IsLeaderboardDisplayed(leaderboard_t const *board, player_t const *player
 void G_MarkLeaderboardDirty(leaderboard_t const *board) {
     int32_t index = leaderboard_index(board);
     if (index < 0) return;
-    FOR_LOOP(i, MIN((uint32_t)MAX_PLAYERS, (uint32_t)MAX_CLIENTS))
+    FOR_LOOP(i, MIN((uint32_t)WC3_MAX_PLAYER_SLOTS, (uint32_t)MAX_CLIENTS))
         if (level.player_leaderboards[i] == index) level.leaderboard_dirty_clients |= leaderboard_client_mask(i);
 }
 

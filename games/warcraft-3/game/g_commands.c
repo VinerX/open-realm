@@ -338,7 +338,7 @@ selectionRelation_t G_SelectionRelation(uint32_t viewer, edict_t const *ent) {
     if (owner == viewer) {
         return SELECT_RELATION_FRIEND;
     }
-    if (viewer >= MAX_PLAYERS || owner >= MAX_PLAYERS) {
+    if (viewer >= WC3_MAX_PLAYER_SLOTS || owner >= WC3_MAX_PLAYER_SLOTS) {
         return SELECT_RELATION_ENEMY;
     }
     alliances = level.alliances[viewer][owner];
@@ -384,7 +384,7 @@ bool G_UnitCanControl(gameClient_t *client, edict_t const *ent) {
     if (owner == client->ps.number) {
         return true;
     }
-    if (owner >= MAX_PLAYERS || client->ps.number >= MAX_PLAYERS) {
+    if (owner >= WC3_MAX_PLAYER_SLOTS || client->ps.number >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     alliances = level.alliances[client->ps.number][owner];
@@ -427,7 +427,7 @@ typedef struct unitResponse_s {
     bool accepted, started;
 } unitResponse_t;
 
-static selectionSoundState_t selection_sound_state[MAX_PLAYERS];
+static selectionSoundState_t selection_sound_state[WC3_MAX_PLAYER_SLOTS];
 static unitResponse_t *unit_responses;
 static uint32_t response_serial, selection_serial;
 
@@ -450,7 +450,7 @@ bool G_UnitResponseTalking(edict_t const *ent) {
 
 static void G_DirtyResponsePortrait(edict_t const *ent) {
     gameClient_t *client;
-    if (!ent || ent->s.player >= MAX_PLAYERS) return;
+    if (!ent || ent->s.player >= WC3_MAX_PLAYER_SLOTS) return;
     client = G_GetPlayerClientByNumber(ent->s.player);
     if (client && G_GetMainControllableUnit(client) == ent) client->presentation_dirty = true;
 }
@@ -472,7 +472,7 @@ uint32_t G_UnitResponseRequest(edict_t const *ent, int sound) {
 }
 
 bool G_QueueUnitResponseSound(edict_t *ent, int sound) {
-    if (!ent || !sound || ent->s.player >= MAX_PLAYERS || ent->s.number >= MAX_ENTITIES) return false;
+    if (!ent || !sound || ent->s.player >= WC3_MAX_PLAYER_SLOTS || ent->s.number >= MAX_ENTITIES) return false;
     for (unitResponse_t *r = unit_responses; r; r = r->next)
         if (r->entity == ent->s.number && r->spawn_time == ent->spawn_time && !r->accepted) return false;
     unitResponse_t *r = calloc(1, sizeof(*r));
@@ -538,7 +538,7 @@ CLIENTCOMMAND(SoundEvent) {
 }
 
 static selectionSoundState_t *G_SelectionSoundState(edict_t *ent, bool reset) {
-    if (!ent || ent->s.player >= MAX_PLAYERS) return NULL;
+    if (!ent || ent->s.player >= WC3_MAX_PLAYER_SLOTS) return NULL;
     selectionSoundState_t *state = selection_sound_state + ent->s.player;
     if (reset || !state->valid || state->entity != (int32_t)ent->s.number || state->spawn_time != ent->spawn_time) {
         if (!++selection_serial) ++selection_serial;

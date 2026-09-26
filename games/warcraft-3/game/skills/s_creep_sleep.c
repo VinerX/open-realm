@@ -57,7 +57,7 @@ static void add_creep_sleep_overlay(edict_t *unit, uint32_t code) {
 /* Restrict automatic sleep to authored neutral-creep candidates. */
 static bool unit_is_neutral_sleep_candidate(edict_t const *unit) {
     return unit && unit->s.player >= PLAYER_NEUTRAL_AGGRESSIVE &&
-           unit->s.player < MAX_PLAYERS;
+           unit->s.player < WC3_MAX_PLAYER_SLOTS;
 }
 
 /* Read the authoritative player-state switch that disables natural sleep. */

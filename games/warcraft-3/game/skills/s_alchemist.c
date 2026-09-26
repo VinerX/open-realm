@@ -50,7 +50,7 @@ BZ_SIMPLE_SPELL_PROC(AbilityHealingSpray) {
 /* ---- Transmute (ANtm): kill target, credit goldCost * DataA -------------- */
 
 static bool transmute_is_neutral(edict_t const *target) {
-    return target && target->s.player < MAX_PLAYERS && level.mapinfo &&
+    return target && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
         level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral;
 }
 

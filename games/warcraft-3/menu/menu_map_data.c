@@ -102,7 +102,7 @@ static bool UI_ReadInfoInto(handle_t archive, mapInfo_t *info) {
         mapPlayer_t *player;
 
         SFileReadFile(file, &playerNumber, sizeof(uint32_t), NULL, NULL);
-        player = playerNumber < MAX_PLAYERS ? info->players + playerNumber : &scratch;
+        player = playerNumber < WC3_MAX_MAP_PLAYERS ? info->players + playerNumber : &scratch;
         player->used = true;
         SFileReadFile(file, &player->playerType, sizeof(playerType_t), NULL, NULL);
         SFileReadFile(file, &player->playerRace, sizeof(playerRace_t), NULL, NULL);
@@ -315,7 +315,7 @@ void UI_FreeMapInfo(mapInfo_t *mapInfo) {
 
     if (!mapInfo)
         return;
-    FOR_LOOP(i, MAX_PLAYERS) SAFE_DELETE(mapInfo->players[i].playerName, mi.MemFree);
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) SAFE_DELETE(mapInfo->players[i].playerName, mi.MemFree);
     FOR_LOOP(i, mapInfo->num_teams) SAFE_DELETE(mapInfo->teams[i].name, mi.MemFree);
     SAFE_DELETE(mapInfo->mapName, mi.MemFree);
     SAFE_DELETE(mapInfo->mapAuthor, mi.MemFree);

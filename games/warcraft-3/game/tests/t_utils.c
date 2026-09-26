@@ -63,9 +63,9 @@ void reset_entities(void) {
     FOR_LOOP(i, cap) G_FreeActorSkills(g_edicts + i);
     memset(g_edicts, 0, sizeof(edict_t) * cap);
     globals.max_edicts = MAX_ENTITIES;
-    globals.num_edicts = game.max_clients;
+    globals.num_edicts = game.player_slots;
     globals.edicts = g_edicts;
-    FOR_LOOP(i, game.max_clients) g_edicts[i].s.number = i;
+    FOR_LOOP(i, game.player_slots) g_edicts[i].s.number = i;
     gi.ClearWorld();
 }
 
@@ -129,15 +129,16 @@ static void reset_test_state(void) {
     G_ResetSoundPresentationState();
     G_BotShutdown();
     if (level.vm) { jass_close(level.vm); level.vm = NULL; }
+    if (level.lua_vm) { WC3_LuaClose(level.lua_vm); level.lua_vm = NULL; }
     G_FowShutdown();
     G_BlightShutdown();
     globals.max_edicts = MAX_ENTITIES;
     memset(g_edicts, 0, sizeof(edict_t) * globals.max_edicts);
-    globals.num_edicts = game.max_clients;
+    globals.num_edicts = game.player_slots;
     globals.edicts = g_edicts;
     /* Restore player-slot client pointers so G_GetPlayerEntityByNumber works. */
-    FOR_LOOP(i, game.max_clients) g_edicts[i].s.number = i;
-    memset(game.clients, 0, game.max_clients * sizeof(*game.clients));
+    FOR_LOOP(i, game.player_slots) g_edicts[i].s.number = i;
+    memset(game.clients, 0, game.player_slots * sizeof(*game.clients));
     game.constants.dawnTimeGameHours = 6.0f;
     game.constants.duskTimeGameHours = 18.0f;
     game.constants.gameDayHours = 24.0f;
@@ -154,7 +155,7 @@ static void reset_test_state(void) {
     game.constants.upkeepLumberTax[0] = 0.0f;
     game.constants.upkeepLumberTax[1] = 0.0f;
     game.constants.upkeepLumberTax[2] = 0.0f;
-    FOR_LOOP(i, game.max_clients) {
+    FOR_LOOP(i, game.player_slots) {
         game.clients[i].ps.number = i;
         game.clients[i].ps.stats[PLAYERSTATE_FOOD_CAP_CEILING] = 100;
         game.clients[i].ps.stats[PLAYERSTATE_GOLD_UPKEEP_RATE] = 100;
@@ -165,7 +166,7 @@ static void reset_test_state(void) {
     G_ClearRegionRegistry();
     G_ClearHashtableRegistry();
     memset(&level, 0, sizeof(level));
-    FOR_LOOP(i, MAX_PLAYERS) level.player_leaderboards[i] = -1;
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) level.player_leaderboards[i] = -1;
     strlcpy(level.map_path, "Maps\\Campaign\\SaveTest.w3m", sizeof(level.map_path));
     memset(&test_mapinfo, 0, sizeof(test_mapinfo));
     level.mapinfo = &test_mapinfo;

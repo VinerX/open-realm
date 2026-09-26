@@ -11,7 +11,7 @@
 
 #include "hud_local.h"
 
-static uint32_t game_result_last_defer_log[MAX_PLAYERS];
+static uint32_t game_result_last_defer_log[WC3_MAX_PLAYER_SLOTS];
 
 /* The stock GameResult dialog is authored as a standalone DIALOG, while the
  * rest of OpenRealm's in-game menus are sent through the client window path.
@@ -140,7 +140,7 @@ void UI_FlushPendingGameResults(void) {
         uint32_t now;
 
         if (!client->jass.pending_game_result) {
-            if (i < MAX_PLAYERS) game_result_last_defer_log[i] = 0;
+            if (i < WC3_MAX_PLAYER_SLOTS) game_result_last_defer_log[i] = 0;
             continue;
         }
 
@@ -148,7 +148,7 @@ void UI_FlushPendingGameResults(void) {
         if (!client->connected ||
             level.events.read < client->jass.pending_game_result_event ||
             (client->ps.client_ui_state == CLIENT_UI_CINEMATIC && !level.script_paused)) {
-            if (G_GameResultDebugEnabled() && i < MAX_PLAYERS &&
+            if (G_GameResultDebugEnabled() && i < WC3_MAX_PLAYER_SLOTS &&
                 (!game_result_last_defer_log[i] || now - game_result_last_defer_log[i] >= 1000)) {
                 game_result_last_defer_log[i] = now;
                 G_GameResultDebug("flush defer client_index=%u player=%u pending=%u connected=%u ui=%u events=%u/%u wait_event=%u reason=%s",
@@ -172,7 +172,7 @@ void UI_FlushPendingGameResults(void) {
         result = (uint32_t)client->jass.pending_game_result - 1;
         client->jass.pending_game_result = 0;
         client->jass.pending_game_result_event = 0;
-        if (i < MAX_PLAYERS) game_result_last_defer_log[i] = 0;
+        if (i < WC3_MAX_PLAYER_SLOTS) game_result_last_defer_log[i] = 0;
         ent = G_GetPlayerEntityByNumber(client->ps.number);
         G_GameResultDebug("flush ready client_index=%u player=%u result=%u ent=%p ent_number=%ld",
             (unsigned)i, (unsigned)client->ps.number, (unsigned)result,

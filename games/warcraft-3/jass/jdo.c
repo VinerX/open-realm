@@ -785,7 +785,7 @@ static bool jass_coroutine_runlocalplayerif(jass_t *j, jasscoroutine_t *co, toke
     }
 
     previous_player = currentplayer;
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
         currentplayer = jass_getplayerbyindex(i);
         jass_dotoken(j, token->condition);
         if (jass_popboolean(j)) {
@@ -1855,7 +1855,7 @@ bool uses_localplayer(token_t const *token) {
 
 TOKENFUNC(IF) {
     if (token->condition && uses_localplayer(token->condition)) {
-        FOR_LOOP(i, MAX_PLAYERS) {
+        FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
             currentplayer = jass_getplayerbyindex(i);
             jass_dotoken(j, token->condition);
             if (jass_popboolean(j)) {
@@ -1944,7 +1944,7 @@ TOKENFUNC(CALL) {
     /* Blizzard's melee reveal timer passes GetLocalPlayer() directly, outside an IF.
      * Evaluate the whole call per player; a null selector used to reach the text native. */
     if (!currentplayer && uses_localplayer(token)) {
-        FOR_LOOP(i, MAX_PLAYERS) {
+        FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
             currentplayer = jass_getplayerbyindex(i);
             jass_discard(j, jass_dotoken(j, token));
         }

@@ -486,7 +486,7 @@ void SP_SpawnUnit(edict_t *self) {
     }
     /* Neutral creeps sleep until a hero enters acquisition range; non-neutral
      * units (including camp defenders made hostile by script) start awake. */
-    if (self->s.player < MAX_PLAYERS &&
+    if (self->s.player < WC3_MAX_PLAYER_SLOTS &&
         level.mapinfo->players[self->s.player].playerType == kPlayerTypeNeutral)
         self->aiflags |= AI_SLEEPING;
 

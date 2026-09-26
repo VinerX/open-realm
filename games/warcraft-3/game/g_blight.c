@@ -9,7 +9,7 @@ static uint32_t G_BlightConnectedMask(void) {
     uint32_t mask = 0;
     FOR_LOOP(i, game.max_clients) {
         uint32_t const player = game.clients[i].ps.number;
-        if (game.clients[i].connected && player < MAX_PLAYERS) mask |= 1u << player;
+        if (game.clients[i].connected && player < WC3_MAX_PLAYER_SLOTS) mask |= 1u << player;
     }
     return mask;
 }
@@ -235,7 +235,7 @@ void G_BlightMarkClientFull(edict_t *ent) {
     uint32_t player;
     if (!ent || !ent->client || !level.blight.dirty_rows) return;
     player = ent->client->ps.number;
-    if (player >= MAX_PLAYERS) return;
+    if (player >= WC3_MAX_PLAYER_SLOTS) return;
     FOR_LOOP(y, level.blight.height) level.blight.dirty_rows[y] |= 1u << player;
     level.blight.sweep_row[player] = 0;
 }
@@ -251,7 +251,7 @@ bool G_BlightDatagramPending(edict_t *ent) {
     uint32_t player;
     if (!ent || !ent->client || !level.blight.dirty_rows) return false;
     player = ent->client->ps.number;
-    if (player >= MAX_PLAYERS) return false;
+    if (player >= WC3_MAX_PLAYER_SLOTS) return false;
     FOR_LOOP(y, level.blight.height) if (level.blight.dirty_rows[y] & (1u << player)) return true;
     return G_BlightSweepDue(player);
 }

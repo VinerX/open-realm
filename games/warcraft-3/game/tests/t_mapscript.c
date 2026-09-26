@@ -18,6 +18,9 @@
 
 extern jassModule_t jass_funcs[];
 void CM_ReadMapScript(handle_t archive);
+void CM_ReadUnits(handle_t archive);
+void CM_ReadAbilities(handle_t archive);
+void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
 
 static cstring_t const kMinimalMapScript =
     "function config takes nothing returns nothing\n"
@@ -28,7 +31,7 @@ static cstring_t const kMinimalMapScript =
 static void mapscript_ignore_error(cstring_t message) { (void)message; }
 
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
-    handle_t archive;
+    handle_t archive = NULL;
 
     unlink(path);
     if (!SFileCreateArchive(path, 0, 16, &archive))
@@ -209,6 +212,93 @@ TEST(wc3_mapscript, legacy_format_without_scriptkind_stays_jass) {
     T_NOT_NULL(world.info.mapscript);
     mapscript_clear_loaded();
     mapscript_selector_pop(saved);
+}
+
+TEST(wc3_mapscript, lua_config_updates_all_24_map_start_locations) {
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_ASSERT(lua != NULL);
+    if (!lua) return;
+    G_RegisterLuaMapConfigNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "function config()\n"
+        "SetMapName('Legion')\nSetMapDescription('24 slots')\n"
+        "SetPlayers(24)\nSetTeams(24)\n"
+        "SetGamePlacement(MAP_PLACEMENT_TEAMS_TOGETHER)\n"
+        "for i=0,23 do DefineStartLocation(i, i*10, -i*10) end\n"
+        "end\n", "=(config-test)"));
+    T_ASSERT(WC3_LuaCall(lua, "config"));
+    T_EQ(level.setup.players, 24);
+    T_EQ(level.setup.teams, 24);
+    T_EQ(strcmp(level.setup.name, "Legion"), 0);
+    T_EQ(level.setup.start_locations[23].x, 230.0f);
+    T_EQ(level.setup.start_locations[23].y, -230.0f);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
+    cstring_t path = "/tmp/openwarcraft3-reforged-v3-units.mpq";
+    uint32_t units[] = {
+        3, 1,
+        MAKEFOURCC('h','f','o','o'), 0, 1, 0, 1,
+        MAKEFOURCC('u','h','p','m'), mod_int, 650, MAKEFOURCC('h','f','o','o'),
+        1,
+        MAKEFOURCC('h','f','o','o'), MAKEFOURCC('h','0','0','1'), 1, 0, 1,
+        MAKEFOURCC('u','h','p','m'), mod_int, 700, MAKEFOURCC('h','0','0','1')
+    };
+    uint32_t abilities[] = {
+        3, 1,
+        MAKEFOURCC('A','H','b','z'), 0, 1, 0, 1,
+        MAKEFOURCC('a','l','e','v'), mod_int, 2, 0, 3, MAKEFOURCC('A','H','b','z'),
+        1,
+        MAKEFOURCC('A','H','b','z'), MAKEFOURCC('A','0','0','1'), 1, 0, 1,
+        MAKEFOURCC('a','l','e','v'), mod_int, 1, 0, 4, MAKEFOURCC('A','0','0','1')
+    };
+    handle_t archive = NULL;
+
+    unlink(path);
+    T_ASSERT(SFileCreateArchive(path, 0, 16, &archive));
+    if (!archive) return;
+    T_ASSERT(SFileAddFileFromBuffer(archive, "war3map.w3u", units, sizeof(units)));
+    T_ASSERT(SFileAddFileFromBuffer(archive, "war3map.w3a", abilities, sizeof(abilities)));
+    SFileCloseArchive(archive);
+    T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
+    if (!archive) { unlink(path); return; }
+    CM_ReadUnits(archive);
+    CM_ReadAbilities(archive);
+    SFileCloseArchive(archive);
+    unlink(path);
+    T_EQ(world.info.num_originalUnits, 1);
+    T_EQ(world.info.num_userCreatedUnits, 1);
+    T_EQ(world.info.originalUnits[0].numbeOfModifications, 1);
+    T_EQ(world.info.originalUnits[0].modifications[0].type, mod_int);
+    T_EQ(*(uint32_t *)world.info.originalUnits[0].modifications[0].data, 650);
+    T_EQ(world.info.userCreatedUnits[0].numbeOfModifications, 1);
+    T_EQ(*(uint32_t *)world.info.userCreatedUnits[0].modifications[0].data, 700);
+    T_EQ(world.info.num_originalAbilities, 1);
+    T_EQ(world.info.originalAbilities[0].modifications[0].level, 2);
+    T_EQ(*(uint32_t *)world.info.originalAbilities[0].modifications[0].data, 3);
+    T_EQ(world.info.userCreatedAbilities[0].modifications[0].level, 1);
+    T_EQ(*(uint32_t *)world.info.userCreatedAbilities[0].modifications[0].data, 4);
+    gi.MemFree(world.info.originalUnits[0].modifications[0].data);
+    gi.MemFree(world.info.originalUnits[0].modifications);
+    gi.MemFree(world.info.originalUnits);
+    gi.MemFree(world.info.userCreatedUnits[0].modifications[0].data);
+    gi.MemFree(world.info.userCreatedUnits[0].modifications);
+    gi.MemFree(world.info.userCreatedUnits);
+    gi.MemFree(world.info.originalAbilities[0].modifications[0].data);
+    gi.MemFree(world.info.originalAbilities[0].modifications);
+    gi.MemFree(world.info.originalAbilities);
+    gi.MemFree(world.info.userCreatedAbilities[0].modifications[0].data);
+    gi.MemFree(world.info.userCreatedAbilities[0].modifications);
+    gi.MemFree(world.info.userCreatedAbilities);
+    world.info.originalUnits = world.info.userCreatedUnits = NULL;
+    world.info.num_originalUnits = world.info.num_userCreatedUnits = 0;
+    world.info.originalAbilities = world.info.userCreatedAbilities = NULL;
+    world.info.num_originalAbilities = world.info.num_userCreatedAbilities = 0;
 }
 
 #endif /* BZ_TESTS */

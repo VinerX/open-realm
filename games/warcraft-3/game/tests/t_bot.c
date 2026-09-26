@@ -118,7 +118,7 @@ TEST(wc3_bot, query_natives_read_authoritative_player_state) {
     edict_t *dead = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 96, 0);
     edict_t *other = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 128, 0);
     edict_t *hall = make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 0, 128, 2, &bot_hall_abilities);
-    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 128, MAX_PLAYERS, &bot_mine_abilities);
+    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 128, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
     edict_t *builder = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 64, 128);
 
     done->s.player = building->s.player = training->s.player = dead->s.player = 2;
@@ -143,8 +143,8 @@ TEST(wc3_bot, mines_belong_to_the_nearest_owned_town) {
     reset_entities();
     edict_t *hall0 = make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 0, 0, 2, &bot_hall_abilities);
     edict_t *hall1 = make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 1000, 0, 2, &bot_hall_abilities);
-    edict_t *mine0 = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 100, 0, MAX_PLAYERS, &bot_mine_abilities);
-    edict_t *mine1 = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 900, 0, MAX_PLAYERS, &bot_mine_abilities);
+    edict_t *mine0 = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 100, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
+    edict_t *mine1 = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 900, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
     mine0->resources = 1000; mine1->resources = 2000;
 
     T_EQ(G_BotTown(player, 0), hall0); T_EQ(G_BotTown(player, 1), hall1);
@@ -287,7 +287,7 @@ TEST(wc3_bot, harvest_gold_assigns_nearest_owned_workers_up_to_quota) {
     edict_t *near = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 32, 0, 2, &bot_harvester_abilities);
     edict_t *far = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 96, 0, 2, &bot_harvester_abilities);
     edict_t *other = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 16, 0, 1, &bot_harvester_abilities);
-    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, MAX_PLAYERS, &bot_mine_abilities);
+    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
     mine->resources = 1000; trainee->training = true; trainee->s.renderfx |= RF_HIDDEN;
     builder->build_project = MAKEFOURCC('h','b','a','r');
 
@@ -306,8 +306,8 @@ TEST(wc3_bot, harvest_pass_reserves_workers_across_gold_and_wood_then_clears) {
     make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 0, 0, 2, &bot_hall_abilities);
     edict_t *first = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 32, 0, 2, &bot_harvester_abilities);
     edict_t *second = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 64, 0, 2, &bot_harvester_abilities);
-    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, MAX_PLAYERS, &bot_mine_abilities);
-    edict_t *tree = make_bot_harvest_unit(MAKEFOURCC('L','T','l','t'), 0, 256, MAX_PLAYERS, NULL);
+    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
+    edict_t *tree = make_bot_harvest_unit(MAKEFOURCC('L','T','l','t'), 0, 256, WC3_MAX_PLAYER_SLOTS, NULL);
     mine->resources = 1000; tree->targtype = TARG_TREE;
     first->currentmove = &gold_move; first->goalentity = mine;
 
@@ -327,7 +327,7 @@ TEST(wc3_bot, harvest_returns_carried_resources_before_collecting) {
     reset_entities();
     edict_t *hall = make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 0, 0, 2, &bot_hall_abilities);
     edict_t *worker = make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 64, 0, 2, &bot_harvester_abilities);
-    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, MAX_PLAYERS, &bot_mine_abilities);
+    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
     mine->resources = 1000; worker->harvested_lumber = 5;
 
     G_BotClearHarvest(&game.clients[2].ps);
@@ -342,8 +342,8 @@ TEST(wc3_bot, harvest_natives_execute_through_player_bot_vm) {
     make_bot_harvest_unit(MAKEFOURCC('h','t','o','w'), 0, 0, 2, &bot_hall_abilities);
     make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 32, 0, 2, &bot_harvester_abilities);
     make_bot_harvest_unit(MAKEFOURCC('h','p','e','a'), 64, 0, 2, &bot_harvester_abilities);
-    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, MAX_PLAYERS, &bot_mine_abilities);
-    edict_t *tree = make_bot_harvest_unit(MAKEFOURCC('L','T','l','t'), 0, 256, MAX_PLAYERS, NULL);
+    edict_t *mine = make_bot_harvest_unit(MAKEFOURCC('n','g','o','l'), 256, 0, WC3_MAX_PLAYER_SLOTS, &bot_mine_abilities);
+    edict_t *tree = make_bot_harvest_unit(MAKEFOURCC('L','T','l','t'), 0, 256, WC3_MAX_PLAYER_SLOTS, NULL);
     mine->resources = 1000; tree->targtype = TARG_TREE;
 
     T_ASSERT(G_BotStart(&game.clients[2].ps, "test_harvest.ai", BOT_CAMPAIGN));

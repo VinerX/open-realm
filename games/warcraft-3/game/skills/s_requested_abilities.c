@@ -114,7 +114,7 @@ void earthquake_think(edict_t *ent) {
 }
 
 void far_sight_think(edict_t *thinker) {
-    if (G_Time() >= thinker->spawn_time || thinker->s.player >= MAX_PLAYERS) {
+    if (G_Time() >= thinker->spawn_time || thinker->s.player >= WC3_MAX_PLAYER_SLOTS) {
         spell_end_area_presentation(thinker);
         G_FreeEdict(thinker);
         return;

@@ -4139,7 +4139,7 @@ TEST(wc3_building, placement_cursor_uses_configured_player_color) {
     building_cursor_opcode_seen = false;
     building_cursor_clear_seen = false;
     building_cursor_entity_seen = false;
-    building_cursor_player = MAX_PLAYERS;
+    building_cursor_player = WC3_MAX_PLAYER_SLOTS;
     building_cursor_effect_flags = 0;
     gi.Write = building_capture_write;
     build_menu_selectlocation(clent, barracks);

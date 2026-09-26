@@ -2347,7 +2347,7 @@ TEST(wc3_api, direct_local_player_text_call_reaches_each_player_once) {
     jass_runevents(level.vm);
     FOR_LOOP(i, game.max_clients) {
         gameClient_t *gc = &game.clients[i];
-        if (i >= MAX_PLAYERS) {
+        if (i >= WC3_MAX_PLAYER_SLOTS) {
             T_EQ(gc->message_log.count, 0);
             continue;
         }
@@ -4022,7 +4022,7 @@ TEST(wc3_api, customize_entity_marks_neutral_passive_owner_neutral) {
     edict_t ent = { .svflags = SVF_MONSTER, .s = { .player = PLAYER_NEUTRAL_PASSIVE } };
     ent.health.value = 100.0f;
 
-    T_EQ(PLAYER_NEUTRAL_PASSIVE, 15); T_ASSERT(PLAYER_NEUTRAL_PASSIVE < MAX_PLAYERS);
+    T_EQ(PLAYER_NEUTRAL_PASSIVE, 27); T_ASSERT(PLAYER_NEUTRAL_PASSIVE < WC3_MAX_PLAYER_SLOTS);
     globals.CustomizeEntity(0, &ent, &state);
     T_ASSERT(state.flags & EF_HOVER_HEALTH);
     T_ASSERT(!(state.flags & EF_HOSTILE));
@@ -4034,7 +4034,7 @@ TEST(wc3_api, customize_entity_honors_runtime_neutral_aggressive_alliance) {
     edict_t ent = { .svflags = SVF_MONSTER, .s = { .player = PLAYER_NEUTRAL_AGGRESSIVE } };
     ent.health.value = 100.0f;
 
-    T_EQ(PLAYER_NEUTRAL_AGGRESSIVE, 12); T_ASSERT(PLAYER_NEUTRAL_AGGRESSIVE < MAX_PLAYERS);
+    T_EQ(PLAYER_NEUTRAL_AGGRESSIVE, 24); T_ASSERT(PLAYER_NEUTRAL_AGGRESSIVE < WC3_MAX_PLAYER_SLOTS);
     G_SetPlayerAlliance(test_player(0), test_player(PLAYER_NEUTRAL_AGGRESSIVE), ALLIANCE_PASSIVE, true);
     G_SetPlayerAlliance(test_player(0), test_player(PLAYER_NEUTRAL_AGGRESSIVE), ALLIANCE_SHARED_CONTROL, true);
     globals.CustomizeEntity(0, &ent, &state);

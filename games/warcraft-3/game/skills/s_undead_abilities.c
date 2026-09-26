@@ -666,7 +666,7 @@ BZ_ABILITY_PROC(CAbilityRaiseDead) {
 #define BZ_POS_MAGIC_IMMUNE 1u // Bpos.data bit; authored DataD > 0 during channel
 
 static bool possession_is_neutral(edict_t const *target) {
-    return target && target->s.player < MAX_PLAYERS && level.mapinfo &&
+    return target && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
         level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral;
 }
 

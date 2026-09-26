@@ -410,7 +410,7 @@ void G_DrainPausedResultEvents(void) {
 
     if (!level.script_paused || !level.vm) return;
 
-    while (passes++ < MAX_PLAYERS) {
+    while (passes++ < WC3_MAX_PLAYER_SLOTS) {
         bool waiting = false;
 
         FOR_LOOP(i, game.max_clients) {
@@ -430,5 +430,5 @@ void G_DrainPausedResultEvents(void) {
     }
 
     G_GameResultDebug("frame drain paused result events stopped after %u passes events=%u/%u",
-        (unsigned)MAX_PLAYERS, (unsigned)level.events.read, (unsigned)level.events.write);
+        (unsigned)WC3_MAX_PLAYER_SLOTS, (unsigned)level.events.read, (unsigned)level.events.write);
 }

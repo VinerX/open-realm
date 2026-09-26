@@ -7,7 +7,7 @@
 #define BOT_BUILD_SEARCH_RINGS 32 // 32-unit grid rings; searches 1024 world units around a town for legal placement
 
 static bot_t *G_BotState(uint32_t player) {
-    return player < MAX_PLAYERS ? &level.bots[player] : NULL;
+    return player < WC3_MAX_PLAYER_SLOTS ? &level.bots[player] : NULL;
 }
 
 static void G_BotClearCaptains(bot_t *bot) {
@@ -301,7 +301,7 @@ bool G_BotAddAssault(player_t *player, int32_t qty, uint32_t class_id) {
     ready = G_BotCaptainFill(player, BOT_CAPTAIN_ATTACK, qty, class_id);
 #ifdef WC3_DEBUG_AI
     fprintf(stderr, "WC3_DEBUG_AI assault add player=%u qty=%d id=%.4s ready=%d size=%u desired=%d\n",
-        player ? PLAYER_NUM(player) : MAX_PLAYERS, qty, (cstring_t)&class_id, ready,
+        player ? PLAYER_NUM(player) : WC3_MAX_PLAYER_SLOTS, qty, (cstring_t)&class_id, ready,
         G_BotCaptainGroupSize(player), bot ? bot->captains[BOT_CAPTAIN_ATTACK].desired : 0);
 #endif
     return ready;
@@ -542,7 +542,7 @@ void G_BotRequestStop(uint32_t player) {
 }
 
 void G_BotShutdown(void) {
-    FOR_LOOP(player, MAX_PLAYERS) G_BotStop(player);
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) G_BotStop(player);
 }
 
 /* Each bot gets a private JASS root because common.ai stores all policy state in globals. */
@@ -606,7 +606,7 @@ void G_BotPause(uint32_t player, bool paused) {
 }
 
 void G_BotRunFrame(void) {
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         bot_t *bot = level.bots + player;
         if (!bot->vm) continue;
         if (bot->stop_requested) { G_BotStop(player); continue; }

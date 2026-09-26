@@ -177,11 +177,11 @@ uint32_t SetMapDescription(jass_t *j) {
     return 0;
 }
 uint32_t SetTeams(jass_t *j) {
-    level.setup.teams = MIN(MAX(0, jass_checkinteger(j, 1)), MAX_PLAYERS);
+    level.setup.teams = MIN(MAX(0, jass_checkinteger(j, 1)), WC3_MAX_MAP_PLAYERS);
     return 0;
 }
 uint32_t SetPlayers(jass_t *j) {
-    level.setup.players = MIN(MAX(0, jass_checkinteger(j, 1)), MAX_PLAYERS);
+    level.setup.players = MIN(MAX(0, jass_checkinteger(j, 1)), WC3_MAX_MAP_PLAYERS);
     return 0;
 }
 uint32_t DefineStartLocation(jass_t *j) {
@@ -189,8 +189,8 @@ uint32_t DefineStartLocation(jass_t *j) {
     float x = jass_checknumber(j, 2);
     float y = jass_checknumber(j, 3);
 
-    if (level.mapinfo && whichStartLoc >= 0 && whichStartLoc < MAX_PLAYERS) {
-        ((mapInfo_t *)level.mapinfo)->players[whichStartLoc].startingPosition = (vec2_t){ x, y };
+    if (whichStartLoc >= 0 && whichStartLoc < WC3_MAX_MAP_PLAYERS) {
+        level.setup.start_locations[whichStartLoc] = (vec2_t){ x, y };
     }
     return 0;
 }
@@ -198,33 +198,32 @@ uint32_t DefineStartLocationLoc(jass_t *j) {
     int32_t whichStartLoc = jass_checkinteger(j, 1);
     vec2_t const *whichLocation = jass_checkhandle(j, 2, "location");
 
-    if (level.mapinfo && whichLocation &&
-        whichStartLoc >= 0 && whichStartLoc < MAX_PLAYERS) {
-        ((mapInfo_t *)level.mapinfo)->players[whichStartLoc].startingPosition = *whichLocation;
+    if (whichLocation && whichStartLoc >= 0 && whichStartLoc < WC3_MAX_MAP_PLAYERS) {
+        level.setup.start_locations[whichStartLoc] = *whichLocation;
     }
     return 0;
 }
 uint32_t SetStartLocPrioCount(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), count = jass_checkinteger(j, 2);
-    if (loc >= 0 && loc < MAX_PLAYERS) level.setup.start_prio[loc].count = MIN(MAX(0, count), MAX_START_PRIO);
+    if (loc >= 0 && loc < WC3_MAX_MAP_PLAYERS) level.setup.start_prio[loc].count = MIN(MAX(0, count), MAX_START_PRIO);
     return 0;
 }
 uint32_t SetStartLocPrio(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), slot = jass_checkinteger(j, 2), other = jass_checkinteger(j, 3);
     uint32_t *priority = jass_checkhandle(j, 4, "startlocprio");
-    if (loc >= 0 && loc < MAX_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count && priority)
+    if (loc >= 0 && loc < WC3_MAX_MAP_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count && priority)
         level.setup.start_prio[loc].slots[slot] = (typeof(*level.setup.start_prio[loc].slots)){ other, *priority };
     return 0;
 }
 uint32_t GetStartLocPrioSlot(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), slot = jass_checkinteger(j, 2);
-    int32_t value = loc >= 0 && loc < MAX_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count ?
+    int32_t value = loc >= 0 && loc < WC3_MAX_MAP_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count ?
         level.setup.start_prio[loc].slots[slot].location : 0;
     return jass_pushinteger(j, value);
 }
 uint32_t GetStartLocPrio(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), slot = jass_checkinteger(j, 2);
-    int32_t value = loc >= 0 && loc < MAX_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count ?
+    int32_t value = loc >= 0 && loc < WC3_MAX_MAP_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count ?
         level.setup.start_prio[loc].slots[slot].priority : 0;
     return JassPushStartLocPrioHandle(j, value);
 }
@@ -304,25 +303,25 @@ uint32_t GetCreatureDensity(jass_t *j) {
 uint32_t GetStartLocationX(jass_t *j) {
     int32_t whichStartLocation = jass_checkinteger(j, 1);
 
-    if (!level.mapinfo || whichStartLocation < 0 || whichStartLocation >= MAX_PLAYERS) {
+    if (whichStartLocation < 0 || whichStartLocation >= WC3_MAX_MAP_PLAYERS) {
         return jass_pushnumber(j, 0);
     }
-    return jass_pushnumber(j, level.mapinfo->players[whichStartLocation].startingPosition.x);
+    return jass_pushnumber(j, level.setup.start_locations[whichStartLocation].x);
 }
 uint32_t GetStartLocationY(jass_t *j) {
     int32_t whichStartLocation = jass_checkinteger(j, 1);
 
-    if (!level.mapinfo || whichStartLocation < 0 || whichStartLocation >= MAX_PLAYERS) {
+    if (whichStartLocation < 0 || whichStartLocation >= WC3_MAX_MAP_PLAYERS) {
         return jass_pushnumber(j, 0);
     }
-    return jass_pushnumber(j, level.mapinfo->players[whichStartLocation].startingPosition.y);
+    return jass_pushnumber(j, level.setup.start_locations[whichStartLocation].y);
 }
 uint32_t GetStartLocationLoc(jass_t *j) {
     int32_t whichStartLocation = jass_checkinteger(j, 1);
     API_ALLOC(vec2_t, location);
 
-    if (level.mapinfo && whichStartLocation >= 0 && whichStartLocation < MAX_PLAYERS) {
-        *location = level.mapinfo->players[whichStartLocation].startingPosition;
+    if (whichStartLocation >= 0 && whichStartLocation < WC3_MAX_MAP_PLAYERS) {
+        *location = level.setup.start_locations[whichStartLocation];
     }
     return 1;
 }
@@ -449,7 +448,7 @@ uint32_t ForForce(jass_t *j) {
     if (!whichForce || !callback) {
         return 0;
     }
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
         if (!(*whichForce & (1 << i))) {
             continue;
         }
@@ -1699,7 +1698,7 @@ uint32_t SetCinematicScene(jass_t *j) {
          * Keep unsupported extended player colors deterministic instead of
          * allowing the renderer's bit mask to wrap them onto another color. */
         currentplayer->stats[UI_PLAYERSTAT_CINEMATIC_PORTRAIT_COLOR] =
-            color && *color < MAX_PLAYERS ? *color : 0;
+            color && *color < WC3_MAX_PLAYER_SLOTS ? *color : 0;
         if (portraitUnitId) {
             cstring_t model = G_UnitUI((uint32_t)portraitUnitId)->modelFile;
             if (model && *model) {

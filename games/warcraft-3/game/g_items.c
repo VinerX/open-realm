@@ -50,7 +50,7 @@ static void G_RefreshInventoryUI(edict_t *unit) {
 static void G_ShowInventoryFull(edict_t *unit) {
     edict_t *player;
 
-    if (!unit || unit->s.player >= MAX_PLAYERS || !level.mapinfo) {
+    if (!unit || unit->s.player >= WC3_MAX_PLAYER_SLOTS || !level.mapinfo) {
         return;
     }
     player = G_GetPlayerEntityByNumber(unit->s.player);
@@ -730,7 +730,7 @@ void G_UseItem(edict_t *unit, uint32_t slot) {
     cstring_t abilities;
 
     if (!unit || !G_InventoryCanUseItems(unit) ||
-        slot >= G_InventoryCapacity(unit) || unit->s.player >= MAX_PLAYERS) {
+        slot >= G_InventoryCapacity(unit) || unit->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return;
     }
     item = unit->inventory[slot];

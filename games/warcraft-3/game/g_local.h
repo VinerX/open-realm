@@ -15,6 +15,7 @@
 #include "g_shared.h"
 #include "g_unitrow.h"
 #include "jass/jlex.h"
+#include "lua/wc3_lua.h"
 
 #define SAFE_CALL(FUNC, ...) if (FUNC) FUNC(__VA_ARGS__)
 #define ABILITY(NAME) void M_##NAME(edict_t *ent, edict_t *target)
@@ -539,7 +540,7 @@ struct client_s {
     bool presentation_dirty; /* dialogue/interface/selected-portrait state changed; flush svc_layout after simulation */
     struct {
         uint32_t race_pref, controller;
-        uint8_t tax[MAX_PLAYERS][PLAYERSTATE_LUMBER_GATHERED + 1];
+        uint8_t tax[WC3_MAX_PLAYER_SLOTS][PLAYERSTATE_LUMBER_GATHERED + 1];
         float handicap, handicap_xp;
         bool race_selectable, on_score_screen;
         bool removed;
@@ -1375,7 +1376,7 @@ struct edict_s {
     uint32_t spawn_time;
     uint32_t summon_ability; /* ability rawcode that created this summoned unit; 0 for ordinary units */
     uint32_t permanent_invisibility_reveal_until; /* Apiv: visible until this server-time deadline after spawn/attack/cast */
-    uint16_t forced_visibility_count[MAX_PLAYERS]; /* active unit-specific reveals, indexed by the sight-sharing player */
+    uint16_t forced_visibility_count[WC3_MAX_PLAYER_SLOTS]; /* active unit-specific reveals, indexed by the sight-sharing player */
     uint32_t harvested_lumber;
     uint32_t harvested_gold;
     struct edictMilitia_s {
@@ -1683,6 +1684,7 @@ typedef struct clientCamera_s clientCamera_s;
 
 struct game_locals {
     uint32_t max_clients;
+    uint32_t player_slots;
     uint32_t num_abilities;
     gameClient_t *clients;
     struct {
@@ -1800,7 +1802,7 @@ typedef struct {
     uint8_t *blocked;
     uint32_t num_blocked;
     ARRAY(uint32_t, rim_cells);
-    fowPlayerGrid_t players[MAX_PLAYERS];
+    fowPlayerGrid_t players[WC3_MAX_PLAYER_SLOTS];
 } fowGrid_t;
 
 #define BLIGHT_SWEEP_INTERVAL 100 // frames; resync cadence for undelivered rows; used by background sweep
@@ -1811,7 +1813,7 @@ typedef struct {
     box2_t bounds;
     uint8_t *cells; /* mutable current Blight, one byte per 32-unit pathing cell */
     uint32_t *dirty_rows; /* one client bit per row; changed rows are sent once per client */
-    uint32_t sweep_row[MAX_PLAYERS]; /* per-client background resync cursor; next row to sweep */
+    uint32_t sweep_row[WC3_MAX_PLAYER_SLOTS]; /* per-player background resync cursor; next row to sweep */
 } blightGrid_t;
 
 /* A fog modifier continuously applies one of the three JASS fog states while started. */
@@ -1944,6 +1946,7 @@ typedef struct {
 
 struct level_locals {
     jass_t *vm;
+    wc3Lua_t *lua_vm;
     ggroup_t **groups;
     uint32_t num_groups;
     uint32_t group_capacity;
@@ -1954,7 +1957,7 @@ struct level_locals {
     uint32_t num_timers;
     timerdialog_t timer_dialogs[MAX_TIMERDIALOGS];
     leaderboard_t leaderboards[MAX_LEADERBOARDS];
-    int32_t player_leaderboards[MAX_PLAYERS]; /* registry index, -1 = none */
+    int32_t player_leaderboards[WC3_MAX_PLAYER_SLOTS]; /* registry index, -1 = none */
     uint32_t leaderboard_dirty_clients;
     multiboard_t multiboards[MAX_MULTIBOARDS];
     multiboardItem_t multiboard_items[MAX_MULTIBOARD_ITEMS];
@@ -1971,7 +1974,7 @@ struct level_locals {
     uint32_t next_weather_id;
     gLightning_t lightning_effects[MAX_LIGHTNING_EFFECTS];
     uint32_t next_lightning_id;
-    bot_t bots[MAX_PLAYERS];
+    bot_t bots[WC3_MAX_PLAYER_SLOTS];
     mapInfo_t const *mapinfo;
     PATHSTR map_path;
     struct {
@@ -1979,10 +1982,11 @@ struct level_locals {
         uint32_t teams, players, game_types, game_type, map_flags;
         uint32_t placement, speed, difficulty, default_difficulty, resource_density, creature_density;
         uint32_t forced_start_locations;
+        vec2_t start_locations[WC3_MAX_MAP_PLAYERS];
         struct {
             uint32_t count;
             struct { int32_t location; uint32_t priority; } slots[MAX_START_PRIO];
-        } start_prio[MAX_PLAYERS];
+        } start_prio[WC3_MAX_MAP_PLAYERS];
     } setup;
     levelEvents_t events;
     bool pending_consumed_item_cleanup;
@@ -1995,7 +1999,7 @@ struct level_locals {
         uint32_t base, cursor, count;
     } waypoints;
     quest_t quests[MAX_QUESTS];
-    uint16_t alliances[MAX_PLAYERS][MAX_PLAYERS];
+    uint16_t alliances[WC3_MAX_PLAYER_SLOTS][WC3_MAX_PLAYER_SLOTS];
     fowGrid_t fow;
     blightGrid_t blight;
     cineFilter_t cinefilter;
@@ -2045,6 +2049,7 @@ typedef struct {
 // g_main.c
 player_t *G_GetPlayerByNumber(uint32_t);
 void G_InitJassHost(void);
+void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
 edict_t *G_GetPlayerEntityByNumber(uint32_t);
 gameClient_t *G_GetPlayerClientByNumber(uint32_t);
 void G_SetClientConnected(edict_t *player, bool connected);

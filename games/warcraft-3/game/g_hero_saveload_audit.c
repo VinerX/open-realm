@@ -120,7 +120,7 @@ static bool hsa_hero_ok(edict_t const *ent) {
 }
 
 static edict_t *hsa_find_hero(void) {
-    FOR_LOOP(player, MAX_PLAYERS) {
+    FOR_LOOP(player, WC3_MAX_PLAYER_SLOTS) {
         if (level.mapinfo && (!level.mapinfo->players[player].used ||
                 level.mapinfo->players[player].playerType != kPlayerTypeHuman))
             continue;

@@ -1200,7 +1200,7 @@ static bool follow_target_is_valid(edict_t const *self, edict_t const *target) {
     if (!self || !target || !target->inuse || !(target->svflags & SVF_MONSTER) || M_IsDead((edict_t *)target)) {
         return false;
     }
-    if (self->s.player >= MAX_PLAYERS || target->s.player >= MAX_PLAYERS) {
+    if (self->s.player >= WC3_MAX_PLAYER_SLOTS || target->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     owner = target->s.player;

@@ -200,7 +200,7 @@ static void G_DumpPrologue02BurrowHandoffSource(cstring_t script) {
 }
 
 static uint32_t G_NormalizeMapObjectPlayer(uint32_t player) {
-    if (player < MAX_PLAYERS) {
+    if (player < WC3_MAX_PLAYER_SLOTS) {
         return player;
     }
     return PLAYER_NEUTRAL_PASSIVE;
@@ -551,7 +551,7 @@ static uint32_t G_LocalMapPlayerNumber(mapInfo_t const *mapinfo) {
     if (!mapinfo) {
         return 0;
     }
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) {
         if (mapinfo->players[i].used && mapinfo->players[i].playerType == kPlayerTypeHuman) {
             return i;
         }
@@ -565,7 +565,7 @@ static uint32_t G_ClientSlotMapPlayerNumber(mapInfo_t const *mapinfo, uint32_t s
     if (slot == 0) {
         return local_player;
     }
-    FOR_LOOP(i, MAX_PLAYERS) {
+    FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) {
         if (i == local_player) {
             continue;
         }
@@ -601,7 +601,8 @@ static uint32_t G_RacePreference(mapPlayer_t const *player) {
 }
 
 static void G_InitMapPlayer(edict_t *clent, mapInfo_t const *mapinfo, uint32_t playernum) {
-    mapPlayer_t const *player = mapinfo ? mapinfo->players + playernum : NULL;
+    mapPlayer_t const *player = mapinfo && playernum < WC3_MAX_MAP_PLAYERS
+        ? mapinfo->players + playernum : NULL;
     cstring_t name = player && player->playerName ? G_LevelString(player->playerName) : NULL;
     player_t *ps = &clent->client->ps;
     G_SetClientConnected(clent, false);
@@ -665,6 +666,7 @@ void G_SpawnEntities(void) {
     /* Map replacement must release script roots before level pointers are cleared. */
     G_BotShutdown();
     if (level.vm) { jass_close(level.vm); level.vm = NULL; }
+    if (level.lua_vm) { WC3_LuaClose(level.lua_vm); level.lua_vm = NULL; }
     G_ClearSaveRegistries();
     G_ClearJassGroupRegistry();
     G_ClearRegionRegistry();
@@ -674,7 +676,7 @@ void G_SpawnEntities(void) {
     memset(&level, 0, sizeof(level));
     G_ResetSelectionSoundState();
     G_ResetHeroPassiveCaches();
-    FOR_LOOP(i, MAX_PLAYERS) level.player_leaderboards[i] = -1;
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) level.player_leaderboards[i] = -1;
     G_ResetStartingResourceCheat();
     level.time = gi.GetTime();
 
@@ -683,7 +685,7 @@ void G_SpawnEntities(void) {
     G_EnvironmentFogInitMap();
     G_InitPlayerAlliances(mapinfo);
     level.setup.teams = mapinfo ? mapinfo->num_teams : 0;
-    if (mapinfo) FOR_LOOP(i, MAX_PLAYERS) level.setup.players += mapinfo->players[i].used;
+    if (mapinfo) FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) level.setup.players += mapinfo->players[i].used;
     level.setup.game_type = 4;
     level.setup.speed = 2;
     if ((!strncasecmp(map_path, "Maps\\Campaign\\", 14) ||
@@ -700,22 +702,29 @@ void G_SpawnEntities(void) {
     if (mapinfo) {
         strlcpy(level.setup.name, G_LevelString(mapinfo->mapName ? mapinfo->mapName : ""), sizeof(level.setup.name));
         strlcpy(level.setup.description, G_LevelString(mapinfo->mapDescription ? mapinfo->mapDescription : ""), sizeof(level.setup.description));
+        FOR_LOOP(i, WC3_MAX_MAP_PLAYERS) level.setup.start_locations[i] = mapinfo->players[i].startingPosition;
     }
     G_FowInit();
     G_InitJassHost();
     level.vm = jass_newstate();
     
-    FOR_LOOP(p, MAX_PLAYERS) {
+    FOR_LOOP(p, game.max_clients) {
         gameClient_t *client = game.clients+p;
         uint32_t playernum = G_ClientSlotMapPlayerNumber(mapinfo, p, local_player);
         g_edicts[p].client = client;
         G_InitMapPlayer(g_edicts+p, mapinfo, playernum);
     }
+    for (uint32_t p = game.max_clients; p < game.player_slots; ++p) {
+        gameClient_t *client = game.clients + p;
+        g_edicts[p].client = client;
+        g_edicts[p].s.number = p;
+        G_InitMapPlayer(g_edicts + p, mapinfo, p);
+    }
     if (mapinfo)
         G_SetCameraBounds(mapinfo->cameraBounds.bounds);
     G_WeatherInitMap();
 
-    globals.num_edicts = game.max_clients;
+    globals.num_edicts = game.player_slots;
     /* Quake II's body queue reserves real edicts before map entities, keeping all entity pointers in one address domain. */
     G_InitWaypoints();
 
@@ -757,15 +766,35 @@ void G_SpawnEntities(void) {
     jass_dofile(level.vm, "Scripts\\Blizzard.j");
     gi.LoadingFrame();
 //    jass_dofilenative(level.vm, "/Users/igor/Desktop/war3map.j");
-    G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
-    if (level.mapinfo->mapscript)
+    if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.mapinfo->mapscript) {
+        level.lua_vm = WC3_LuaNewState();
+        if (!level.lua_vm) {
+            fprintf(stderr, "G_SpawnEntities: could not create Lua 5.3 state for %s\n",
+                    gi.CvarString("map", "(unknown)"));
+        } else if (!WC3_LuaLoadBuffer(level.lua_vm, level.mapinfo->mapscript, "war3map.lua")) {
+            fprintf(stderr, "G_SpawnEntities: Lua load failed for %s: %s\n",
+                    gi.CvarString("map", "(unknown)"),
+                    WC3_LuaErrorMessage(level.lua_vm));
+        }
+        G_RegisterLuaMapConfigNatives(level.lua_vm);
+    } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && level.mapinfo->mapscript) {
+        G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
         jass_dobuffer(level.vm, level.mapinfo->mapscript);
-    else
-        fprintf(stderr, "G_SpawnEntities: missing mapscript; skipping jass_dobuffer\n");
+    } else {
+        fprintf(stderr, "G_SpawnEntities: missing selected map script in %s\n",
+                gi.CvarString("map", "(unknown)"));
+    }
     gi.LoadingFrame();
 
     /* Warcraft executes config before main; this phase owns authored player colors, teams, and slots. */
-    if (!level.scriptsConfigured && level.mapinfo && level.mapinfo->mapscript &&
+    if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.lua_vm &&
+        WC3_LuaCall(level.lua_vm, "config")) {
+        level.scriptsConfigured = true;
+    } else if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.lua_vm) {
+        fprintf(stderr, "G_SpawnEntities: Lua config failed for %s: %s\n",
+                gi.CvarString("map", "(unknown)"),
+                WC3_LuaErrorMessage(level.lua_vm));
+    } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && !level.scriptsConfigured && level.mapinfo && level.mapinfo->mapscript &&
         strstr(level.mapinfo->mapscript, "function config")) {
         jass_callbyname(level.vm, "config", false);
         if (!jass_rterror_pending(level.vm)) level.scriptsConfigured = true;

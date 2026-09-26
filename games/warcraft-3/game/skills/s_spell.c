@@ -339,7 +339,7 @@ bool S_SpellIsAliveTarget(edict_t *target) {
 bool S_SpellIsEnemy(edict_t *caster, edict_t *target) {
     uint32_t owner;
 
-    if (!caster || !target || caster->s.player >= MAX_PLAYERS || target->s.player >= MAX_PLAYERS) {
+    if (!caster || !target || caster->s.player >= WC3_MAX_PLAYER_SLOTS || target->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     owner = target->s.player;
@@ -356,7 +356,7 @@ bool S_SpellIsEnemy(edict_t *caster, edict_t *target) {
 bool S_SpellIsFriend(edict_t *caster, edict_t *target) {
     uint32_t owner;
 
-    if (!caster || !target || caster->s.player >= MAX_PLAYERS || target->s.player >= MAX_PLAYERS) {
+    if (!caster || !target || caster->s.player >= WC3_MAX_PLAYER_SLOTS || target->s.player >= WC3_MAX_PLAYER_SLOTS) {
         return false;
     }
     owner = target->s.player;
@@ -395,7 +395,7 @@ bool S_SpellAllowsTarget(uint32_t code, edict_t *caster, edict_t *target) {
         return false;
     }
     if (S_UnitSpellImmune(target)) return false;
-    if (caster && caster->s.player < MAX_PLAYERS &&
+    if (caster && caster->s.player < WC3_MAX_PLAYER_SLOTS &&
         S_UnitIsInvisibleToPlayer(target, caster->s.player)) return false;
     ability_level = S_SpellLevel(caster, code);
     targets = G_AbilityLevel(code, ability_level)->targs;
@@ -425,7 +425,7 @@ bool S_SpellAllowsTarget(uint32_t code, edict_t *caster, edict_t *target) {
     if (strstr(targets, "enemy") && S_SpellIsEnemy(caster, target)) {
         return true;
     }
-    if (strstr(targets, "neutral") && target->s.player < MAX_PLAYERS && level.mapinfo &&
+    if (strstr(targets, "neutral") && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
         level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral) {
         return true;
     }
@@ -454,7 +454,7 @@ static bool spell_allows_corpse_target(uint32_t code, edict_t *caster, edict_t *
     if (strstr(targets, "player") && target->s.player == caster->s.player) return true;
     if (strstr(targets, "friend") && S_SpellIsFriend(caster, target)) return true;
     if (strstr(targets, "enemy") && S_SpellIsEnemy(caster, target)) return true;
-    if (strstr(targets, "neutral") && target->s.player < MAX_PLAYERS && level.mapinfo &&
+    if (strstr(targets, "neutral") && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
         level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral) return true;
     return !strstr(targets, "player") && !strstr(targets, "friend") &&
         !strstr(targets, "enemy") && !strstr(targets, "neutral");

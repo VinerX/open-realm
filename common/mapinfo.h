@@ -6,10 +6,12 @@
 #define TILE_SIZE 128
 #define SEGMENT_SIZE 32
 //#define AREA_SIZE (TILE_SIZE * SEGMENT_SIZE)
-#define PLAYER_NEUTRAL_AGGRESSIVE 12 // player slot; Warcraft III hostile neutral owner
-#define PLAYER_NEUTRAL_VICTIM 13 // player slot; Warcraft III neutral victim owner
-#define PLAYER_NEUTRAL_EXTRA 14 // player slot; Warcraft III extra neutral owner
-#define PLAYER_NEUTRAL_PASSIVE 15 // player slot; Warcraft III passive neutral owner
+#define WC3_MAX_MAP_PLAYERS 24
+#define WC3_MAX_PLAYER_SLOTS (WC3_MAX_MAP_PLAYERS + 4)
+#define PLAYER_NEUTRAL_AGGRESSIVE WC3_MAX_MAP_PLAYERS
+#define PLAYER_NEUTRAL_VICTIM (WC3_MAX_MAP_PLAYERS + 1)
+#define PLAYER_NEUTRAL_EXTRA (WC3_MAX_MAP_PLAYERS + 2)
+#define PLAYER_NEUTRAL_PASSIVE (WC3_MAX_MAP_PLAYERS + 3)
 
 typedef struct {
     float bounds[8];
@@ -265,7 +267,7 @@ struct mapInfo_s {
     uint32_t num_originalAbilities;
     uint32_t num_userCreatedAbilities;
     uint32_t num_weatherRegions;
-    mapPlayer_t players[MAX_PLAYERS];
+    mapPlayer_t players[WC3_MAX_MAP_PLAYERS];
     mapTeam_t *teams;
     mapUpgradeAvailability_t *upgradeAvailabilities;
     mapTechAvailability_t *techAvailabilities;

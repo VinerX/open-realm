@@ -21,7 +21,7 @@ void G_SendMinimapPing(gameClient_t *client, vec2_t const *position, float durat
 void G_SendOwnerMinimapAlert(edict_t *ent) {
     gameClient_t *client;
 
-    if (!ent || ent->s.player >= MAX_PLAYERS) return;
+    if (!ent || ent->s.player >= WC3_MAX_PLAYER_SLOTS) return;
     client = G_GetPlayerClientByNumber(ent->s.player);
     if (!client || client->ps.number != ent->s.player) return;
     G_SendMinimapPing(client, &ent->s.origin2, WC3_DEFAULT_ALERT_PING_DURATION,

@@ -3,16 +3,16 @@
 
 static soundPolicy_t sound_index_policy[MAX_SOUNDS];
 static UnitAckSounds_t const *sound_index_row[MAX_SOUNDS];
-static uint16_t sound_index_last[MAX_PLAYERS][MAX_SOUNDS];
+static uint16_t sound_index_last[WC3_MAX_PLAYER_SLOTS][MAX_SOUNDS];
 
 void G_AcceptSoundVariant(int index, uint32_t owner) {
-    if (index <= 0 || index >= MAX_SOUNDS || owner >= MAX_PLAYERS || !sound_index_row[index]) return;
+    if (index <= 0 || index >= MAX_SOUNDS || owner >= WC3_MAX_PLAYER_SLOTS || !sound_index_row[index]) return;
     FOR_LOOP(i, MAX_SOUNDS)
         if (sound_index_row[i] == sound_index_row[index]) sound_index_last[owner][i] = index;
 }
 
 bool G_SoundVariantIsLast(int index, uint32_t owner) {
-    return index > 0 && index < MAX_SOUNDS && owner < MAX_PLAYERS && sound_index_last[owner][index] == index;
+    return index > 0 && index < MAX_SOUNDS && owner < WC3_MAX_PLAYER_SLOTS && sound_index_last[owner][index] == index;
 }
 
 static float sound_index_volume[MAX_SOUNDS];
@@ -518,7 +518,7 @@ void G_QueueReadySound(edict_t *ent) {
 void G_QueueOwnerSoundAlias(edict_t *ent, cstring_t alias) {
     int sound;
 
-    if (!ent || ent->s.player >= MAX_PLAYERS || !alias || !alias[0]) return;
+    if (!ent || ent->s.player >= WC3_MAX_PLAYER_SLOTS || !alias || !alias[0]) return;
     sound = G_RegisterUISound(alias);
     if (sound) ent->sound.owner_pending = sound;
 }
@@ -527,7 +527,7 @@ void G_QueueOwnerUISound(edict_t *ent, cstring_t skin_key) {
     gameClient_t *client;
     cstring_t alias;
 
-    if (!ent || !skin_key || ent->s.player >= MAX_PLAYERS) return;
+    if (!ent || !skin_key || ent->s.player >= WC3_MAX_PLAYER_SLOTS) return;
     client = G_GetPlayerClientByNumber(ent->s.player);
     if (!client || client->ps.number != ent->s.player) return;
     alias = Theme_PlayerString(client, skin_key, NULL);

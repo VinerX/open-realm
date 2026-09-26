@@ -9,7 +9,7 @@ static bool unstable_concoction_splash_allows(uint32_t code, edict_t *caster, ed
 	targets = G_AbilityLevel(code, 1)->targs;
 	if (!targets) return true;
 	if (strstr(targets, "enemy") && S_SpellIsEnemy(caster, target)) return true;
-	if (strstr(targets, "neutral") && target->s.player < MAX_PLAYERS && level.mapinfo &&
+	if (strstr(targets, "neutral") && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
 		level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral)
 		return true;
 	return false;

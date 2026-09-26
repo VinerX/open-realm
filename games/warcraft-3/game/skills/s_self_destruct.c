@@ -13,7 +13,7 @@ static bool self_destruct_allows(uint32_t code, edict_t *caster, edict_t *target
 		!(strstr(targets, "structure") && (target->targtype == TARG_STRUCTURE || G_UnitIsBuilding(target->class_id))))
 		return false;
 	if (strstr(targets, "enemy") && S_SpellIsEnemy(caster, target)) return true;
-	if (strstr(targets, "neutral") && target->s.player < MAX_PLAYERS && level.mapinfo &&
+	if (strstr(targets, "neutral") && target->s.player < WC3_MAX_PLAYER_SLOTS && level.mapinfo &&
 		level.mapinfo->players[target->s.player].playerType == kPlayerTypeNeutral) return true;
 	return !strstr(targets, "friend") && !strstr(targets, "enemy") && !strstr(targets, "neutral");
 }
