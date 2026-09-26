@@ -82,6 +82,21 @@ static PATHSTR archiveNames[MAX_ARCHIVES];
 static PATHSTR gameDirs[MAX_GAME_DIRS];
 static handle_t priority_archive; /* optional session overlay; searched before archives[] */
 
+typedef struct {
+    handle_t handle;
+} fsMpqFile_t;
+
+typedef enum {
+    FS_FILE_MPQ,
+} fsFileBackend_t;
+
+typedef struct {
+    fsFileBackend_t backend;
+    union {
+        fsMpqFile_t mpq;
+    } source;
+} fsFile_t;
+
 typedef void (*fsDiskEntryFunc_t)(cstring_t name, cstring_t path, bool isDirectory, bool isFile, void *userData);
 
 static void FS_NormalizePath(cstring_t in, string_t out, uint32_t out_size) {
@@ -949,6 +964,20 @@ static void FS_FindCollectLooseDir(fsFind_t *find, cstring_t root, cstring_t rel
 
 static handle_t FS_OpenNestedLooseFile(cstring_t filename);
 
+static handle_t FS_WrapMpqFile(handle_t mpq_file) {
+    fsFile_t *file;
+    if (!mpq_file) return NULL;
+    file = MemAlloc(sizeof(*file));
+    if (!file) {
+        SFileCloseFile(mpq_file);
+        filelock = false;
+        return NULL;
+    }
+    file->backend = FS_FILE_MPQ;
+    file->source.mpq.handle = mpq_file;
+    return file;
+}
+
 handle_t FS_OpenFile(cstring_t fileName) {
     while (filelock) {
         PF_Sleep(10);
@@ -961,7 +990,7 @@ handle_t FS_OpenFile(cstring_t fileName) {
     if (priority_archive) {
         handle_t file;
         if (SFileOpenFileEx(priority_archive, fileName, SFILE_OPEN_FROM_MPQ, &file))
-            return file;
+            return FS_WrapMpqFile(file);
     }
     for (int i = MAX_ARCHIVES - 1; i >= 0; i--) {
         handle_t file;
@@ -971,12 +1000,12 @@ handle_t FS_OpenFile(cstring_t fileName) {
         if (!FS_ArchiveFileVisible(archiveNames[i], fileName))
             continue;
         if (SFileOpenFileEx(archives[i], fileName, SFILE_OPEN_FROM_MPQ, &file)) {
-            return file;
+            return FS_WrapMpqFile(file);
         }
     }
     handle_t looseNestedFile = FS_OpenNestedLooseFile(fileName);
     if (looseNestedFile) {
-        return looseNestedFile;
+        return FS_WrapMpqFile(looseNestedFile);
     }
     filelock = false;
     return NULL;
@@ -1104,8 +1133,63 @@ static handle_t FS_OpenNestedLooseFile(cstring_t filename) {
 }
 
 void FS_CloseFile(handle_t file) {
-    SFileCloseFile(file);
+    fsFile_t *vfs_file = file;
+    if (vfs_file) {
+        switch (vfs_file->backend) {
+            case FS_FILE_MPQ:
+                SFileCloseFile(vfs_file->source.mpq.handle);
+                break;
+        }
+        MemFree(vfs_file);
+    }
     filelock = false;
+}
+
+bool FS_ReadFileHandle(handle_t file, void *buffer, uint32_t length, uint32_t *bytes_read) {
+    fsFile_t *vfs_file = file;
+    uint32_t read = 0;
+    bool ok;
+    if (!vfs_file || (length && !buffer)) return false;
+    switch (vfs_file->backend) {
+        case FS_FILE_MPQ:
+            ok = SFileReadFile(vfs_file->source.mpq.handle, buffer, length, &read, NULL);
+            break;
+        default:
+            return false;
+    }
+    if (bytes_read) *bytes_read = read;
+    return ok;
+}
+
+bool FS_SetFilePointer(handle_t file, int64_t distance, uint32_t origin) {
+    fsFile_t *vfs_file = file;
+    if (!vfs_file) return false;
+    switch (vfs_file->backend) {
+        case FS_FILE_MPQ: {
+            int32_t high = (int32_t)(distance >> 32);
+            uint32_t position = SFileSetFilePointer(vfs_file->source.mpq.handle,
+                                                    (int32_t)distance, &high, origin);
+            return position != SFILE_INVALID_POS;
+        }
+        default:
+            return false;
+    }
+}
+
+bool FS_GetFileSize(handle_t file, uint64_t *size) {
+    fsFile_t *vfs_file = file;
+    if (!vfs_file || !size) return false;
+    switch (vfs_file->backend) {
+        case FS_FILE_MPQ: {
+            uint32_t high = 0;
+            uint32_t low = SFileGetFileSize(vfs_file->source.mpq.handle, &high);
+            if (low == SFILE_INVALID_POS && high == 0) return false;
+            *size = ((uint64_t)high << 32) | low;
+            return true;
+        }
+        default:
+            return false;
+    }
 }
 
 // Quake 3-style FS_ReadFile: returns size, allocates buffer via buf pointer
@@ -1127,10 +1211,17 @@ handle_t FS_ReadFile(cstring_t filename, uint32_t *size) {
     if (!fp) {
         return FS_ReadLooseFile(filename, size, 0);
     }
-    *size = SFileGetFileSize(fp, NULL);
+    uint64_t file_size;
+    if (!FS_GetFileSize(fp, &file_size) || file_size > UINT32_MAX) {
+        fprintf(stderr, "FS_ReadFile: invalid or oversized VFS file %s\n", filename);
+        FS_CloseFile(fp);
+        *size = 0;
+        return NULL;
+    }
+    *size = (uint32_t)file_size;
     string_t buffer = MemAlloc(*size + 1);
-    if (!SFileReadFile(fp, buffer, *size, &read_size, NULL) || read_size != *size) {
-        fprintf(stderr, "FS_ReadFile: incomplete MPQ read for %s (%u/%u bytes)\n", filename, read_size, *size);
+    if (!buffer || !FS_ReadFileHandle(fp, buffer, *size, &read_size) || read_size != *size) {
+        fprintf(stderr, "FS_ReadFile: incomplete VFS read for %s (%u/%u bytes)\n", filename, read_size, *size);
         MemFree(buffer); FS_CloseFile(fp); *size = 0;
         return NULL;
     }
