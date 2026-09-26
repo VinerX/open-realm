@@ -57,6 +57,20 @@ typedef enum {
     share_advanced_unit_control = 0x0020,
 } forceFlags_t;
 
+/* W3I scriptType (format 28+) values and the resolved map-script selector.
+ * The serialized field is 0 = JASS, 1 = Lua; unknown values keep the legacy
+ * JASS path so a future Blizzard extension cannot silently select Lua. */
+enum wc3W3iScriptType_t {
+    WC3_W3I_SCRIPT_JASS = 0,
+    WC3_W3I_SCRIPT_LUA  = 1,
+};
+
+typedef enum {
+    WC3_SCRIPT_NONE = 0,
+    WC3_SCRIPT_JASS = 1,
+    WC3_SCRIPT_LUA  = 2,
+} wc3ScriptType_t;
+
 typedef struct mapPlayer_s {
 //    uint32_t number;
     bool used;
@@ -267,6 +281,9 @@ struct mapInfo_s {
     unitData_t *originalAbilities; /* war3map.w3a original-table rows */
     unitData_t *userCreatedAbilities;
     mapWeatherRegion_t *weatherRegions;
+    /* Set by CM_ReadMapScript: which runtime owns mapscript. NONE means no
+     * member was found and no runtime should be started for this map. */
+    wc3ScriptType_t scriptKind;
     string_t mapscript;
 };
 

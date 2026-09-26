@@ -1042,14 +1042,32 @@ void CM_ReadStrings(handle_t archive) {
 }
 
 void CM_ReadMapScript(handle_t archive) {
+    cstring_t map = cm_loaded_map[0] ? cm_loaded_map : "(unknown)";
+    bool lua_declared = world.info.fileFormat >= 28 &&
+                        world.info.scriptType == WC3_W3I_SCRIPT_LUA;
+
+    world.info.scriptKind = WC3_SCRIPT_NONE;
+    if (lua_declared) {
+        /* W3I declares Lua: the Lua member is authoritative.  Do not fall back
+         * to war3map.j; a missing Lua member is an explicit map failure. */
+        world.info.mapscript = FS_ReadArchiveFileIntoString(archive, "war3map.lua");
+        if (!world.info.mapscript)
+            world.info.mapscript = FS_ReadArchiveFileIntoString(archive, "scripts\\war3map.lua");
+        world.info.scriptKind = WC3_SCRIPT_LUA;
+        if (!world.info.mapscript)
+            fprintf(stderr, "CM_ReadMapScript: map declares Lua but war3map.lua is missing in %s\n", map);
+        return;
+    }
+
     /* DotA and some protected maps store only scripts\war3map.j. Prefer the
      * root name when both exist; never invent an empty buffer on a miss. */
     world.info.mapscript = FS_ReadArchiveFileIntoString(archive, "war3map.j");
     if (!world.info.mapscript)
         world.info.mapscript = FS_ReadArchiveFileIntoString(archive, "scripts\\war3map.j");
-    if (!world.info.mapscript)
-        fprintf(stderr, "CM_ReadMapScript: missing war3map.j / scripts\\war3map.j in %s\n",
-                cm_loaded_map[0] ? cm_loaded_map : "(unknown)");
+    if (world.info.mapscript)
+        world.info.scriptKind = WC3_SCRIPT_JASS;
+    else
+        fprintf(stderr, "CM_ReadMapScript: missing war3map.j / scripts\\war3map.j in %s\n", map);
 }
 
 bool CM_LoadMap(cstring_t mapFilename, cmLoadYield_t yield) {

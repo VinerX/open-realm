@@ -5,6 +5,9 @@
  * CM_ReadMapScript must prefer war3map.j, then scripts\war3map.j. Missing both
  * leaves mapscript NULL without inventing an empty buffer. jass_dobuffer must
  * refuse NULL instead of crashing in jass_remove_comments.
+ *
+ * A W3I map that declares Lua (scriptType 1, format 28+) must load
+ * war3map.lua and must not fall back to war3map.j.
  */
 #include "test.h"
 #include "../g_local.h"
@@ -133,6 +136,61 @@ TEST(wc3_mapscript, missing_script_leaves_null_without_crash) {
     SFileCloseArchive(archive);
     unlink(path);
     T_NULL(world.info.mapscript);
+}
+
+static void mapscript_set_kind(uint32_t file_format, uint32_t script_type) {
+    world.info.fileFormat = file_format;
+    world.info.scriptType = script_type;
+}
+
+TEST(wc3_mapscript, lua_declared_loads_war3map_lua) {
+    cstring_t path = "/tmp/openwarcraft3-mapscript-lua.mpq";
+    handle_t archive;
+    cstring_t lua = "function config() end\nfunction main() end\n";
+
+    T_ASSERT(mapscript_pack_mpq(path, "war3map.lua", lua));
+    T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
+    mapscript_clear_loaded();
+    mapscript_set_kind(28, WC3_W3I_SCRIPT_LUA);
+    CM_ReadMapScript(archive);
+    SFileCloseArchive(archive);
+    unlink(path);
+    T_EQ(world.info.scriptKind, WC3_SCRIPT_LUA);
+    T_NOT_NULL(world.info.mapscript);
+    T_ASSERT(strstr(world.info.mapscript, "function config") != NULL);
+    mapscript_clear_loaded();
+}
+
+TEST(wc3_mapscript, lua_declared_never_falls_back_to_jass) {
+    cstring_t path = "/tmp/openwarcraft3-mapscript-lua-no-member.mpq";
+    handle_t archive;
+
+    T_ASSERT(mapscript_pack_mpq(path, "war3map.j", kMinimalMapScript));
+    T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
+    mapscript_clear_loaded();
+    mapscript_set_kind(28, WC3_W3I_SCRIPT_LUA);
+    CM_ReadMapScript(archive);
+    SFileCloseArchive(archive);
+    unlink(path);
+    T_EQ(world.info.scriptKind, WC3_SCRIPT_LUA);
+    T_NULL(world.info.mapscript);
+    mapscript_clear_loaded();
+}
+
+TEST(wc3_mapscript, legacy_format_without_scriptkind_stays_jass) {
+    cstring_t path = "/tmp/openwarcraft3-mapscript-legacy.mpq";
+    handle_t archive;
+
+    T_ASSERT(mapscript_pack_mpq(path, "war3map.j", kMinimalMapScript));
+    T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
+    mapscript_clear_loaded();
+    mapscript_set_kind(25, 0);
+    CM_ReadMapScript(archive);
+    SFileCloseArchive(archive);
+    unlink(path);
+    T_EQ(world.info.scriptKind, WC3_SCRIPT_JASS);
+    T_NOT_NULL(world.info.mapscript);
+    mapscript_clear_loaded();
 }
 
 #endif /* BZ_TESTS */
