@@ -1,0 +1,3 @@
+Source: https://github.com/ladislav-zezula/CascLib
+Commit: 4971d363e665551ac4142f541e5f2d71f1cda653
+License: MIT (see LICENSE)

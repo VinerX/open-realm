@@ -171,6 +171,40 @@ $(LUA53_LIB): $(LUA53_OBJS) | $(LIB_DIR)
 	@echo "[lua53]"
 	@ar rcs $@ $(LUA53_OBJS)
 
+# CascLib 3.0 is isolated from the public VFS interface. The project uses the
+# system zlib and never calls CascLib's online-storage APIs.
+CASC_DIR       := vendor/casclib
+CASC_CPP_SRCS  := $(filter-out $(CASC_DIR)/src/overwatch/cmf-key.cpp,$(shell find $(CASC_DIR)/src -name '*.cpp' | sort))
+CASC_C_SRCS    := $(CASC_DIR)/src/jenkins/lookup3.c
+CASC_OBJS      := $(patsubst $(CASC_DIR)/src/%.cpp,$(LIB_DIR)/casc-%.o,$(CASC_CPP_SRCS)) \
+	$(patsubst $(CASC_DIR)/src/%.c,$(LIB_DIR)/casc-%.o,$(CASC_C_SRCS))
+CASC_LIB       := $(LIB_DIR)/libcasc.a
+CASC_CFLAGS    := -I$(CASC_DIR)/src -DCASC_USE_SYSTEM_ZLIB -DCASCLIB_NO_AUTO_LINK_LIBRARY -DCASCLIB_NODEBUG
+CASC_CXXFLAGS  := $(CFLAGS) $(CASC_CFLAGS) -std=c++11
+ifeq ($(OS),Windows_NT)
+CASC_PLATFORM_LIBS := -lwininet -lws2_32
+else
+CASC_PLATFORM_LIBS := -pthread
+endif
+
+$(LIB_DIR)/casc-%.o: $(CASC_DIR)/src/%.cpp $(shell find $(CASC_DIR)/src -type f -name '*.h' | sort) | $(LIB_DIR)
+	@mkdir -p $(dir $@)
+	@$(CXX) $(CASC_CXXFLAGS) -c $< -o $@
+
+$(LIB_DIR)/casc-%.o: $(CASC_DIR)/src/%.c $(shell find $(CASC_DIR)/src -type f -name '*.h' | sort) | $(LIB_DIR)
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) $(CASC_CFLAGS) -c $< -o $@
+
+$(CASC_LIB): $(CASC_OBJS) $(shell find $(CASC_DIR)/src -type f -name '*.h' | sort) | $(LIB_DIR)
+	@echo "[casc]"
+	@ar rcs $@ $(CASC_OBJS)
+
+$(BIN_DIR)/casc_probe$(EXE_EXT): tools/casc_probe.c $(CASC_LIB) | $(BIN_DIR)
+	@$(CC) $(CFLAGS) $(CASC_CFLAGS) -o $@ $< $(LDFLAGS) -L$(LIB_DIR) -lcasc -lstdc++ $(CASC_PLATFORM_LIBS) -lz
+
+.PHONY: casc-probe
+casc-probe: $(BIN_DIR)/casc_probe$(EXE_EXT)
+
 TOOL_SRCS := $(shell find tools -maxdepth 1 -name '*.c' ! -name 'jass.c' | sort)
 TOOL_NAMES := $(patsubst tools/%.c,%,$(TOOL_SRCS))
 TOOL_BINS := $(addprefix $(BIN_DIR)/,$(addsuffix $(EXE_EXT),$(TOOL_NAMES)))

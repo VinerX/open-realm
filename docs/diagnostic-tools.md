@@ -1,5 +1,23 @@
 # Diagnostic Tools
 
+## CASC storage probe
+
+`make casc-probe` builds a read-only local-storage diagnostic around CascLib.
+It selects the requested product explicitly, opens storage with the local API,
+reports product/build metadata, and reads a small sample from each named file.
+For Warcraft III 3.0, CASC root paths are namespaced in the ROOT manifest (for
+example, `war3.w3mod:units\unitdata.slk`); pass the exact manifest path:
+
+```powershell
+build/bin/casc_probe.exe "E:\Games\Warcraft III" w3 `
+  "war3.w3mod:units\unitdata.slk" `
+  "war3.w3mod:_balance\custom_v0.w3mod:units\unitdata.slk" `
+  "war3.w3mod:ui\war3skins.txt"
+```
+
+The probe does not enable online storage. To inspect matching ROOT names, pass
+`--find <mask>` after the product, for example `--find "*unitdata.slk"`.
+
 ## Warcraft III Campaign Map Audit
 
 Use `make audit-wc3-maps` to run every shipped RoC/TFT campaign map for a
