@@ -94,6 +94,32 @@ class ReportTest(unittest.TestCase):
         self.assertIn("600 frames", markdown)
         self.assertNotIn("map works", markdown.lower())
 
+    def test_loose_map_report_uses_one_map_table_without_campaign_sections(self):
+        report = {
+            "kind": "loose",
+            "commit": "abc123",
+            "frames": 10,
+            "simulated_seconds": 1,
+            "timeout_seconds": 60,
+            "jobs": 1,
+            "wall_seconds": 2.0,
+            "maps": [{
+                "edition": "TFT",
+                "name": "Season Map",
+                "filename": "(4)Season.w3x",
+                "status": "completed",
+                "compact_errors": [],
+                "families": [],
+            }],
+        }
+        markdown = AUDIT.render_markdown(report)
+        self.assertIn("bounded loose-map audit", markdown)
+        self.assertIn("1 loose map launched", markdown)
+        self.assertIn("### Per-map results", markdown)
+        self.assertIn("`(4)Season.w3x`", markdown)
+        self.assertNotIn("### RoC:", markdown)
+        self.assertNotIn("### TFT:", markdown)
+
 
 class LooseMapTest(unittest.TestCase):
     def test_w3x_under_data_is_tft_with_relative_map_path(self):
@@ -107,6 +133,7 @@ class LooseMapTest(unittest.TestCase):
             self.assertEqual(item["filename"], "Fake DotA.w3x")
             self.assertEqual(item["path"], "Maps/Fake DotA.w3x")
             self.assertEqual(item["archive"], str(target.resolve()))
+            self.assertEqual(item["map_dir"], str(target.parent.resolve()))
             self.assertEqual(item["loose"], "1")
 
     def test_w3m_under_data_is_roc(self):
@@ -133,7 +160,7 @@ class LooseMapTest(unittest.TestCase):
                 os.chdir(old)
             self.assertEqual(item["path"], "Maps/Rel.w3x")
 
-    def test_missing_and_outside_data_are_rejected(self):
+    def test_missing_map_is_rejected_and_external_map_gets_mount_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp) / "data"
             data.mkdir()
@@ -141,8 +168,9 @@ class LooseMapTest(unittest.TestCase):
                 AUDIT.loose_map_spec(data / "Maps" / "Missing.w3x", data)
             outside = Path(tmp) / "elsewhere.w3x"
             outside.write_bytes(b"fake")
-            with self.assertRaisesRegex(RuntimeError, "must live under data dir"):
-                AUDIT.loose_map_spec(outside, data)
+            item = AUDIT.loose_map_spec(outside, data)
+            self.assertEqual(item["path"], "elsewhere.w3x")
+            self.assertEqual(item["map_dir"], str(outside.parent.resolve()))
             bad = data / "Maps" / "note.txt"
             bad.parent.mkdir(parents=True)
             bad.write_text("nope")

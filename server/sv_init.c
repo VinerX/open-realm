@@ -307,6 +307,7 @@ void SV_Map(cstring_t mapFilename) {
     savedLobbyClient_t lobby_clients[MAX_CLIENTS];
     uint32_t num_lobby_clients;
     bool had_lobby;
+    bool dedicated = Cvar_Integer("dedicated", 0) != 0;
 
     fprintf(stderr, "Server initialization (loopback/local map).\n");
     had_lobby = sv.state == ss_lobby && svs.lobby.active;
@@ -328,9 +329,11 @@ void SV_Map(cstring_t mapFilename) {
         CL_LoadingFrame();
         return;
     }
-    if (!SV_BuildLoadingScreen()) { SV_Shutdown(); CL_LoadingFrame(); return; }
-    FOR_LOOP(i, svs.num_clients) SV_SendLoadingScreen(&svs.clients[i]);
-    CL_LoadingFrame();
+    if (!dedicated) {
+        if (!SV_BuildLoadingScreen()) { SV_Shutdown(); CL_LoadingFrame(); return; }
+        FOR_LOOP(i, svs.num_clients) SV_SendLoadingScreen(&svs.clients[i]);
+        CL_LoadingFrame();
+    }
     if (!ge->LoadMap(mapFilename)) {
         fprintf(stderr, "SV_Map: map load failed\n");
         SV_Shutdown();

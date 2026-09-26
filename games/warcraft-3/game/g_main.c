@@ -280,7 +280,7 @@ static bool G_LoadMap(cstring_t mapFilename) {
     G_SetMapAbilityOverrides(CM_GetMapInfo());
     /* SV_Map already wiped CS_IMAGES/CS_FONTS. Bind every panel once so write
      * paths do not parse FDF on first use. */
-    UI_LoadHud();
+    if (!gi.CvarString || atoi(gi.CvarString("dedicated", "0")) == 0) UI_LoadHud();
     gi.LoadingFrame();
     G_SpawnEntities();
     gi.LoadingFrame();
@@ -813,6 +813,7 @@ static void G_StartScripts(void) {
 
     if (level.mapinfo && level.mapinfo->scriptKind == WC3_SCRIPT_LUA) {
         if (!level.lua_vm || !WC3_LuaCall(level.lua_vm, "main")) {
+            level.scriptsStarted = true;
             fprintf(stderr, "G_StartScripts: Lua main failed for %s: %s\n",
                     level.map_path, level.lua_vm ? WC3_LuaErrorMessage(level.lua_vm) : "Lua state unavailable");
             G_SetDestructableScriptBinding(false);
@@ -1302,13 +1303,16 @@ static void G_ClientBegin(edict_t *edict) {
 /* Publish only loading media before synchronous world/entity loading can block presentation. */
 static bool G_PrepareMap(cstring_t filename) {
     mapInfo_t info;
+    bool dedicated = gi.CvarString && atoi(gi.CvarString("dedicated", "0")) != 0;
     if (!CM_ReadMapInfo(filename, &info)) return false;
-    UI_ResetHud();
-    UI_LoadHudLoading();
+    if (!dedicated) {
+        UI_ResetHud();
+        UI_LoadHudLoading();
+    }
     /* Loading precedes LoadMap: resolve the same lobby roster before publishing its presentation. */
     gi.ApplyLobbySettings(&info);
     gi.configstring(CS_ASSET_SCOPE, filename);
-    UI_WriteLoadingLayout(NULL, &info);
+    if (!dedicated) UI_WriteLoadingLayout(NULL, &info);
     CM_FreeMapInfo(&info);
     return true;
 }

@@ -54,6 +54,264 @@ static int LuaCreateTimer(lua_State *L) {
     return 1;
 }
 
+static int LuaCreateGroup(lua_State *L) {
+    ggroup_t *group = G_AllocJassGroup();
+    if (!group) return luaL_error(L, "CreateGroup: group registry is full");
+    lua_pushlightuserdata(L, group);
+    return 1;
+}
+
+static int LuaDestroyGroup(lua_State *L) {
+    G_FreeJassGroup(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaGroupEnumUnitsOfPlayer(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    if (!G_JassGroupValid(group) || !player)
+        return luaL_error(L, "GroupEnumUnitsOfPlayer: invalid group or player");
+    if (!lua_isnoneornil(L, 3))
+        return luaL_error(L, "GroupEnumUnitsOfPlayer: Lua boolexpr filters are unsupported");
+    G_EnumUnitsOfPlayer(group, player, NULL, NULL);
+    return 0;
+}
+
+static int LuaBlzGroupGetSize(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    lua_pushinteger(L, G_JassGroupValid(group) ? (lua_Integer)group->num_units : 0);
+    return 1;
+}
+
+static int LuaBlzGroupUnitAt(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    int32_t index = (int32_t)luaL_checkinteger(L, 2);
+    if (G_JassGroupValid(group) && index >= 0 && (uint32_t)index < group->num_units)
+        lua_pushlightuserdata(L, group->units[index]);
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
+static int LuaRect(lua_State *L) {
+    box2_t *rect = lua_newuserdata(L, sizeof(*rect));
+    rect->min.x = (float)luaL_checknumber(L, 1);
+    rect->min.y = (float)luaL_checknumber(L, 2);
+    rect->max.x = (float)luaL_checknumber(L, 3);
+    rect->max.y = (float)luaL_checknumber(L, 4);
+    return 1;
+}
+
+static int LuaLocation(lua_State *L) {
+    vec2_t *location = lua_newuserdata(L, sizeof(*location));
+    location->x = (float)luaL_checknumber(L, 1);
+    location->y = (float)luaL_checknumber(L, 2);
+    return 1;
+}
+
+static int LuaPlayer(lua_State *L) {
+    int32_t number = (int32_t)luaL_checkinteger(L, 1);
+    player_t *player = number >= 0 && number < WC3_MAX_PLAYER_SLOTS
+        ? G_GetPlayerByNumber((uint32_t)number) : NULL;
+    if (player) lua_pushlightuserdata(L, player);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaSetPlayerStartLocation(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    if (player) PLAYER_CLIENT(player)->ps.start_location = (int32_t)luaL_checkinteger(L, 2);
+    return 0;
+}
+
+static int LuaForcePlayerStartLocation(lua_State *L) {
+    return LuaSetPlayerStartLocation(L);
+}
+
+static int LuaGetPlayerStartLocation(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    lua_pushinteger(L, player ? PLAYER_CLIENT(player)->ps.start_location : -1);
+    return 1;
+}
+
+static int LuaGetCameraMargin(lua_State *L) {
+    float margin;
+    int32_t which = (int32_t)luaL_checkinteger(L, 1);
+    if (G_GetCameraMargin(which, &margin)) lua_pushnumber(L, margin);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaConvertPlayerColor(lua_State *L) {
+    uint32_t *color = lua_newuserdata(L, sizeof(*color));
+    *color = (uint32_t)luaL_checkinteger(L, 1);
+    return 1;
+}
+
+static int LuaSetPlayerColor(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *color = lua_touserdata(L, 2);
+    if (player && color) {
+        G_ChangePlayerTeamColor(player, player->color, *color);
+        player->color = *color;
+    }
+    return 0;
+}
+
+static int LuaSetPlayerTeam(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    if (player) player->team = (int32_t)luaL_checkinteger(L, 2);
+    return 0;
+}
+
+static int LuaSetStartLocPrioCount(lua_State *L) {
+    G_SetStartLocPrioCount((int32_t)luaL_checkinteger(L, 1), (int32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaSetStartLocPrio(lua_State *L) {
+    G_SetStartLocPrio((int32_t)luaL_checkinteger(L, 1), (int32_t)luaL_checkinteger(L, 2),
+        (int32_t)luaL_checkinteger(L, 3), (uint32_t)luaL_checkinteger(L, 4));
+    return 0;
+}
+
+static int LuaSetTerrainFogEx(lua_State *L) {
+    G_SetTerrainFog((int32_t)luaL_checkinteger(L, 1),
+        (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3),
+        (float)luaL_checknumber(L, 4), (float)luaL_checknumber(L, 5),
+        (float)luaL_checknumber(L, 6), (float)luaL_checknumber(L, 7));
+    return 0;
+}
+
+static int LuaConvertFogStyle(lua_State *L) {
+    lua_pushinteger(L, luaL_checkinteger(L, 1));
+    return 1;
+}
+
+static int LuaSetWaterBaseColor(lua_State *L) {
+    (void)luaL_checkinteger(L, 1);
+    (void)luaL_checkinteger(L, 2);
+    (void)luaL_checkinteger(L, 3);
+    (void)luaL_checkinteger(L, 4);
+    fprintf(stderr, "WC3 Lua: SetWaterBaseColor presentation is not implemented\n");
+    return 0;
+}
+
+static int LuaNewSoundEnvironment(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    fprintf(stderr, "WC3 Lua: NewSoundEnvironment('%s') audio environment is not implemented\n", name);
+    return 0;
+}
+
+static int LuaSetAmbientDaySound(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    fprintf(stderr, "WC3 Lua: SetAmbientDaySound('%s') audio ambience is not implemented\n", name);
+    return 0;
+}
+
+static int LuaSetAmbientNightSound(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    fprintf(stderr, "WC3 Lua: SetAmbientNightSound('%s') audio ambience is not implemented\n", name);
+    return 0;
+}
+
+static int LuaSetMapMusic(lua_State *L) {
+    G_MusicSetMap(luaL_checkstring(L, 1), lua_toboolean(L, 2), (int32_t)luaL_checkinteger(L, 3));
+    return 0;
+}
+
+static int LuaSetPlayerRacePreference(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *preference = lua_touserdata(L, 2);
+    uint32_t value = preference ? *preference : (uint32_t)luaL_checkinteger(L, 2);
+    if (player) PLAYER_CLIENT(player)->jass.race_pref |= value;
+    return 0;
+}
+
+static int LuaSetPlayerRaceSelectable(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    if (player) PLAYER_CLIENT(player)->jass.race_selectable = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaSetPlayerController(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *controller = lua_touserdata(L, 2);
+    uint32_t value = controller ? *controller : (uint32_t)luaL_checkinteger(L, 2);
+    if (player) PLAYER_CLIENT(player)->jass.controller = value;
+    return 0;
+}
+
+static int LuaSetCameraBounds(lua_State *L) {
+    float bounds[8];
+    FOR_LOOP(i, 8) bounds[i] = (float)luaL_checknumber(L, i + 1);
+    G_SetCameraBounds(bounds);
+    return 0;
+}
+
+static int LuaSetDayNightModels(lua_State *L) {
+    G_SetDayNightModels(luaL_checkstring(L, 1), luaL_checkstring(L, 2));
+    return 0;
+}
+
+static int LuaCreateForce(lua_State *L) {
+    uint32_t *force = lua_newuserdata(L, sizeof(*force));
+    *force = 0;
+    return 1;
+}
+
+static int LuaDestroyForce(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    if (force) *force = 0;
+    return 0;
+}
+
+static int LuaForceAddPlayer(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    if (force && player) *force |= 1u << PLAYER_NUM(player);
+    return 0;
+}
+
+static int LuaForceRemovePlayer(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    if (force && player) *force &= ~(1u << PLAYER_NUM(player));
+    return 0;
+}
+
+static int LuaForceClear(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    if (force) *force = 0;
+    return 0;
+}
+
+static int LuaIsPlayerInForce(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *force = lua_touserdata(L, 2);
+    lua_pushboolean(L, player && force && (*force & (1u << PLAYER_NUM(player))));
+    return 1;
+}
+
+static int LuaCreateRegion(lua_State *L) {
+    for (uint32_t i = 0; i < MAX_REGIONS; i++) {
+        region_t *region = &level.regions[i];
+        if (region->inuse || region->exhausted) continue;
+        memset(region->rects, 0, sizeof(region->rects));
+        region->num_rects = 0;
+        region->inuse = true;
+        if (i >= level.num_regions) level.num_regions = i + 1;
+        lua_pushlightuserdata(L, G_RegionHandle(i));
+        return 1;
+    }
+    return luaL_error(L, "CreateRegion: region registry is full");
+}
+
+static int LuaStringHash(lua_State *L) {
+    lua_pushinteger(L, (int32_t)G_StringHash(luaL_checkstring(L, 1)));
+    return 1;
+}
+
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetMapName", LuaSetMapName);
     WC3_LuaRegisterNative(L, "SetMapDescription", LuaSetMapDescription);
@@ -66,8 +324,59 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterInteger(L, "MAP_PLACEMENT_TEAMS_TOGETHER", 3);
 }
 
+void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
+    G_RegisterLuaMapConfigNatives(L);
+    WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
+    WC3_LuaRegisterNative(L, "DestroyGroup", LuaDestroyGroup);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsOfPlayer", LuaGroupEnumUnitsOfPlayer);
+    WC3_LuaRegisterNative(L, "BlzGroupGetSize", LuaBlzGroupGetSize);
+    WC3_LuaRegisterNative(L, "BlzGroupUnitAt", LuaBlzGroupUnitAt);
+    WC3_LuaRegisterNative(L, "Rect", LuaRect);
+    WC3_LuaRegisterNative(L, "Location", LuaLocation);
+    WC3_LuaRegisterNative(L, "Player", LuaPlayer);
+    WC3_LuaRegisterNative(L, "SetPlayerStartLocation", LuaSetPlayerStartLocation);
+    WC3_LuaRegisterNative(L, "ForcePlayerStartLocation", LuaForcePlayerStartLocation);
+    WC3_LuaRegisterNative(L, "GetPlayerStartLocation", LuaGetPlayerStartLocation);
+    WC3_LuaRegisterNative(L, "GetCameraMargin", LuaGetCameraMargin);
+    WC3_LuaRegisterNative(L, "ConvertPlayerColor", LuaConvertPlayerColor);
+    WC3_LuaRegisterNative(L, "SetPlayerColor", LuaSetPlayerColor);
+    WC3_LuaRegisterNative(L, "SetPlayerTeam", LuaSetPlayerTeam);
+    WC3_LuaRegisterNative(L, "SetStartLocPrioCount", LuaSetStartLocPrioCount);
+    WC3_LuaRegisterNative(L, "SetStartLocPrio", LuaSetStartLocPrio);
+    WC3_LuaRegisterNative(L, "SetPlayerRacePreference", LuaSetPlayerRacePreference);
+    WC3_LuaRegisterNative(L, "SetPlayerRaceSelectable", LuaSetPlayerRaceSelectable);
+    WC3_LuaRegisterNative(L, "SetPlayerController", LuaSetPlayerController);
+    WC3_LuaRegisterNative(L, "SetCameraBounds", LuaSetCameraBounds);
+    WC3_LuaRegisterNative(L, "SetDayNightModels", LuaSetDayNightModels);
+    WC3_LuaRegisterNative(L, "SetTerrainFogEx", LuaSetTerrainFogEx);
+    WC3_LuaRegisterNative(L, "ConvertFogStyle", LuaConvertFogStyle);
+    WC3_LuaRegisterNative(L, "SetWaterBaseColor", LuaSetWaterBaseColor);
+    WC3_LuaRegisterNative(L, "NewSoundEnvironment", LuaNewSoundEnvironment);
+    WC3_LuaRegisterNative(L, "SetAmbientDaySound", LuaSetAmbientDaySound);
+    WC3_LuaRegisterNative(L, "SetAmbientNightSound", LuaSetAmbientNightSound);
+    WC3_LuaRegisterNative(L, "SetMapMusic", LuaSetMapMusic);
+    WC3_LuaRegisterInteger(L, "CAMERA_MARGIN_LEFT", 0);
+    WC3_LuaRegisterInteger(L, "CAMERA_MARGIN_RIGHT", 1);
+    WC3_LuaRegisterInteger(L, "CAMERA_MARGIN_TOP", 2);
+    WC3_LuaRegisterInteger(L, "CAMERA_MARGIN_BOTTOM", 3);
+    WC3_LuaRegisterInteger(L, "RACE_PREF_HUMAN", 1);
+    WC3_LuaRegisterInteger(L, "MAP_CONTROL_USER", 0);
+    WC3_LuaRegisterInteger(L, "MAP_LOC_PRIO_LOW", 0);
+    WC3_LuaRegisterInteger(L, "MAP_LOC_PRIO_HIGH", 1);
+    WC3_LuaRegisterInteger(L, "MAP_LOC_PRIO_NOT", 2);
+    WC3_LuaRegisterInteger(L, "PLAYER_NEUTRAL_PASSIVE", PLAYER_NEUTRAL_PASSIVE);
+    WC3_LuaRegisterNative(L, "CreateForce", LuaCreateForce);
+    WC3_LuaRegisterNative(L, "DestroyForce", LuaDestroyForce);
+    WC3_LuaRegisterNative(L, "ForceAddPlayer", LuaForceAddPlayer);
+    WC3_LuaRegisterNative(L, "ForceRemovePlayer", LuaForceRemovePlayer);
+    WC3_LuaRegisterNative(L, "ForceClear", LuaForceClear);
+    WC3_LuaRegisterNative(L, "IsPlayerInForce", LuaIsPlayerInForce);
+    WC3_LuaRegisterNative(L, "CreateRegion", LuaCreateRegion);
+    WC3_LuaRegisterNative(L, "StringHash", LuaStringHash);
+}
+
 bool G_LoadLuaMapScript(wc3Lua_t *L, cstring_t source, cstring_t chunk_name) {
     if (!L) return false;
-    G_RegisterLuaMapConfigNatives(L);
+    G_RegisterLuaMapRuntimeNatives(L);
     return WC3_LuaLoadBuffer(L, source, chunk_name);
 }

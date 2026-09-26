@@ -78,7 +78,7 @@ def enumerate_maps(data: Path, mpqtool: Path) -> list[dict[str, str]]:
 
 
 def loose_map_spec(path: Path, data: Path) -> dict[str, str]:
-    """Build one audit row for a disk-resident .w3m/.w3x under the data tree."""
+    """Build one audit row for a disk-resident map, including outside the data tree."""
     data = data.expanduser().resolve()
     candidate = path.expanduser()
     candidate = candidate.resolve() if candidate.is_absolute() else (Path.cwd() / candidate).resolve()
@@ -89,13 +89,14 @@ def loose_map_spec(path: Path, data: Path) -> dict[str, str]:
         raise RuntimeError(f"loose map must be .w3m or .w3x: {candidate}")
     try:
         rel = candidate.relative_to(data)
-    except ValueError as error:
-        raise RuntimeError(f"loose map must live under data dir {data}: {candidate}") from error
+    except ValueError:
+        rel = Path(candidate.name)
     return {
         "archive": str(candidate),
         "edition": "TFT" if suffix == ".w3x" else "RoC",
         "filename": candidate.name,
         "path": str(rel).replace("\\", "/"),
+        "map_dir": str(candidate.parent),
         "loose": "1",
     }
 
@@ -258,6 +259,7 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
         command = [
             str(args.binary), "-data", str(args.data),
             *(["-tft"] if item["edition"] == "TFT" else []),
+            *(["+set", "extra_data", item["map_dir"]] if item.get("map_dir") else []),
             "+dedicated", "1", "+set", "game_port", str(args.port_base + index),
             "+set", "com_fast_forward", "1", "+set", "vid_hidden", "1",
             "+set", "skip_cutscene", "1", "+map", item["path"],
@@ -275,7 +277,7 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
             stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
             output, exit_code, status = stdout + stderr, None, "timeout"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(output)
+    log_path.write_text(output, encoding="utf-8")
     return {
         **item, "status": status, "exit_code": exit_code,
         "wall_seconds": round(time.monotonic() - started, 3), "log": str(log_path),
@@ -292,10 +294,13 @@ def render_markdown(report: dict[str, Any]) -> str:
     reproduced = sum(item.get("serial_crash", False) for item in maps if item["status"] == "crashed")
     sim = report["simulated_seconds"]
     sim_unit = "second" if sim == 1 else "seconds"
+    kind = report.get("kind", "campaign")
+    map_kind = "loose map" if kind == "loose" else "retail campaign map"
+    map_count = f"{len(maps)} {map_kind}{'s' if len(maps) != 1 else ''}"
     lines = [
-        "## Actual bounded campaign-map audit", "",
+        f"## Actual bounded {kind}-map audit", "",
         f"Audited commit `{report['commit']}` with `build/bin/openwarcraft3`.", "",
-        f"Each of {len(maps)} retail campaign maps was launched headlessly with `com_fast_forward=1` for "
+        f"{map_count.capitalize()} launched headlessly with `com_fast_forward=1` for "
         f"**{report['frames']} frames / {sim:.0f} simulated {sim_unit}**. Each process used "
         f"an isolated writable home, a unique UDP port, and a {report['timeout_seconds']}s wall timeout. "
         f"The {report['jobs']}-worker sweep finished in {report['wall_seconds']:.1f}s.", "",
@@ -309,14 +314,16 @@ def render_markdown(report: dict[str, Any]) -> str:
         meaning = (f"Unimplemented native `{family.split(':', 1)[1]}` executed."
                    if family.startswith("JASS:") else FAMILY_MEANINGS.get(family, family))
         lines.append(f"| `{family}` | {count} | {meaning.replace('|', '&#124;')} |")
-    for edition in ("RoC", "TFT"):
+    editions = ("RoC", "TFT") if kind == "campaign" else (None,)
+    for edition in editions:
+        title = f"{edition}: per-map results" if edition else "Per-map results"
         lines.extend([
-            "", f"### {edition}: per-map results", "",
+            "", f"### {title}", "",
             "| Map name | Filename | Result | Errors observed |",
             "| --- | --- | --- | --- |",
         ])
         for item in maps:
-            if item["edition"] != edition:
+            if edition and item["edition"] != edition:
                 continue
             name = item["name"].replace("|", "&#124;")
             errors = "; ".join(item["compact_errors"]).replace("|", "&#124;") or "none"
@@ -415,7 +422,7 @@ def main() -> int:
                 }
         for item in report_maps:
             item["name"] = map_name(item, args.mpqtool)
-            output = Path(item["log"]).read_text(errors="replace") if item.get("log") else item.get("auditor_error", "")
+            output = Path(item["log"]).read_text(encoding="utf-8", errors="replace") if item.get("log") else item.get("auditor_error", "")
             errors, families = compact_diagnostics(
                 output, item["status"], item["exit_code"], item.get("serial_crash", False))
             item["compact_errors"], item["families"] = errors, sorted(families)
@@ -424,11 +431,12 @@ def main() -> int:
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "frames": args.frames, "simulated_seconds": args.frames / 10,
             "timeout_seconds": args.timeout, "jobs": args.jobs,
-            "wall_seconds": round(time.monotonic() - started, 3), "maps": report_maps,
+            "wall_seconds": round(time.monotonic() - started, 3),
+            "kind": "loose" if args.loose_map else "campaign", "maps": report_maps,
         }
         markdown = render_markdown(report)
-        (args.output_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-        (args.output_dir / "report.md").write_text(markdown)
+        (args.output_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        (args.output_dir / "report.md").write_text(markdown, encoding="utf-8")
         print(f"wrote {args.output_dir / 'report.json'}")
         print(f"wrote {args.output_dir / 'report.md'}")
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:

@@ -142,6 +142,7 @@ static bool test_prepare_map(cstring_t filename) {
     SV_ModelIndex("Loading.mdx");
     SV_ImageIndex("Loading.blp");
     SV_FontIndex("Loading.ttf", 18);
+    if (Cvar_Integer("dedicated", 0)) return true;
     MSG_WriteByte(&sv.multicast, svc_layout);
     MSG_WriteByte(&sv.multicast, LAYER_LOADING);
     MSG_WriteLong(&sv.multicast, 0); MSG_WriteShort(&sv.multicast, 0);
@@ -149,7 +150,7 @@ static bool test_prepare_map(cstring_t filename) {
 }
 
 static bool test_load_map(cstring_t mapFilename) {
-    T_ASSERT(sv.loading.cursize);
+    T_ASSERT(Cvar_Integer("dedicated", 0) || sv.loading.cursize);
     SV_ModelIndex("World.mdx");
     if (!CM_LoadMap(mapFilename, CL_LoadingFrame)) {
         return false;
@@ -1286,6 +1287,7 @@ TEST(server_net, dedicated_map_does_not_defer_operator_commands_for_a_local_clie
     test_client_stubs_set_cvar("dedicated", "1");
     SV_Map("Test.w3m");
     T_EQ(map_defer_count, before);
+    T_EQ(sv.state, ss_game);
     SV_Shutdown(); test_mapinfo = NULL;
     test_client_stubs_set_cvar("dedicated", "0");
 }

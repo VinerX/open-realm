@@ -583,45 +583,11 @@ uint32_t CameraSetSmoothingFactor(jass_t *j) {
     //float factor = jass_checknumber(j, 1);
     return 0;
 }
-static box2_t G_DefaultCameraBounds(void) {
-    float const *bounds = level.mapinfo->cameraBounds.bounds;
-
-    return MAKE(box2_t,
-        .min = {
-            MIN(MIN(bounds[0], bounds[2]), MIN(bounds[4], bounds[6])),
-            MIN(MIN(bounds[1], bounds[3]), MIN(bounds[5], bounds[7])),
-        },
-        .max = {
-            MAX(MAX(bounds[0], bounds[2]), MAX(bounds[4], bounds[6])),
-            MAX(MAX(bounds[1], bounds[3]), MAX(bounds[5], bounds[7])),
-        });
-}
-
-static box2_t G_PlayableMapBounds(void) {
-    mapCameraBounds_t const *camera = &level.mapinfo->cameraBounds;
-    box2_t playable = CM_GetWorldBounds();
-
-    /* W3I complements describe the terrain cells outside the playable map.
-     * They are not the values returned by the JASS GetCameraMargin native. */
-    playable.min.x += camera->complement.left * TILE_SIZE;
-    playable.max.x -= camera->complement.right * TILE_SIZE;
-    playable.min.y += camera->complement.bottom * TILE_SIZE;
-    playable.max.y -= camera->complement.top * TILE_SIZE;
-    return playable;
-}
-
 uint32_t GetCameraMargin(jass_t *j) {
     int32_t whichMargin = jass_checkinteger(j, 1);
-    box2_t const camera = G_DefaultCameraBounds();
-    box2_t const playable = G_PlayableMapBounds();
-
-    switch (whichMargin) {
-        case 0: jass_pushnumber(j, camera.min.x - playable.min.x); break;
-        case 1: jass_pushnumber(j, playable.max.x - camera.max.x); break;
-        case 2: jass_pushnumber(j, playable.max.y - camera.max.y); break;
-        case 3: jass_pushnumber(j, camera.min.y - playable.min.y); break;
-        default: jass_pushnull(j);
-    }
+    float margin;
+    if (G_GetCameraMargin(whichMargin, &margin)) jass_pushnumber(j, margin);
+    else jass_pushnull(j);
     return 1;
 }
 uint32_t GetCameraBoundMinX(jass_t *j) {

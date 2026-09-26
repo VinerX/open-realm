@@ -135,5 +135,34 @@ Equivalent Make form:
 make audit-wc3-maps WC3_AUDIT_ARGS="--jobs 1 --frames 10 --timeout 60 --loose-map 'data/Warcraft III/Maps/DotA v6.83dAI PMV 1.42 EN.w3x'"
 ```
 
+The loose map may also live outside the Warcraft III data tree. Its parent
+folder is mounted as `extra_data`, while `--data` remains the CASC game
+installation. For example:
+
+```powershell
+make audit-wc3-maps WC3DATA='E:\Games\Warcraft III' WC3_AUDIT_ARGS='--jobs 1 --frames 600 --timeout 180 --loose-map "C:\Development\Warcraft 3\23-Race-Legion\23-Race-Legion.w3x" --output-dir build/wc3-map-audit-23-race'
+```
+
+This runs one TFT map headlessly for at most 600 server frames and keeps the
+report and full log under `build/wc3-map-audit-23-race`. Reaching the frame
+budget demonstrates bounded startup/runtime only; it does not establish that
+the map is fully playable.
+
+To audit every loose `.w3x` in a folder from PowerShell, pass each file as a
+repeated `--loose-map` argument. The game data path can remain a read-only CASC
+installation:
+
+```powershell
+$maps = Get-ChildItem -LiteralPath 'C:\Users\Dmitry\Documents\Warcraft III\Maps\Download\Season9' -File -Filter '*.w3x'
+$auditArgs = @('--data', 'E:\Games\Warcraft III', '--binary', 'build/bin/openwarcraft3.exe', '--mpqtool', 'build/bin/mpqtool.exe', '--jobs', '4', '--frames', '10', '--timeout', '60', '--output-dir', 'build/wc3-map-audit-season9')
+foreach ($map in $maps) { $auditArgs += @('--loose-map', $map.FullName) }
+$env:PATH = "$env:TEMP\wc3lua\msys2out\msys64\ucrt64\bin;$PWD\build\lib;$env:PATH"
+python tools/wc3_map_audit.py @auditArgs
+```
+
+This bounded smoke pass launched 46 Season9 maps to the 10-frame limit with no
+process crashes. That result does not establish successful script initialization
+or full playability; inspect each map's log and error families in the report.
+
 Without `--loose-map`, the enumerator only walks retail campaign members inside
 `War3.mpq` / `War3x.mpq`. See [DotA Custom-Map Playability](dota-map-playability.md).

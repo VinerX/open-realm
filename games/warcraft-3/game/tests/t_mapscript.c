@@ -30,6 +30,90 @@ static cstring_t const kMinimalMapScript =
 
 static void mapscript_ignore_error(cstring_t message) { (void)message; }
 
+TEST(wc3_mapscript, lua_main_failure_is_latched_once) {
+    mapInfo_t info = { .scriptKind = WC3_SCRIPT_LUA };
+    wc3Lua_t *lua = WC3_LuaNewState();
+    mapInfo_t const *previous_info = level.mapinfo;
+    wc3Lua_t *previous_lua = level.lua_vm;
+    bool previous_started = level.scriptsStarted;
+    PATHSTR previous_path;
+
+    strlcpy(previous_path, level.map_path, sizeof(previous_path));
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    G_RegisterLuaMapConfigNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua, "value = 1\n", "failure-test.lua"));
+    level.mapinfo = &info;
+    level.lua_vm = lua;
+    strlcpy(level.map_path, "failure-test.w3x", sizeof(level.map_path));
+    level.scriptsStarted = false;
+    G_StartScripts();
+    T_ASSERT(level.scriptsStarted);
+    G_StartScripts();
+    T_ASSERT(level.scriptsStarted);
+    level.lua_vm = previous_lua;
+    level.mapinfo = previous_info;
+    level.scriptsStarted = previous_started;
+    strlcpy(level.map_path, previous_path, sizeof(level.map_path));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_runtime_registers_create_group_handle) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t groups_before = level.num_groups;
+    uint32_t regions_before = level.num_regions;
+    uint32_t region_slot = MAX_REGIONS;
+    region_t region_before = {0};
+
+    FOR_LOOP(i, MAX_REGIONS) {
+        if (!level.regions[i].inuse && !level.regions[i].exhausted) {
+            region_slot = i;
+            region_before = level.regions[i];
+            break;
+        }
+    }
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "MapGroup = CreateGroup()\nMapRect = Rect(1, 2, 3, 4)\nMapLocation = Location(5, 6)\n"
+        "MapPlayer = Player(PLAYER_NEUTRAL_PASSIVE)\nMapForce = CreateForce()\n"
+        "SetPlayerStartLocation(MapPlayer, 7)\n"
+        "assert(GetPlayerStartLocation(MapPlayer) == 7)\n"
+        "SetStartLocPrioCount(2, 1)\n"
+        "SetStartLocPrio(2, 0, 7, MAP_LOC_PRIO_HIGH)\n"
+        "SetPlayerColor(MapPlayer, ConvertPlayerColor(8))\n"
+        "SetPlayerTeam(MapPlayer, 2)\n"
+        "SetPlayerRacePreference(MapPlayer, RACE_PREF_HUMAN)\n"
+        "SetPlayerRaceSelectable(MapPlayer, false)\n"
+        "SetPlayerController(MapPlayer, MAP_CONTROL_USER)\n"
+        "ForceAddPlayer(MapForce, MapPlayer)\nassert(IsPlayerInForce(MapPlayer, MapForce))\n"
+        "MapRegion = CreateRegion()\n"
+        "GroupEnumUnitsOfPlayer(MapGroup, MapPlayer, nil)\n"
+        "assert(BlzGroupGetSize(MapGroup) == 0)\n"
+        "assert(BlzGroupUnitAt(MapGroup, 0) == nil)\n"
+        "DestroyGroup(MapGroup)\n"
+        "assert(StringHash('case') == 1865766789)\n"
+        "assert(StringHash('CASE') == 1865766789)\n"
+        "assert(StringHash('path/to') == -1197512958)\n",
+        "runtime-handles-test.lua"));
+    T_EQ(level.num_groups, groups_before + 1);
+    T_EQ(level.setup.start_prio[2].count, 1);
+    T_EQ(level.setup.start_prio[2].slots[0].location, 7);
+    T_EQ(level.setup.start_prio[2].slots[0].priority, 1);
+    if (level.num_groups > groups_before)
+        T_ASSERT(!G_JassGroupValid(level.groups[groups_before]));
+    T_ASSERT(region_slot < MAX_REGIONS);
+    if (region_slot < MAX_REGIONS) {
+        T_ASSERT(level.num_regions >= region_slot + 1);
+        T_ASSERT(level.regions[region_slot].inuse);
+        level.regions[region_slot] = region_before;
+        level.num_regions = regions_before;
+    }
+    WC3_LuaClose(lua);
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
@@ -87,7 +171,7 @@ TEST(wc3_mapscript, jass_dobuffer_null_returns_false) {
 }
 
 TEST(wc3_mapscript, read_scripts_war3map_j_when_root_absent) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-scripts.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-scripts.mpq";
     handle_t archive;
 
     T_ASSERT(mapscript_pack_mpq(path, "scripts\\war3map.j", kMinimalMapScript));
@@ -103,7 +187,7 @@ TEST(wc3_mapscript, read_scripts_war3map_j_when_root_absent) {
 }
 
 TEST(wc3_mapscript, root_war3map_j_preferred_over_scripts) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-both.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-both.mpq";
     handle_t archive;
     cstring_t root = "function config takes nothing returns nothing\nendfunction\n"
                   "function main takes nothing returns nothing\nendfunction\n"
@@ -129,7 +213,7 @@ TEST(wc3_mapscript, root_war3map_j_preferred_over_scripts) {
 }
 
 TEST(wc3_mapscript, missing_script_leaves_null_without_crash) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-missing.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-missing.mpq";
     handle_t archive;
 
     T_ASSERT(mapscript_pack_mpq(path, NULL, NULL));
@@ -159,7 +243,7 @@ static void mapscript_selector_pop(mapscript_selector_t saved) {
 }
 
 TEST(wc3_mapscript, lua_declared_loads_war3map_lua) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-lua.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-lua.mpq";
     handle_t archive;
     cstring_t lua = "function config() end\nfunction main() end\n";
     mapscript_selector_t saved;
@@ -179,7 +263,7 @@ TEST(wc3_mapscript, lua_declared_loads_war3map_lua) {
 }
 
 TEST(wc3_mapscript, lua_declared_never_falls_back_to_jass) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-lua-no-member.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-lua-no-member.mpq";
     handle_t archive;
     mapscript_selector_t saved;
 
@@ -197,7 +281,7 @@ TEST(wc3_mapscript, lua_declared_never_falls_back_to_jass) {
 }
 
 TEST(wc3_mapscript, legacy_format_without_scriptkind_stays_jass) {
-    cstring_t path = "/tmp/openwarcraft3-mapscript-legacy.mpq";
+    cstring_t path = "build/tests/openwarcraft3-mapscript-legacy.mpq";
     handle_t archive;
     mapscript_selector_t saved;
 
@@ -240,7 +324,7 @@ TEST(wc3_mapscript, lua_config_updates_all_24_map_start_locations) {
 }
 
 TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
-    cstring_t path = "/tmp/openwarcraft3-reforged-v3-units.mpq";
+    cstring_t path = "build/tests/openwarcraft3-reforged-v3-units.mpq";
     uint32_t units[] = {
         3, 1,
         MAKEFOURCC('h','f','o','o'), 0, 1, 0, 1,

@@ -2,7 +2,7 @@
  * Tables live in level.hashtables[]; nested HT_HANDLE slots store the JASS type for save/load. */
 
 /* Bob Jenkins lookup2 (SStrHash2): uppercase + '/'→'\\' then mix; empty → 0. */
-static uint32_t hashtable_sstrhash2(cstring_t text) {
+uint32_t G_StringHash(cstring_t text) {
     uint32_t a, b, c, len, i;
     uint8_t buff[1024];
     cstring_t p;
@@ -152,7 +152,7 @@ uint32_t GetHandleId(jass_t *j) {
 }
 
 uint32_t StringHash(jass_t *j) {
-    return jass_pushinteger(j, (int32_t)hashtable_sstrhash2(jass_checkstring(j, 1)));
+    return jass_pushinteger(j, (int32_t)G_StringHash(jass_checkstring(j, 1)));
 }
 
 uint32_t SaveInteger(jass_t *j) {

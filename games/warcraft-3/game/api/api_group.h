@@ -1,12 +1,5 @@
 #define IS_UNIT(ent) (ent->svflags & SVF_MONSTER)
 
-bool group_add_entity(ggroup_t *group, edict_t *ent) {
-    if (!G_JassGroupValid(group) || !ent || group->num_units >= MAX_GROUP_SIZE) return false;
-    FOR_LOOP(i, group->num_units) if (group->units[i] == ent) return false;
-    group->units[group->num_units++] = ent;
-    return true;
-}
-
 uint32_t CreateGroup(jass_t *j) {
     char chain[256] = {0};
     cstring_t creator = NULL;
@@ -40,7 +33,7 @@ uint32_t DestroyGroup(jass_t *j) {
 uint32_t GroupAddUnit(jass_t *j) {
     ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
     edict_t *whichUnit = jass_checkhandle(j, 2, "unit");
-    return jass_pushboolean(j, group_add_entity(whichGroup, whichUnit));
+    return jass_pushboolean(j, G_AddUnitToGroup(whichGroup, whichUnit));
 }
 uint32_t GroupRemoveUnit(jass_t *j) {
     ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
@@ -67,6 +60,16 @@ uint32_t GroupClear(jass_t *j) {
 /* Enumeration filters run with each candidate bound as GetFilterUnit(). Apply
  * counted limits after the filter accepts a unit, and restore context so nested
  * group callbacks do not leak their candidate. */
+typedef struct {
+    jass_t *vm;
+    jassFunc_t const *filter;
+} jassGroupEnumContext_t;
+
+static bool GroupEnumUnitsOfPlayerFilter(edict_t *ent, void *opaque) {
+    jassGroupEnumContext_t *context = opaque;
+    return jass_evaluateboolexpr(context->vm, context->filter, ent);
+}
+
 uint32_t GroupEnumUnitsOfType(jass_t *j) {
     //ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
     //cstring_t unitname = jass_checkstring(j, 2);
@@ -77,16 +80,9 @@ uint32_t GroupEnumUnitsOfPlayer(jass_t *j) {
     ggroup_t *whichGroup = jass_checkhandle(j, 1, "group");
     player_t *whichPlayer = jass_checkhandle(j, 2, "player");
     jassFunc_t const *filter = jass_checkhandle(j, 3, "boolexpr");
-    if (!G_JassGroupValid(whichGroup) || !whichPlayer) {
-        return 0;
-    }
-    FOR_LOOP(i, globals.num_edicts) {
-        edict_t *ent = &globals.edicts[i];
-        if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->s.player == PLAYER_NUM(whichPlayer) &&
-            jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
-        }
-    }
+    jassGroupEnumContext_t context = { j, filter };
+    G_EnumUnitsOfPlayer(whichGroup, whichPlayer,
+        filter ? GroupEnumUnitsOfPlayerFilter : NULL, &context);
     return 0;
 }
 uint32_t GroupEnumUnitsOfTypeCounted(jass_t *j) {
@@ -110,7 +106,7 @@ uint32_t GroupEnumUnitsInRect(jass_t *j) {
         edict_t *ent = &globals.edicts[i];
         if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
         }
     }
     return 0;
@@ -128,7 +124,7 @@ uint32_t GroupEnumUnitsInRectCounted(jass_t *j) {
         edict_t *ent = &globals.edicts[i];
         if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) && Box2_containsPoint(r, &ent->s.origin2) &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
             countLimit--;
         }
     }
@@ -148,7 +144,7 @@ uint32_t GroupEnumUnitsInRange(jass_t *j) {
         if (IS_UNIT(ent) && !G_IsDeferredFree(ent) &&
             Vector2_distance(&ent->s.origin2, &MAKE(vec2_t, x, y)) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
         }
     }
     return 0;
@@ -165,7 +161,7 @@ uint32_t GroupEnumUnitsInRangeOfLoc(jass_t *j) {
         edict_t *ent = &globals.edicts[i];
         if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
         }
     }
     return 0;
@@ -185,7 +181,7 @@ uint32_t GroupEnumUnitsInRangeCounted(jass_t *j) {
         if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) &&
             Vector2_distance(&ent->s.origin2, &MAKE(vec2_t, x, y)) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
             countLimit--;
         }
     }
@@ -205,7 +201,7 @@ uint32_t GroupEnumUnitsInRangeOfLocCounted(jass_t *j) {
         if (countLimit > 0 && IS_UNIT(ent) && !G_IsDeferredFree(ent) &&
             Vector2_distance(&ent->s.origin2, whichLocation) <= radius &&
             jass_evaluateboolexpr(j, filter, ent)) {
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
             countLimit--;
         }
     }
@@ -220,7 +216,7 @@ uint32_t GroupEnumUnitsSelected(jass_t *j) {
         edict_t *ent = &globals.edicts[i];
         if (IS_UNIT(ent) && !G_IsDeferredFree(ent) && ent->selected & (1 << PLAYER_NUM(whichPlayer)) &&
             jass_evaluateboolexpr(j, filter, ent))
-            group_add_entity(whichGroup, ent);
+            G_AddUnitToGroup(whichGroup, ent);
     }
     return 0;
 }

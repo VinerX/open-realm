@@ -252,6 +252,84 @@ bool G_JassGroupValid(ggroup_t const *group) {
     return G_JassGroupIndex(group, NULL) && group->inuse;
 }
 
+bool G_AddUnitToGroup(ggroup_t *group, edict_t *ent) {
+    if (!G_JassGroupValid(group) || !ent || group->num_units >= MAX_GROUP_SIZE) return false;
+    FOR_LOOP(i, group->num_units) if (group->units[i] == ent) return false;
+    group->units[group->num_units++] = ent;
+    return true;
+}
+
+void G_EnumUnitsOfPlayer(ggroup_t *group, player_t *player, groupUnitFilter_t filter, void *context) {
+    if (!G_JassGroupValid(group) || !player) return;
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = &globals.edicts[i];
+        if ((ent->svflags & SVF_MONSTER) && !G_IsDeferredFree(ent) && ent->s.player == PLAYER_NUM(player) &&
+            (!filter || filter(ent, context)))
+            G_AddUnitToGroup(group, ent);
+    }
+}
+
+bool G_GetCameraMargin(int32_t which, float *margin) {
+    mapCameraBounds_t const *camera;
+    float const *bounds;
+    box2_t default_camera, playable;
+
+    if (!level.mapinfo || !margin) return false;
+    camera = &level.mapinfo->cameraBounds;
+    bounds = camera->bounds;
+    default_camera = MAKE(box2_t,
+        .min = { MIN(MIN(bounds[0], bounds[2]), MIN(bounds[4], bounds[6])),
+                 MIN(MIN(bounds[1], bounds[3]), MIN(bounds[5], bounds[7])) },
+        .max = { MAX(MAX(bounds[0], bounds[2]), MAX(bounds[4], bounds[6])),
+                 MAX(MAX(bounds[1], bounds[3]), MAX(bounds[5], bounds[7])) });
+    playable = CM_GetWorldBounds();
+    playable.min.x += camera->complement.left * TILE_SIZE;
+    playable.max.x -= camera->complement.right * TILE_SIZE;
+    playable.min.y += camera->complement.bottom * TILE_SIZE;
+    playable.max.y -= camera->complement.top * TILE_SIZE;
+    switch (which) {
+        case 0: *margin = default_camera.min.x - playable.min.x; return true;
+        case 1: *margin = playable.max.x - default_camera.max.x; return true;
+        case 2: *margin = playable.max.y - default_camera.max.y; return true;
+        case 3: *margin = default_camera.min.y - playable.min.y; return true;
+        default: return false;
+    }
+}
+
+void G_SetDayNightModels(cstring_t terrain, cstring_t unit) {
+    int terrain_model = 0, unit_model = 0;
+    char value[16];
+    if (gi.ModelIndex) {
+        if (terrain && *terrain) terrain_model = gi.ModelIndex(terrain);
+        if (unit && *unit) unit_model = gi.ModelIndex(unit);
+    }
+    if (gi.configstring) {
+        snprintf(value, sizeof(value), "%d", terrain_model);
+        gi.configstring(CS_TERRAIN_LIGHT_MODEL, value);
+        snprintf(value, sizeof(value), "%d", unit_model);
+        gi.configstring(CS_ENTITY_LIGHT_MODEL, value);
+    }
+}
+
+void G_SetTerrainFog(int32_t style, float start, float end, float density,
+                     float red, float green, float blue) {
+    G_EnvironmentFogSet(&(wc3EnvironmentFogParams_t){
+        .style = style, .start = start, .end = end, .density = density,
+        .color = { red, green, blue } });
+}
+
+void G_SetStartLocPrioCount(int32_t location, int32_t count) {
+    if (location >= 0 && location < WC3_MAX_MAP_PLAYERS)
+        level.setup.start_prio[location].count = MIN(MAX(0, count), MAX_START_PRIO);
+}
+
+void G_SetStartLocPrio(int32_t location, int32_t slot, int32_t other, uint32_t priority) {
+    if (location >= 0 && location < WC3_MAX_MAP_PLAYERS && slot >= 0 &&
+        slot < (int32_t)level.setup.start_prio[location].count)
+        level.setup.start_prio[location].slots[slot] =
+            (typeof(*level.setup.start_prio[location].slots)){ other, priority };
+}
+
 bool G_QuestValid(quest_t const *quest) {
     return quest && quest >= level.quests && quest < level.quests + MAX_QUESTS && quest->inuse;
 }

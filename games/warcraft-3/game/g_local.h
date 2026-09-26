@@ -956,6 +956,8 @@ typedef struct {
     uint32_t num_units;
 } ggroup_t;
 
+typedef bool (*groupUnitFilter_t)(edict_t *ent, void *context);
+
 typedef struct {
     bool inuse;
     bool enabled;
@@ -2050,6 +2052,8 @@ typedef struct {
 player_t *G_GetPlayerByNumber(uint32_t);
 void G_InitJassHost(void);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
+void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *lua);
+uint32_t G_StringHash(cstring_t text);
 bool G_LoadLuaMapScript(wc3Lua_t *lua, cstring_t source, cstring_t chunk_name);
 edict_t *G_GetPlayerEntityByNumber(uint32_t);
 gameClient_t *G_GetPlayerClientByNumber(uint32_t);
@@ -2252,6 +2256,13 @@ handle_t G_LoadJassHandle(cstring_t type, uint32_t id);
 ggroup_t *G_AllocJassGroup(void);
 bool G_EnsureJassGroupSlots(uint32_t count);
 bool G_JassGroupValid(ggroup_t const *group);
+bool G_AddUnitToGroup(ggroup_t *group, edict_t *ent);
+void G_EnumUnitsOfPlayer(ggroup_t *group, player_t *player, groupUnitFilter_t filter, void *context);
+bool G_GetCameraMargin(int32_t which, float *margin);
+void G_SetDayNightModels(cstring_t terrain, cstring_t unit);
+void G_SetTerrainFog(int32_t style, float start, float end, float density, float red, float green, float blue);
+void G_SetStartLocPrioCount(int32_t location, int32_t count);
+void G_SetStartLocPrio(int32_t location, int32_t slot, int32_t other, uint32_t priority);
 bool G_JassGroupIndex(ggroup_t const *group, uint32_t *index);
 ggroup_t *G_JassGroupByIndex(uint32_t index);
 bool G_QuestValid(quest_t const *quest);

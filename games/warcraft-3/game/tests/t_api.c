@@ -29,6 +29,14 @@ void setup_test_world(void);
 void CM_SetupTestPathmap(uint32_t width, uint32_t height, uint8_t const *cells);
 void CM_SetupTestWorldBounds(box2_t const *bounds);
 bool run_test_jass(cstring_t src);
+
+TEST(wc3_api, animation_enum_converters_are_registered) {
+    T_ASSERT(run_test_jass(
+        "function main takes nothing returns nothing\n"
+        "  call ConvertAnimType(0)\n"
+        "  call ConvertSubAnimType(17)\n"
+        "endfunction\n"));
+}
 extern player_t *currentplayer;
 void unit_die(edict_t *self, edict_t *attacker);
 void unit_build(edict_t *self, uint32_t class_id);
@@ -1407,6 +1415,8 @@ TEST(wc3_api, camera_margin_is_default_camera_inset_from_playable_area) {
      * the W3I default camera bounds; it is not complement * TILE_SIZE. */
     int const raw_complements[4] = { 4, 8, 6, 10 };
     mapInfo_t *mapinfo = (mapInfo_t *)level.mapinfo;
+    wc3Lua_t *lua;
+    double margin;
 
     CM_SetupTestWorldBounds(&MAKE(box2_t,
         .min = { -4096.0f, -3072.0f },
@@ -1441,6 +1451,31 @@ TEST(wc3_api, camera_margin_is_default_camera_inset_from_playable_area) {
     T_FEQ(level.camera_bounds.max.x, 2688.0f, 0.001f);
     T_FEQ(level.camera_bounds.min.y, -1920.0f, 0.001f);
     T_FEQ(level.camera_bounds.max.y, 1280.0f, 0.001f);
+
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function left_margin() return GetCameraMargin(CAMERA_MARGIN_LEFT) end\n"
+        "function right_margin() return GetCameraMargin(CAMERA_MARGIN_RIGHT) end\n"
+        "function top_margin() return GetCameraMargin(CAMERA_MARGIN_TOP) end\n"
+        "function bottom_margin() return GetCameraMargin(CAMERA_MARGIN_BOTTOM) end\n"
+        "function lua_set_bounds() SetCameraBounds(-3328, -1920, -3328, 1280, 2688, 1280, 2688, -1920) end\n",
+        "=(camera-margin-lua-test)"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "left_margin", &margin));
+    T_FEQ((float)margin, 256.0f, 0.001f);
+    T_ASSERT(WC3_LuaCallNumber(lua, "right_margin", &margin));
+    T_FEQ((float)margin, 384.0f, 0.001f);
+    T_ASSERT(WC3_LuaCallNumber(lua, "top_margin", &margin));
+    T_FEQ((float)margin, 512.0f, 0.001f);
+    T_ASSERT(WC3_LuaCallNumber(lua, "bottom_margin", &margin));
+    T_FEQ((float)margin, 384.0f, 0.001f);
+    T_ASSERT(WC3_LuaCall(lua, "lua_set_bounds"));
+    T_FEQ(level.camera_bounds.min.x, -3328.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.x, 2688.0f, 0.001f);
+    T_FEQ(level.camera_bounds.min.y, -1920.0f, 0.001f);
+    T_FEQ(level.camera_bounds.max.y, 1280.0f, 0.001f);
+    WC3_LuaClose(lua);
 }
 
 TEST(wc3_api, world_bounds_enables_full_map_group_transfer) {
@@ -2073,6 +2108,7 @@ TEST(wc3_environment_fog, set_terrain_fog_ex_publishes_runtime_state) {
     int style = -1;
     float start = 0.0f, end = 0.0f, density = 0.0f;
     float red = 0.0f, green = 0.0f, blue = 0.0f;
+    wc3Lua_t *lua;
 
     scene_fog_configstring_calls = 0;
     scene_fog_configstring_index = 0;
@@ -2091,17 +2127,34 @@ TEST(wc3_environment_fog, set_terrain_fog_ex_publishes_runtime_state) {
     T_FEQ(level.environment_fog.active.color.x, 0.2f, 0.001f);
     T_FEQ(level.environment_fog.active.color.y, 0.3f, 0.001f);
     T_FEQ(level.environment_fog.active.color.z, 0.4f, 0.001f);
-    T_EQ(scene_fog_configstring_calls, 1);
+
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (lua) {
+        T_ASSERT(G_LoadLuaMapScript(lua,
+            "function set_lua_fog() SetTerrainFogEx(0, 1200, 6200, 0.3, 0.1, 0.2, 0.3) end\n",
+            "=(terrain-fog-lua-test)"));
+        T_ASSERT(WC3_LuaCall(lua, "set_lua_fog"));
+        T_EQ(level.environment_fog.active.style, WC3_ENV_FOG_LINEAR);
+        T_FEQ(level.environment_fog.active.start, 1200.0f, 0.001f);
+        T_FEQ(level.environment_fog.active.end, 6200.0f, 0.001f);
+        T_FEQ(level.environment_fog.active.density, 0.3f, 0.001f);
+        T_FEQ(level.environment_fog.active.color.x, 0.1f, 0.001f);
+        T_FEQ(level.environment_fog.active.color.y, 0.2f, 0.001f);
+        T_FEQ(level.environment_fog.active.color.z, 0.3f, 0.001f);
+        WC3_LuaClose(lua);
+    }
+    T_EQ(scene_fog_configstring_calls, 2);
     T_EQ(scene_fog_configstring_index, CS_SCENE_FOG);
     T_EQ(sscanf(scene_fog_configstring_value, "%d %f %f %f %f %f %f",
                 &style, &start, &end, &density, &red, &green, &blue), 7);
     T_EQ(style, WC3_ENV_FOG_LINEAR);
-    T_FEQ(start, 1000.0f, 0.001f);
-    T_FEQ(end, 5000.0f, 0.001f);
-    T_FEQ(density, 0.25f, 0.001f);
-    T_FEQ(red, 0.2f, 0.001f);
-    T_FEQ(green, 0.3f, 0.001f);
-    T_FEQ(blue, 0.4f, 0.001f);
+    T_FEQ(start, 1200.0f, 0.001f);
+    T_FEQ(end, 6200.0f, 0.001f);
+    T_FEQ(density, 0.3f, 0.001f);
+    T_FEQ(red, 0.1f, 0.001f);
+    T_FEQ(green, 0.2f, 0.001f);
+    T_FEQ(blue, 0.3f, 0.001f);
 
     gi.configstring = old_configstring;
 }
@@ -4966,8 +5019,8 @@ TEST(wc3_api, group_add_is_set_semantics) {
     edict_t *unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0);
     ggroup_t *group = G_AllocJassGroup();
     T_NOT_NULL(group);
-    T_ASSERT(group_add_entity(group, unit));
-    T_ASSERT(!group_add_entity(group, unit));
+    T_ASSERT(G_AddUnitToGroup(group, unit));
+    T_ASSERT(!G_AddUnitToGroup(group, unit));
     T_EQ(group->num_units, 1);
     G_FreeJassGroup(group);
 }

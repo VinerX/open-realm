@@ -88,6 +88,9 @@ CONVERT_FUNC(RarityControl, raritycontrol);
 CONVERT_FUNC(TexMapFlags, texmapflags);
 CONVERT_FUNC(FogState, fogstate);
 CONVERT_FUNC(EffectType, effecttype);
+CONVERT_FUNC(AnimType, animtype);
+CONVERT_FUNC(SubAnimType, subanimtype);
+CONVERT_FUNC(FogStyle, fogstyle);
 
 MATH_FUNC(Deg2Rad, DEG2RAD, number, number);
 MATH_FUNC(Rad2Deg, RAD2DEG, number, number);
@@ -205,14 +208,13 @@ uint32_t DefineStartLocationLoc(jass_t *j) {
 }
 uint32_t SetStartLocPrioCount(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), count = jass_checkinteger(j, 2);
-    if (loc >= 0 && loc < WC3_MAX_MAP_PLAYERS) level.setup.start_prio[loc].count = MIN(MAX(0, count), MAX_START_PRIO);
+    G_SetStartLocPrioCount(loc, count);
     return 0;
 }
 uint32_t SetStartLocPrio(jass_t *j) {
     int32_t loc = jass_checkinteger(j, 1), slot = jass_checkinteger(j, 2), other = jass_checkinteger(j, 3);
     uint32_t *priority = jass_checkhandle(j, 4, "startlocprio");
-    if (loc >= 0 && loc < WC3_MAX_MAP_PLAYERS && slot >= 0 && slot < (int32_t)level.setup.start_prio[loc].count && priority)
-        level.setup.start_prio[loc].slots[slot] = (typeof(*level.setup.start_prio[loc].slots)){ other, *priority };
+    if (priority) G_SetStartLocPrio(loc, slot, other, *priority);
     return 0;
 }
 uint32_t GetStartLocPrioSlot(jass_t *j) {
@@ -1394,16 +1396,16 @@ uint32_t SetTerrainFogEx(jass_t *j) {
     float green = jass_checknumber(j, 6);
     float blue = jass_checknumber(j, 7);
 
-    G_EnvironmentFogSet(&(wc3EnvironmentFogParams_t){
-        .style = style, .start = zstart, .end = zend, .density = density,
-        .color = { red, green, blue } });
+    G_SetTerrainFog(style, zstart, zend, density, red, green, blue);
     return 0;
 }
 uint32_t SetWaterBaseColor(jass_t *j) {
-    //int32_t red = jass_checkinteger(j, 1);
-    //int32_t green = jass_checkinteger(j, 2);
-    //int32_t blue = jass_checkinteger(j, 3);
-    //int32_t alpha = jass_checkinteger(j, 4);
+    int32_t red = jass_checkinteger(j, 1);
+    int32_t green = jass_checkinteger(j, 2);
+    int32_t blue = jass_checkinteger(j, 3);
+    int32_t alpha = jass_checkinteger(j, 4);
+    fprintf(stderr, "WC3: SetWaterBaseColor(%d,%d,%d,%d) presentation is not implemented\n",
+            red, green, blue, alpha);
     return 0;
 }
 uint32_t SetWaterDeforms(jass_t *j) {
@@ -1413,23 +1415,7 @@ uint32_t SetWaterDeforms(jass_t *j) {
 uint32_t SetDayNightModels(jass_t *j) {
     cstring_t terrainDNCFile = jass_checkstring(j, 1);
     cstring_t unitDNCFile = jass_checkstring(j, 2);
-    int terrain_model = 0, unit_model = 0;
-    char value[16];
-
-    /* The map script owns the DNC asset choice. Register both models through
-     * the ordinary model configstring pool, then publish only their compact
-     * indices. The generic client turns those indices back into model handles
-     * and the WC3 renderer samples their first animated lights. */
-    if (gi.ModelIndex) {
-        if (terrainDNCFile && *terrainDNCFile) terrain_model = gi.ModelIndex(terrainDNCFile);
-        if (unitDNCFile && *unitDNCFile) unit_model = gi.ModelIndex(unitDNCFile);
-    }
-    if (gi.configstring) {
-        snprintf(value, sizeof(value), "%d", terrain_model);
-        gi.configstring(CS_TERRAIN_LIGHT_MODEL, value);
-        snprintf(value, sizeof(value), "%d", unit_model);
-        gi.configstring(CS_ENTITY_LIGHT_MODEL, value);
-    }
+    G_SetDayNightModels(terrainDNCFile, unitDNCFile);
     return 0;
 }
 uint32_t SetSkyModel(jass_t *j) {
