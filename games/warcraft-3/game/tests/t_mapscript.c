@@ -138,20 +138,33 @@ TEST(wc3_mapscript, missing_script_leaves_null_without_crash) {
     T_NULL(world.info.mapscript);
 }
 
-static void mapscript_set_kind(uint32_t file_format, uint32_t script_type) {
+/* CM_ReadMapScript reads the map-scoped W3I fields from the shared world.info,
+ * so each case must restore the previous selector to keep the suite ordered
+ * independently. */
+typedef struct { uint32_t fileFormat, scriptType; } mapscript_selector_t;
+
+static mapscript_selector_t mapscript_selector_push(uint32_t file_format, uint32_t script_type) {
+    mapscript_selector_t saved = { world.info.fileFormat, world.info.scriptType };
     world.info.fileFormat = file_format;
     world.info.scriptType = script_type;
+    return saved;
+}
+
+static void mapscript_selector_pop(mapscript_selector_t saved) {
+    world.info.fileFormat = saved.fileFormat;
+    world.info.scriptType = saved.scriptType;
 }
 
 TEST(wc3_mapscript, lua_declared_loads_war3map_lua) {
     cstring_t path = "/tmp/openwarcraft3-mapscript-lua.mpq";
     handle_t archive;
     cstring_t lua = "function config() end\nfunction main() end\n";
+    mapscript_selector_t saved;
 
     T_ASSERT(mapscript_pack_mpq(path, "war3map.lua", lua));
     T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
     mapscript_clear_loaded();
-    mapscript_set_kind(28, WC3_W3I_SCRIPT_LUA);
+    saved = mapscript_selector_push(28, WC3_W3I_SCRIPT_LUA);
     CM_ReadMapScript(archive);
     SFileCloseArchive(archive);
     unlink(path);
@@ -159,38 +172,43 @@ TEST(wc3_mapscript, lua_declared_loads_war3map_lua) {
     T_NOT_NULL(world.info.mapscript);
     T_ASSERT(strstr(world.info.mapscript, "function config") != NULL);
     mapscript_clear_loaded();
+    mapscript_selector_pop(saved);
 }
 
 TEST(wc3_mapscript, lua_declared_never_falls_back_to_jass) {
     cstring_t path = "/tmp/openwarcraft3-mapscript-lua-no-member.mpq";
     handle_t archive;
+    mapscript_selector_t saved;
 
     T_ASSERT(mapscript_pack_mpq(path, "war3map.j", kMinimalMapScript));
     T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
     mapscript_clear_loaded();
-    mapscript_set_kind(28, WC3_W3I_SCRIPT_LUA);
+    saved = mapscript_selector_push(28, WC3_W3I_SCRIPT_LUA);
     CM_ReadMapScript(archive);
     SFileCloseArchive(archive);
     unlink(path);
     T_EQ(world.info.scriptKind, WC3_SCRIPT_LUA);
     T_NULL(world.info.mapscript);
     mapscript_clear_loaded();
+    mapscript_selector_pop(saved);
 }
 
 TEST(wc3_mapscript, legacy_format_without_scriptkind_stays_jass) {
     cstring_t path = "/tmp/openwarcraft3-mapscript-legacy.mpq";
     handle_t archive;
+    mapscript_selector_t saved;
 
     T_ASSERT(mapscript_pack_mpq(path, "war3map.j", kMinimalMapScript));
     T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
     mapscript_clear_loaded();
-    mapscript_set_kind(25, 0);
+    saved = mapscript_selector_push(25, 0);
     CM_ReadMapScript(archive);
     SFileCloseArchive(archive);
     unlink(path);
     T_EQ(world.info.scriptKind, WC3_SCRIPT_JASS);
     T_NOT_NULL(world.info.mapscript);
     mapscript_clear_loaded();
+    mapscript_selector_pop(saved);
 }
 
 #endif /* BZ_TESTS */
