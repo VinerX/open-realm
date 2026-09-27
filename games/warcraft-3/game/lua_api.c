@@ -4,7 +4,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 
-extern player_t *currentplayer;
+#include "g_camera.h"
 
 static int LuaSetMapName(lua_State *L) {
     strlcpy(level.setup.name, luaL_checkstring(L, 1), sizeof(level.setup.name));
@@ -122,6 +122,35 @@ static int LuaCreateGroup(lua_State *L) {
     return 1;
 }
 
+/* Reforged BlzCreateUnitWithSkin always passes the unit rawcode as its skin in
+ * the maps seen so far; OpenRealm has no alternate-skin registry yet, so the
+ * rawcode is authoritative and a differing skin is reported once rather than
+ * silently dropped. */
+static int LuaBlzCreateUnitWithSkin(lua_State *L) {
+    static bool logged_skin;
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t unitid = (uint32_t)luaL_checkinteger(L, 2);
+    vec2_t location = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
+    float facing = (float)luaL_checknumber(L, 5);
+    uint32_t skinId = (uint32_t)luaL_checkinteger(L, 6);
+    edict_t *unit;
+
+    if (!player) {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (skinId && skinId != unitid && !logged_skin) {
+        logged_skin = true;
+        fprintf(stderr, "WC3 Lua: BlzCreateUnitWithSkin alternate skin %c%c%c%c for unit %c%c%c%c is not implemented\n",
+                skinId & 255, (skinId >> 8) & 255, (skinId >> 16) & 255, (skinId >> 24) & 255,
+                unitid & 255, (unitid >> 8) & 255, (unitid >> 16) & 255, (unitid >> 24) & 255);
+    }
+    unit = unit_create(PLAYER_NUM(player), unitid, &location, facing);
+    if (unit) lua_pushlightuserdata(L, unit);
+    else lua_pushnil(L);
+    return 1;
+}
+
 static int LuaDestroyGroup(lua_State *L) {
     G_FreeJassGroup(lua_touserdata(L, 1));
     return 0;
@@ -234,6 +263,22 @@ static int LuaTriggerRegisterPlayerUnitEvent(lua_State *L) {
         }
         event->lua_filter_vm = level.lua_vm;
     }
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterUnitEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    EVENTTYPE type = (EVENTTYPE)luaL_checkinteger(L, 3);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !unit)
+        return luaL_error(L, "TriggerRegisterUnitEvent: invalid trigger or unit");
+    event = G_MakeEvent(type);
+    if (!event) return luaL_error(L, "TriggerRegisterUnitEvent: event registry is full");
+    G_SetEventSubject(event, unit);
+    event->trigger = trigger;
     lua_pushlightuserdata(L, G_EventHandle(event));
     return 1;
 }
@@ -468,6 +513,258 @@ static int LuaAddWeatherEffect(lua_State *L) {
     gweather_t *effect = G_WeatherAdd(where, (uint32_t)luaL_checkinteger(L, 2), false);
     if (effect) lua_pushlightuserdata(L, effect);
     else lua_pushnil(L);
+    return 1;
+}
+
+/* Camera setups own their own authored state; the shared g_camera.h helpers
+ * keep the angle/FOV conventions identical to the JASS camera natives. */
+static camerasetup_t *LuaCameraSetup(lua_State *L, int index) {
+    return lua_isnoneornil(L, index) ? NULL : lua_touserdata(L, index);
+}
+
+static CAMERAFIELD LuaCameraField(lua_State *L, int index) {
+    uint32_t *field = lua_touserdata(L, index);
+    return field ? (CAMERAFIELD)*field : (CAMERAFIELD)luaL_checkinteger(L, index);
+}
+
+static int LuaCreateCameraSetup(lua_State *L) {
+    camerasetup_t *setup = lua_newuserdata(L, sizeof(*setup));
+    gameCamera_t cam;
+    memset(setup, 0, sizeof(*setup));
+    CL_GameDefaultCamera(&cam);
+    setup->viewangles = (vec3_t){ cam.pitch, 0, cam.yaw };
+    setup->fov = cam.fov;
+    setup->target_distance = cam.distance;
+    setup->near_z = cam.znear;
+    setup->far_z = cam.zfar;
+    return 1;
+}
+
+static int LuaCameraSetupSetField(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    if (setup) G_SetCameraStateField(setup, LuaCameraField(L, 2), (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
+static int LuaCameraSetupGetField(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    lua_pushnumber(L, G_GetCameraStateField(setup, LuaCameraField(L, 2)));
+    return 1;
+}
+
+static int LuaCameraSetupSetDestPosition(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    if (setup) {
+        setup->position.x = (float)luaL_checknumber(L, 2);
+        setup->position.y = (float)luaL_checknumber(L, 3);
+    }
+    return 0;
+}
+
+static int LuaCameraSetupGetDestPositionX(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    lua_pushnumber(L, setup ? setup->position.x : 0.0f);
+    return 1;
+}
+
+static int LuaCameraSetupGetDestPositionY(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    lua_pushnumber(L, setup ? setup->position.y : 0.0f);
+    return 1;
+}
+
+static int LuaCameraSetupGetDestPositionLoc(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    vec2_t *location = lua_newuserdata(L, sizeof(*location));
+    *location = setup ? setup->position : (vec2_t){ 0 };
+    return 1;
+}
+
+static int LuaCameraSetupApply(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    G_ApplyCameraSetup(setup, lua_toboolean(L, 2), false, 0.0f, 0.0f);
+    return 0;
+}
+
+static int LuaCameraSetupApplyWithZ(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    G_ApplyCameraSetup(setup, true, true, (float)luaL_checknumber(L, 2), 0.0f);
+    return 0;
+}
+
+static int LuaCameraSetupApplyForceDuration(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    G_ApplyCameraSetup(setup, lua_toboolean(L, 2), false, 0.0f,
+                       (float)luaL_checknumber(L, 3) * 1000.0f);
+    return 0;
+}
+
+static int LuaCameraSetupApplyForceDurationWithZ(lua_State *L) {
+    camerasetup_t *setup = LuaCameraSetup(L, 1);
+    G_ApplyCameraSetup(setup, true, true, (float)luaL_checknumber(L, 2),
+                       (float)luaL_checknumber(L, 3) * 1000.0f);
+    return 0;
+}
+
+static int LuaSetCameraField(lua_State *L) {
+    G_SetCameraFieldForCurrentPlayer(LuaCameraField(L, 1),
+        (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
+static int LuaAdjustCameraField(lua_State *L) {
+    CAMERAFIELD field = LuaCameraField(L, 1);
+    float offset = (float)luaL_checknumber(L, 2);
+    float duration = (float)luaL_checknumber(L, 3);
+    gameClient_t *gc = G_CurrentCameraClient("AdjustCameraField");
+    if (gc) {
+        camerasetup_t current = G_CameraStateAtTime(gc, G_Time());
+        G_SetCameraFieldForCurrentPlayer(field, G_GetCameraStateField(&current, field) + offset, duration);
+    }
+    return 0;
+}
+
+static int LuaGetCameraField(lua_State *L) {
+    CAMERAFIELD field = LuaCameraField(L, 1);
+    player_t const *p = currentplayer;
+    float value = 0.0f;
+
+    /* Mirror the JASS getter: live player state, with angles and FOV in radians. */
+    if (p) switch (field) {
+        case CAMERA_FIELD_TARGET_DISTANCE: value = p->distance; break;
+        case CAMERA_FIELD_FARZ: value = p->zfar; break;
+        case CAMERA_FIELD_NEARZ: value = p->znear; break;
+        case CAMERA_FIELD_ANGLE_OF_ATTACK:
+            value = G_CameraDegreesToRadians(G_CameraPitchToAuthored(p->viewangles.x)); break;
+        case CAMERA_FIELD_FIELD_OF_VIEW:
+            value = G_CameraDegreesToRadians(G_CameraVerticalToHorizontalFov(p->fov)); break;
+        case CAMERA_FIELD_ROLL: value = G_CameraDegreesToRadians(p->viewangles.y); break;
+        case CAMERA_FIELD_ROTATION: value = G_CameraDegreesToRadians(G_CameraRotation(p)); break;
+        case CAMERA_FIELD_ZOFFSET: value = G_CameraZOffset(p); break;
+        case CAMERA_FIELD_LOCAL_PITCH:
+        case CAMERA_FIELD_LOCAL_YAW:
+        case CAMERA_FIELD_LOCAL_ROLL:
+            break;
+    }
+    lua_pushnumber(L, value);
+    return 1;
+}
+
+static int LuaSetCameraTargetController(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    float xoffset = (float)luaL_checknumber(L, 2);
+    float yoffset = (float)luaL_checknumber(L, 3);
+    bool inherit = lua_toboolean(L, 4);
+    gameClient_t *gc = G_CurrentCameraClient("SetCameraTargetController");
+    if (!gc) return 0;
+    gc->camera.target_controller = unit;
+    gc->camera.target_offset = (vec2_t){ xoffset, yoffset };
+    gc->camera.target_inherit_orientation = inherit;
+    if (unit) {
+        vec2_t position = { unit->s.origin2.x + xoffset, unit->s.origin2.y + yoffset };
+        gc->camera.old_state = gc->camera.state;
+        gc->camera.state.position = G_ClampCameraPosition(gc, &position);
+        if (inherit) {
+            gc->camera.old_state.viewangles.z = 90.0f - (float)RAD2DEG(unit->s.angle);
+            gc->camera.state.viewangles.z = 90.0f - (float)RAD2DEG(unit->s.angle);
+        }
+        gc->camera.start_time = G_Time();
+        gc->camera.end_time = gc->camera.start_time;
+    } else {
+        gc->camera.target_offset = (vec2_t){ 0, 0 };
+        gc->camera.target_inherit_orientation = false;
+    }
+    return 0;
+}
+
+static int LuaSetCameraPosition(lua_State *L) {
+    G_SetCameraPositionForCurrentPlayer("SetCameraPosition", (float)luaL_checknumber(L, 1),
+        (float)luaL_checknumber(L, 2), false, 0.0f, 0.0f);
+    return 0;
+}
+
+static int LuaSetCameraQuickPosition(lua_State *L) {
+    gameClient_t *gc = G_CurrentCameraClient("SetCameraQuickPosition");
+    if (!gc) return 0;
+    /* Warcraft's quick position is the spacebar recall point. It must not
+     * mutate the current camera target when the script assigns it. */
+    gc->camera.quick_position = MAKE(vec2_t, (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2));
+    gc->camera.quick_position_set = true;
+    return 0;
+}
+
+static int LuaPanCameraTo(lua_State *L) {
+    G_SetCameraPositionForCurrentPlayer("PanCameraTo", (float)luaL_checknumber(L, 1),
+        (float)luaL_checknumber(L, 2), false, 0.0f, 0.0f);
+    return 0;
+}
+
+static int LuaPanCameraToTimed(lua_State *L) {
+    G_SetCameraPositionForCurrentPlayer("PanCameraToTimed", (float)luaL_checknumber(L, 1),
+        (float)luaL_checknumber(L, 2), false, 0.0f, (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
+static int LuaPanCameraToWithZ(lua_State *L) {
+    G_SetCameraPositionForCurrentPlayer("PanCameraToWithZ", (float)luaL_checknumber(L, 1),
+        (float)luaL_checknumber(L, 2), true, (float)luaL_checknumber(L, 3), 0.0f);
+    return 0;
+}
+
+static int LuaPanCameraToTimedWithZ(lua_State *L) {
+    G_SetCameraPositionForCurrentPlayer("PanCameraToTimedWithZ", (float)luaL_checknumber(L, 1),
+        (float)luaL_checknumber(L, 2), true, (float)luaL_checknumber(L, 3),
+        (float)luaL_checknumber(L, 4));
+    return 0;
+}
+
+static int LuaStopCamera(lua_State *L) {
+    gameClient_t *gc = G_CurrentCameraClient("StopCamera");
+    if (gc) {
+        uint32_t now = G_Time();
+        gc->camera.state = G_CameraStateAtTime(gc, now);
+        gc->camera.old_state = gc->camera.state;
+        gc->camera.start_time = gc->camera.end_time = now;
+    }
+    (void)L;
+    return 0;
+}
+
+static int LuaResetToGameCamera(lua_State *L) {
+    float duration = (float)luaL_checknumber(L, 1);
+    gameClient_t *gc = G_CurrentCameraClient("ResetToGameCamera");
+    gameCamera_t cam;
+    if (!gc) return 0;
+    if (G_SkipCutscene()) duration = 0.0f;
+    G_ClearCameraTarget(gc, "ResetToGameCamera");
+    gc->camera.old_state = gc->camera.state;
+    CL_GameDefaultCamera(&cam);
+    gc->camera.state.viewangles = (vec3_t){ cam.pitch, 0, cam.yaw };
+    gc->camera.state.fov = cam.fov;
+    gc->camera.state.target_distance = cam.distance;
+    gc->camera.state.z_offset = 0.0f;
+    gc->camera.state.near_z = cam.znear;
+    gc->camera.state.far_z = cam.zfar;
+    gc->camera.start_time = G_Time();
+    gc->camera.end_time = gc->camera.start_time + (uint32_t)(duration * 1000.0f);
+    return 0;
+}
+
+static int LuaGetCameraTargetPositionX(lua_State *L) {
+    gameClient_t *gc = G_CurrentCameraClient("GetCameraTargetPositionX");
+    lua_pushnumber(L, gc ? gc->ps.vieworigin.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetCameraTargetPositionY(lua_State *L) {
+    gameClient_t *gc = G_CurrentCameraClient("GetCameraTargetPositionY");
+    lua_pushnumber(L, gc ? gc->ps.vieworigin.y : 0.0f);
+    return 1;
+}
+
+static int LuaGetCameraTargetPositionZ(lua_State *L) {
+    gameClient_t *gc = G_CurrentCameraClient("GetCameraTargetPositionZ");
+    lua_pushnumber(L, gc ? gc->ps.vieworigin.z : 0.0f);
     return 1;
 }
 
@@ -1100,6 +1397,7 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
 void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     G_RegisterLuaMapConfigNatives(L);
     WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
+    WC3_LuaRegisterNative(L, "BlzCreateUnitWithSkin", LuaBlzCreateUnitWithSkin);
     WC3_LuaRegisterNative(L, "DestroyGroup", LuaDestroyGroup);
     WC3_LuaRegisterNative(L, "CreateTrigger", LuaCreateTrigger);
     WC3_LuaRegisterNative(L, "TriggerAddAction", LuaTriggerAddAction);
@@ -1107,6 +1405,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "TriggerRegisterGameStateEvent", LuaTriggerRegisterGameStateEvent);
     WC3_LuaRegisterNative(L, "TriggerRegisterTimerExpireEvent", LuaTriggerRegisterTimerExpireEvent);
     WC3_LuaRegisterNative(L, "TriggerRegisterPlayerUnitEvent", LuaTriggerRegisterPlayerUnitEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterUnitEvent", LuaTriggerRegisterUnitEvent);
     WC3_LuaRegisterNative(L, "TriggerEvaluate", LuaTriggerEvaluate);
     WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
     WC3_LuaRegisterNative(L, "GetTriggerUnit", LuaGetTriggerUnit);
@@ -1161,6 +1460,32 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetThematicMusicVolume", LuaSetThematicMusicVolume);
     WC3_LuaRegisterNative(L, "SetThematicMusicPlayPosition", LuaSetThematicMusicPlayPosition);
     WC3_LuaRegisterNative(L, "SetCameraBounds", LuaSetCameraBounds);
+    WC3_LuaRegisterNative(L, "CreateCameraSetup", LuaCreateCameraSetup);
+    WC3_LuaRegisterNative(L, "CameraSetupSetField", LuaCameraSetupSetField);
+    WC3_LuaRegisterNative(L, "CameraSetupGetField", LuaCameraSetupGetField);
+    WC3_LuaRegisterNative(L, "CameraSetupSetDestPosition", LuaCameraSetupSetDestPosition);
+    WC3_LuaRegisterNative(L, "CameraSetupGetDestPositionX", LuaCameraSetupGetDestPositionX);
+    WC3_LuaRegisterNative(L, "CameraSetupGetDestPositionY", LuaCameraSetupGetDestPositionY);
+    WC3_LuaRegisterNative(L, "CameraSetupGetDestPositionLoc", LuaCameraSetupGetDestPositionLoc);
+    WC3_LuaRegisterNative(L, "CameraSetupApply", LuaCameraSetupApply);
+    WC3_LuaRegisterNative(L, "CameraSetupApplyWithZ", LuaCameraSetupApplyWithZ);
+    WC3_LuaRegisterNative(L, "CameraSetupApplyForceDuration", LuaCameraSetupApplyForceDuration);
+    WC3_LuaRegisterNative(L, "CameraSetupApplyForceDurationWithZ", LuaCameraSetupApplyForceDurationWithZ);
+    WC3_LuaRegisterNative(L, "SetCameraField", LuaSetCameraField);
+    WC3_LuaRegisterNative(L, "AdjustCameraField", LuaAdjustCameraField);
+    WC3_LuaRegisterNative(L, "GetCameraField", LuaGetCameraField);
+    WC3_LuaRegisterNative(L, "SetCameraTargetController", LuaSetCameraTargetController);
+    WC3_LuaRegisterNative(L, "SetCameraPosition", LuaSetCameraPosition);
+    WC3_LuaRegisterNative(L, "SetCameraQuickPosition", LuaSetCameraQuickPosition);
+    WC3_LuaRegisterNative(L, "PanCameraTo", LuaPanCameraTo);
+    WC3_LuaRegisterNative(L, "PanCameraToTimed", LuaPanCameraToTimed);
+    WC3_LuaRegisterNative(L, "PanCameraToWithZ", LuaPanCameraToWithZ);
+    WC3_LuaRegisterNative(L, "PanCameraToTimedWithZ", LuaPanCameraToTimedWithZ);
+    WC3_LuaRegisterNative(L, "StopCamera", LuaStopCamera);
+    WC3_LuaRegisterNative(L, "ResetToGameCamera", LuaResetToGameCamera);
+    WC3_LuaRegisterNative(L, "GetCameraTargetPositionX", LuaGetCameraTargetPositionX);
+    WC3_LuaRegisterNative(L, "GetCameraTargetPositionY", LuaGetCameraTargetPositionY);
+    WC3_LuaRegisterNative(L, "GetCameraTargetPositionZ", LuaGetCameraTargetPositionZ);
     WC3_LuaRegisterNative(L, "GetCameraBoundMinX", LuaGetCameraBoundMinX);
     WC3_LuaRegisterNative(L, "GetCameraBoundMinY", LuaGetCameraBoundMinY);
     WC3_LuaRegisterNative(L, "GetCameraBoundMaxX", LuaGetCameraBoundMaxX);

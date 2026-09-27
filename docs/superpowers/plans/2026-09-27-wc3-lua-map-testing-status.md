@@ -28,6 +28,21 @@ must reject unsupported syntax rather than silently omit it.
   passed `InitBlizzard` setup including day/night sound creation; map startup
   then stopped at the next missing Lua native, `CreateTrigger` from
   `Blizzard.j:3022`. This is a startup smoke result, not gameplay validation.
+- Triggers, timer callbacks, player-unit events, and Lua event filters reuse the
+  shared trigger/event lifecycle (Lua VM + registry ref, never a faked JASS
+  `code` handle).
+- The bounded audit now classifies a run by its engine-reported script startup
+  result: `classify_run_status` downgrades any `G_StartScripts`/`G_SpawnEntities`
+  load/config/main failure to `script_error` and reports a `SCRIPT_STARTUP`
+  family, so a zero exit code can no longer be reported as `completed` for a map
+  whose script never ran.
+- Lua sound and music natives reuse the JASS sound path (`G_JassSound*`,
+  `G_PlaySound`, `G_Music*`); Lua weather reuses `G_Weather*`; Lua camera setup
+  and pan natives reuse the shared `g_camera.h` helpers now factored out of
+  `api_camera.h`.
+- The read-only CASC audit advanced past `CreateTrigger`, `CreateSound`, weather,
+  camera creation, and `BlzCreateUnitWithSkin`; map startup now stops in `main`
+  at `TriggerRegisterUnitEvent` (then `SetUnitColor`), the next missing slices.
 
 ## Remaining work
 
@@ -37,9 +52,11 @@ must reject unsupported syntax rather than silently omit it.
    function pointers.
 2. Continue the map audit after each bounded native slice. Follow actual
    initialization order and use focused regressions before changing behavior.
-3. Fix the audit reporting so script initialization failures are distinguished
-   from frame-limit survival; the current report can mark a run completed while
-   its log contains a `G_StartScripts` failure.
+   The map references hundreds of WC3 natives; implement them in slices that
+   reuse the existing JASS/engine implementations rather than in bulk.
+3. Extend the audit report from a binary startup result to per-phase detail
+   (`kind`, `selection`, `load`, `config`, `main`, `runtime_error`,
+   `unsupported_natives`) as planned in the implementation plan's Task 6.
 4. Keep JASS regressions green, complete map initialization, then proceed to
    runtime map behavior and report remaining unsupported natives explicitly.
 5. Before a checkpoint, run focused tests, `git diff --check`, and a production

@@ -628,6 +628,83 @@ TEST(wc3_mapscript, lua_add_weather_effect_uses_shared_weather_state) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, lua_camera_setup_round_trips_authored_fields) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double distance = 0.0, rotation = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunCameraSetupTest()\n"
+        "local setup = CreateCameraSetup()\n"
+        "CameraSetupSetField(setup, field_distance, 3980.0, 0.0)\n"
+        "CameraSetupSetField(setup, field_rotation, 89.0, 0.0)\n"
+        "CameraSetupSetDestPosition(setup, -3864.1, 398.5, 0.0)\n"
+        "assert(math.abs(CameraSetupGetDestPositionX(setup) - (-3864.1)) < 0.01)\n"
+        "assert(math.abs(CameraSetupGetDestPositionY(setup) - 398.5) < 0.01)\n"
+        "camera_setup = setup\n"
+        "end\n"
+        "function GetSetupDistance() return CameraSetupGetField(camera_setup, field_distance) end\n"
+        "function GetSetupRotation() return CameraSetupGetField(camera_setup, field_rotation) end\n",
+        "lua-camera-setup-test.lua"));
+    WC3_LuaRegisterInteger(lua, "field_distance", CAMERA_FIELD_TARGET_DISTANCE);
+    WC3_LuaRegisterInteger(lua, "field_rotation", CAMERA_FIELD_ROTATION);
+    T_ASSERT(WC3_LuaCall(lua, "RunCameraSetupTest"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "GetSetupDistance", &distance));
+    T_ASSERT(WC3_LuaCallNumber(lua, "GetSetupRotation", &rotation));
+    T_FEQ((float)distance, 3980.0f, 0.001f);
+    T_FEQ((float)rotation, 89.0f, 0.001f);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_blz_create_unit_with_skin_uses_shared_unit_create) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t hero = MAKEFOURCC('H', 'p', 'a', 'l');
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunBlzCreateUnitTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(1), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "assert(u ~= nil)\n"
+        "end\n",
+        "lua-blz-create-unit-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", hero);
+    T_ASSERT(WC3_LuaCall(lua, "RunBlzCreateUnitTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_trigger_register_unit_event_uses_shared_event_registry) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunUnitEventTest()\n"
+        "local trigger = CreateTrigger()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "local event = TriggerRegisterUnitEvent(trigger, u, EVENT_UNIT_DEATH)\n"
+        "assert(event ~= nil)\n"
+        "end\n",
+        "lua-unit-event-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    WC3_LuaRegisterInteger(lua, "EVENT_UNIT_DEATH", EVENT_UNIT_DEATH);
+    T_ASSERT(WC3_LuaCall(lua, "RunUnitEventTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
