@@ -151,6 +151,53 @@ static int LuaBlzCreateUnitWithSkin(lua_State *L) {
     return 1;
 }
 
+static int LuaSetUnitColor(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *color = lua_touserdata(L, 2);
+    if (unit && color) G_SetUnitColorOverride(unit, *color);
+    return 0;
+}
+
+static int LuaSetUnitState(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *state = lua_touserdata(L, 2);
+    float value = (float)luaL_checknumber(L, 3);
+    uint32_t which = state ? *state : (uint32_t)luaL_checkinteger(L, 2);
+    bool was_dead;
+
+    if (!unit) return 0;
+    was_dead = M_IsDead(unit);
+    if (which == WC3_UNIT_STATE_LIFE) G_SetHealth(unit, value);
+    else (&unit->health.value)[which] = value;
+    if ((unit->s.flags & EF_FOW_BLOCKER) && was_dead != M_IsDead(unit)) G_FowMarkBlockersDirty();
+    return 0;
+}
+
+static int LuaWaygateSetDestination(lua_State *L) {
+    edict_t *waygate = lua_touserdata(L, 1);
+    vec2_t destination = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
+    S_WaygateSetDestination(waygate, &destination);
+    return 0;
+}
+
+static int LuaWaygateActivate(lua_State *L) {
+    edict_t *waygate = lua_touserdata(L, 1);
+    S_WaygateSetActive(waygate, lua_toboolean(L, 2));
+    return 0;
+}
+
+static int LuaGetRectCenterX(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? Box2_center(rect).x : 0.0f);
+    return 1;
+}
+
+static int LuaGetRectCenterY(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? Box2_center(rect).y : 0.0f);
+    return 1;
+}
+
 static int LuaDestroyGroup(lua_State *L) {
     G_FreeJassGroup(lua_touserdata(L, 1));
     return 0;
@@ -1398,6 +1445,12 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     G_RegisterLuaMapConfigNatives(L);
     WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
     WC3_LuaRegisterNative(L, "BlzCreateUnitWithSkin", LuaBlzCreateUnitWithSkin);
+    WC3_LuaRegisterNative(L, "SetUnitColor", LuaSetUnitColor);
+    WC3_LuaRegisterNative(L, "SetUnitState", LuaSetUnitState);
+    WC3_LuaRegisterNative(L, "WaygateSetDestination", LuaWaygateSetDestination);
+    WC3_LuaRegisterNative(L, "WaygateActivate", LuaWaygateActivate);
+    WC3_LuaRegisterNative(L, "GetRectCenterX", LuaGetRectCenterX);
+    WC3_LuaRegisterNative(L, "GetRectCenterY", LuaGetRectCenterY);
     WC3_LuaRegisterNative(L, "DestroyGroup", LuaDestroyGroup);
     WC3_LuaRegisterNative(L, "CreateTrigger", LuaCreateTrigger);
     WC3_LuaRegisterNative(L, "TriggerAddAction", LuaTriggerAddAction);
