@@ -1020,6 +1020,30 @@ player_t *G_GetPlayerByNumber(uint32_t number) {
 //    return NULL;
 }
 
+uint32_t G_GetPlayerNeutralPassive(void) {
+    return PLAYER_NEUTRAL_PASSIVE;
+}
+
+uint32_t G_GetPlayerNeutralAggressive(void) {
+    return PLAYER_NEUTRAL_AGGRESSIVE;
+}
+
+uint32_t G_GetBJMaxPlayers(void) {
+    return game.max_clients;
+}
+
+uint32_t G_GetBJPlayerNeutralVictim(void) {
+    return PLAYER_NEUTRAL_VICTIM;
+}
+
+uint32_t G_GetBJPlayerNeutralExtra(void) {
+    return PLAYER_NEUTRAL_EXTRA;
+}
+
+uint32_t G_GetBJMaxPlayerSlots(void) {
+    return 12;
+}
+
 gameEvent_t *G_PublishEventWithValue(edict_t *edict, EVENTTYPE type, edict_t *source, int32_t value) {
     uint32_t index;
     if (level.events.write - level.events.read >= MAX_EVENT_QUEUE) {

@@ -710,6 +710,59 @@ bool G_GetPlayerAlliance(player_t const *p1, player_t const *p2, PLAYERALLIANCE 
     return level.alliances[p1->number][p2->number] & (1 << type);
 }
 
+void G_ForceEnumPlayers(uint32_t *force, int32_t count_limit,
+                        forcePlayerFilter_t filter, void *context) {
+    if (!force || count_limit < 0) return;
+    FOR_LOOP(i, game.max_clients) {
+        player_t *player = &game.clients[i].ps;
+        if (filter && !filter(player, context)) continue;
+        *force |= 1u << player->number;
+        if (count_limit > 0 && --count_limit == 0) break;
+    }
+}
+
+uint32_t G_GetGameSpeed(void) {
+    return level.setup.speed;
+}
+
+bool G_PlayerFogEnabled(player_t const *player, bool mask) {
+    gameClient_t *client = player ? PLAYER_CLIENT(player) : game.clients;
+    return !(client->ps.rdflags & (mask ? RDF_NOFOGMASK : RDF_NOFOG));
+}
+
+uint32_t G_GetPlayerController(player_t const *player) {
+    return player ? PLAYER_CLIENT(player)->jass.controller : 5;
+}
+
+uint32_t G_GetPlayerSlotState(player_t const *player) {
+    gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
+    if (client && client->jass.removed) return 2;
+    if (client && client->mapplayer &&
+        (client->mapplayer->playerType == kPlayerTypeHuman ||
+         client->mapplayer->playerType == kPlayerTypeComputer)) return 1;
+    return 0;
+}
+
+void G_SetPlayerState(player_t *player, uint32_t state, int32_t value) {
+    gameClient_t *client;
+
+    if (!player || state >= MAX_STATS) return;
+    client = PLAYER_CLIENT(player);
+    if ((state == PLAYERSTATE_RESOURCE_GOLD || state == PLAYERSTATE_RESOURCE_LUMBER) &&
+        client->mapplayer && client->mapplayer->playerType == kPlayerTypeHuman &&
+        gi.CvarString && atoi(gi.CvarString("wc3_cheat_starting_resources", "0"))) {
+        fprintf(stderr,
+            "WC3_CHEAT_RESOURCES SetPlayerState player=%u state=%u before=%u requested=%d\n",
+            (unsigned)player->number, state, (unsigned)client->ps.stats[state], value);
+    }
+    client->ps.stats[state] = (uint16_t)MIN(MAX(0, value), USHRT_MAX);
+    if (state == PLAYERSTATE_RESOURCE_FOOD_USED) G_RecomputePlayerUpkeep(client);
+    if (state == PLAYERSTATE_RESOURCE_FOOD_USED || state == PLAYERSTATE_RESOURCE_FOOD_CAP ||
+        state == PLAYERSTATE_FOOD_CAP_CEILING) {
+        G_InvalidateCommands(client);
+    }
+}
+
 bool G_PlayerTreatsPlayerAsAlly(uint32_t source, uint32_t other) {
     if (source >= WC3_MAX_PLAYER_SLOTS || other >= WC3_MAX_PLAYER_SLOTS) return false;
     if (source == other) return true;

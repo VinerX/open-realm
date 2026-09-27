@@ -4,6 +4,7 @@
 #include "game/g_local.h"
 #include "game/api/api_macros.h"
 #include "jass_api.h"
+#include "jparser.h"
 
 #define API_ALLOC(TYPE, NAME) TYPE *NAME = jass_newhandle(j, sizeof(TYPE), #NAME);
 
@@ -170,6 +171,10 @@ bool jass_dobuffer_ex(jass_t *j, string_t buffer, JASSMODE mode);
 /* jass_newstate / jass_close — state lifecycle. */
 jass_t *jass_newstate(void);
 void   jass_close(jass_t *j);
+
+/* Convert ordinary JASS source to Lua for a WC3 map-scoped Lua VM. */
+bool jass_transpile_to_lua(jass_t *j, cstring_t source, string_t *lua_source);
+void jass_remove_comments(string_t source);
 
 
 #endif

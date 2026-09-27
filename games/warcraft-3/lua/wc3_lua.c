@@ -15,6 +15,7 @@ struct wc3Lua_s {
     lua_State *L;
     char error[WC3_LUA_ERROR_MAX];
     bool error_pending;
+    void *filter_unit;
 };
 
 static int WC3_LuaFourCC(lua_State *L) {
@@ -166,4 +167,29 @@ void WC3_LuaRegisterInteger(wc3Lua_t *state, const char *name, int64_t value) {
     if (!state || !state->L || !name) return;
     lua_pushinteger(state->L, (lua_Integer)value);
     lua_setglobal(state->L, name);
+}
+
+bool WC3_LuaEvaluateFilter(wc3Lua_t *state, int function_index, void *unit, bool *accepted) {
+    int const top = state && state->L ? lua_gettop(state->L) : 0;
+    void *previous;
+    int status;
+
+    if (!state || !state->L || !lua_isfunction(state->L, function_index)) return false;
+    previous = state->filter_unit;
+    state->filter_unit = unit;
+    lua_pushvalue(state->L, function_index);
+    status = WC3_LuaPCall(state->L, 0, 1);
+    state->filter_unit = previous;
+    if (status != LUA_OK) {
+        WC3_LuaCaptureError(state, "Filter");
+        lua_settop(state->L, top);
+        return false;
+    }
+    if (accepted) *accepted = lua_toboolean(state->L, -1);
+    lua_settop(state->L, top);
+    return true;
+}
+
+void *WC3_LuaFilterUnit(wc3Lua_t const *state) {
+    return state ? state->filter_unit : NULL;
 }

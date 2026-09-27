@@ -118,22 +118,11 @@ uint32_t GetPlayerSelectable(jass_t *j) {
 }
 uint32_t GetPlayerController(jass_t *j) {
     player_t *player = jass_checkhandle(j, 1, "player");
-    return JassPushMapControlHandle(j, player ? PLAYER_CLIENT(player)->jass.controller : 5);
+    return JassPushMapControlHandle(j, G_GetPlayerController(player));
 }
 uint32_t GetPlayerSlotState(jass_t *j) {
     player_t *whichPlayer = jass_checkhandle(j, 1, "player");
-    gameClient_t *client = whichPlayer ? PLAYER_CLIENT(whichPlayer) : NULL;
-    int32_t state = 0;
-
-    if (client && client->jass.removed) {
-        state = 2;
-    } else if (client && client->mapplayer &&
-        (client->mapplayer->playerType == kPlayerTypeHuman ||
-         client->mapplayer->playerType == kPlayerTypeComputer))
-    {
-        state = 1;
-    }
-    return JassPushPlayerSlotStateHandle(j, state);
+    return JassPushPlayerSlotStateHandle(j, (int32_t)G_GetPlayerSlotState(whichPlayer));
 }
 uint32_t GetPlayerTaxRate(jass_t *j) {
     player_t *source = jass_checkhandle(j, 1, "player"), *other = jass_checkhandle(j, 2, "player");
@@ -444,28 +433,7 @@ uint32_t SetPlayerState(jass_t *j) {
     player_t *whichPlayer = jass_checkhandle(j, 1, "player");
     PLAYERSTATE *whichPlayerState = jass_checkhandle(j, 2, "playerstate");
     int32_t value = jass_checkinteger(j, 3);
-    gameClient_t *client;
-
-    if (!whichPlayer || !whichPlayerState || *whichPlayerState >= MAX_STATS) return 0;
-    client = PLAYER_CLIENT(whichPlayer);
-    if ((*whichPlayerState == PLAYERSTATE_RESOURCE_GOLD ||
-         *whichPlayerState == PLAYERSTATE_RESOURCE_LUMBER) &&
-        client->mapplayer && client->mapplayer->playerType == kPlayerTypeHuman &&
-        gi.CvarString && atoi(gi.CvarString("wc3_cheat_starting_resources", "0"))) {
-        fprintf(stderr,
-            "WC3_CHEAT_RESOURCES SetPlayerState player=%u state=%ld before=%u requested=%ld\n",
-            (unsigned)whichPlayer->number, (long)*whichPlayerState,
-            (unsigned)client->ps.stats[*whichPlayerState], (long)value);
-    }
-    client->ps.stats[*whichPlayerState] = (uint16_t)MIN(MAX(0, value), USHRT_MAX);
-    if (*whichPlayerState == PLAYERSTATE_RESOURCE_FOOD_USED) {
-        G_RecomputePlayerUpkeep(client);
-    }
-    if (*whichPlayerState == PLAYERSTATE_RESOURCE_FOOD_USED ||
-        *whichPlayerState == PLAYERSTATE_RESOURCE_FOOD_CAP ||
-        *whichPlayerState == PLAYERSTATE_FOOD_CAP_CEILING) {
-        G_InvalidateCommands(client);
-    }
+    if (whichPlayerState) G_SetPlayerState(whichPlayer, *whichPlayerState, value);
     return 0;
 }
 uint32_t RemovePlayer(jass_t *j) {
@@ -549,20 +517,10 @@ uint32_t FogEnable(jass_t *j) {
     return 0;
 }
 uint32_t IsFogMaskEnabled(jass_t *j) {
-    if (currentplayer) {
-        gameClient_t *client = PLAYER_CLIENT(currentplayer);
-        return jass_pushboolean(j, !(client->ps.rdflags & RDF_NOFOGMASK));
-    } else {
-        return jass_pushboolean(j, !(game.clients->ps.rdflags & RDF_NOFOGMASK));
-    }
+    return jass_pushboolean(j, G_PlayerFogEnabled(currentplayer, true));
 }
 uint32_t IsFogEnabled(jass_t *j) {
-    if (currentplayer) {
-        gameClient_t *client = PLAYER_CLIENT(currentplayer);
-        return jass_pushboolean(j, !(client->ps.rdflags & RDF_NOFOG));
-    } else {
-        return jass_pushboolean(j, !(game.clients->ps.rdflags & RDF_NOFOG));
-    }
+    return jass_pushboolean(j, G_PlayerFogEnabled(currentplayer, false));
 }
 static fogModifier_t *G_NewFogModifier(jass_t *j, player_t *player, uint32_t *state, bool useShared) {
     API_ALLOC(fogModifier_t, fogmodifier);

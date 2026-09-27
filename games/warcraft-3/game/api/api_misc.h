@@ -88,6 +88,46 @@ CONVERT_FUNC(RarityControl, raritycontrol);
 CONVERT_FUNC(TexMapFlags, texmapflags);
 CONVERT_FUNC(FogState, fogstate);
 CONVERT_FUNC(EffectType, effecttype);
+CONVERT_FUNC(EquipmentType, equipmenttype);
+CONVERT_FUNC(ItemTag, itemtag);
+CONVERT_FUNC(LoadoutSlot, loadoutslot);
+CONVERT_FUNC(OriginFrameType, originframetype);
+CONVERT_FUNC(FramePointType, framepointtype);
+CONVERT_FUNC(TextAlignType, textaligntype);
+CONVERT_FUNC(FrameEventType, frameeventtype);
+CONVERT_FUNC(OsKeyType, oskeytype);
+CONVERT_FUNC(AbilityBooleanField, abilitybooleanfield);
+CONVERT_FUNC(AbilityBooleanLevelArrayField, abilitybooleanlevelarrayfield);
+CONVERT_FUNC(AbilityBooleanLevelField, abilitybooleanlevelfield);
+CONVERT_FUNC(AbilityIntegerField, abilityintegerfield);
+CONVERT_FUNC(AbilityIntegerLevelArrayField, abilityintegerlevelarrayfield);
+CONVERT_FUNC(AbilityIntegerLevelField, abilityintegerlevelfield);
+CONVERT_FUNC(AbilityRealField, abilityrealfield);
+CONVERT_FUNC(AbilityRealLevelArrayField, abilityreallevelarrayfield);
+CONVERT_FUNC(AbilityRealLevelField, abilityreallevelfield);
+CONVERT_FUNC(AbilityStringField, abilitystringfield);
+CONVERT_FUNC(AbilityStringLevelArrayField, abilitystringlevelarrayfield);
+CONVERT_FUNC(AbilityStringLevelField, abilitystringlevelfield);
+CONVERT_FUNC(ArmorType, armortype);
+CONVERT_FUNC(DefenseType, defensetype);
+CONVERT_FUNC(HeroAttribute, heroattribute);
+CONVERT_FUNC(ItemBooleanField, itembooleanfield);
+CONVERT_FUNC(ItemIntegerField, itemintegerfield);
+CONVERT_FUNC(ItemRealField, itemrealfield);
+CONVERT_FUNC(ItemStringField, itemstringfield);
+CONVERT_FUNC(MoveType, movetype);
+CONVERT_FUNC(PathingFlag, pathingflag);
+CONVERT_FUNC(RegenType, regentype);
+CONVERT_FUNC(TargetFlag, targetflag);
+CONVERT_FUNC(UnitBooleanField, unitbooleanfield);
+CONVERT_FUNC(UnitCategory, unitcategory);
+CONVERT_FUNC(UnitIntegerField, unitintegerfield);
+CONVERT_FUNC(UnitRealField, unitrealfield);
+CONVERT_FUNC(UnitStringField, unitstringfield);
+CONVERT_FUNC(UnitWeaponBooleanField, unitweaponbooleanfield);
+CONVERT_FUNC(UnitWeaponIntegerField, unitweaponintegerfield);
+CONVERT_FUNC(UnitWeaponRealField, unitweaponrealfield);
+CONVERT_FUNC(UnitWeaponStringField, unitweaponstringfield);
 CONVERT_FUNC(AnimType, animtype);
 CONVERT_FUNC(SubAnimType, subanimtype);
 CONVERT_FUNC(FogStyle, fogstyle);
@@ -291,7 +331,7 @@ uint32_t GetGamePlacement(jass_t *j) {
     return JassPushPlacementHandle(j, level.setup.placement);
 }
 uint32_t GetGameSpeed(jass_t *j) {
-    return JassPushGameSpeedHandle(j, level.setup.speed);
+    return JassPushGameSpeedHandle(j, G_GetGameSpeed());
 }
 uint32_t GetGameDifficulty(jass_t *j) {
     return JassPushGameDifficultyHandle(j, level.setup.difficulty);
@@ -397,12 +437,19 @@ uint32_t DestroyForce(jass_t *j) {
 }
 /* Force filters bind each candidate as GetFilterPlayer(); limits count accepted
  * players, matching group enumeration rather than limiting candidates tested. */
+typedef struct { jass_t *vm; jassFunc_t const *filter; } jassForceFilterContext_t;
+
+static bool JassForcePlayerFilter(player_t *player, void *opaque) {
+    jassForceFilterContext_t *context = opaque;
+    return jass_evaluateplayerexpr(context->vm, context->filter, player);
+}
+
 uint32_t ForceEnumPlayers(jass_t *j) {
     uint32_t *whichForce = jass_checkhandle(j, 1, "force");
     jassFunc_t const *filter = jass_checkhandle(j, 2, "boolexpr");
     if (!whichForce) return 0;
-    FOR_LOOP(i, game.max_clients)
-        if (jass_evaluateplayerexpr(j, filter, &game.clients[i].ps)) *whichForce |= 1 << game.clients[i].ps.number;
+    jassForceFilterContext_t context = { j, filter };
+    G_ForceEnumPlayers(whichForce, 0, filter ? JassForcePlayerFilter : NULL, &context);
     return 0;
 }
 uint32_t ForceEnumPlayersCounted(jass_t *j) {
@@ -410,11 +457,8 @@ uint32_t ForceEnumPlayersCounted(jass_t *j) {
     jassFunc_t const *filter = jass_checkhandle(j, 2, "boolexpr");
     int32_t countLimit = jass_checkinteger(j, 3);
     if (!whichForce || countLimit <= 0) return 0;
-    FOR_LOOP(i, game.max_clients) {
-        player_t *player = &game.clients[i].ps;
-        if (jass_evaluateplayerexpr(j, filter, player)) *whichForce |= 1 << player->number, countLimit--;
-        if (!countLimit) break;
-    }
+    jassForceFilterContext_t context = { j, filter };
+    G_ForceEnumPlayers(whichForce, countLimit, filter ? JassForcePlayerFilter : NULL, &context);
     return 0;
 }
 uint32_t ForceEnumAllies(jass_t *j) {
@@ -1799,22 +1843,22 @@ uint32_t Preloader(jass_t *j) {
 // **************
 
 uint32_t GetPlayerNeutralPassive(jass_t *j) {
-    return jass_pushinteger(j, PLAYER_NEUTRAL_PASSIVE);
+    return jass_pushinteger(j, G_GetPlayerNeutralPassive());
 }
 uint32_t GetPlayerNeutralAggressive(jass_t *j) {
-    return jass_pushinteger(j, PLAYER_NEUTRAL_AGGRESSIVE);
+    return jass_pushinteger(j, G_GetPlayerNeutralAggressive());
 }
 uint32_t GetBJMaxPlayers(jass_t *j) {
-    return jass_pushinteger(j, game.max_clients);
+    return jass_pushinteger(j, G_GetBJMaxPlayers());
 }
 uint32_t GetBJPlayerNeutralVictim(jass_t *j) {
-    return jass_pushinteger(j, PLAYER_NEUTRAL_VICTIM);
+    return jass_pushinteger(j, G_GetBJPlayerNeutralVictim());
 }
 uint32_t GetBJPlayerNeutralExtra(jass_t *j) {
-    return jass_pushinteger(j, PLAYER_NEUTRAL_EXTRA);
+    return jass_pushinteger(j, G_GetBJPlayerNeutralExtra());
 }
 uint32_t GetBJMaxPlayerSlots(jass_t *j) {
-    return jass_pushinteger(j, 12);
+    return jass_pushinteger(j, G_GetBJMaxPlayerSlots());
 }
 uint32_t ConvertVersion(jass_t *j) {
     API_ALLOC(uint32_t, version);

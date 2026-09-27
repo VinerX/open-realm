@@ -24,6 +24,24 @@ static bool G_MapObjectCreatedByMapScript(uint32_t id) {
     return G_UnitUI(id)->modelFile || G_ItemData(id)->file;
 }
 
+static bool G_LoadLuaMapJassFile(cstring_t filename) {
+    uint32_t size = 0;
+    handle_t source = gi.ReadFile(filename, &size);
+    bool loaded;
+
+    if (!source) {
+        fprintf(stderr, "G_SpawnEntities: missing Lua dependency source %s\n", filename);
+        return false;
+    }
+    loaded = G_LoadLuaMapJass(level.lua_vm, level.vm, source, filename);
+    gi.MemFree(source);
+    if (!loaded) {
+        fprintf(stderr, "G_SpawnEntities: Lua dependency failed for %s: %s\n",
+                filename, WC3_LuaErrorMessage(level.lua_vm));
+    }
+    return loaded;
+}
+
 #ifdef BZ_TESTS
 bool G_TestMapObjectCreatedByMapScript(uint32_t id) { return G_MapObjectCreatedByMapScript(id); }
 #endif
@@ -761,22 +779,31 @@ void G_SpawnEntities(void) {
     S_MineOverlayBindPreplaced();
     SP_worldspawn(NULL);
     
-    jass_dofile(level.vm, "Scripts\\common.j");
-    gi.LoadingFrame();
-    jass_dofile(level.vm, "Scripts\\Blizzard.j");
-    gi.LoadingFrame();
-//    jass_dofilenative(level.vm, "/Users/igor/Desktop/war3map.j");
     if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.mapinfo->mapscript) {
         level.lua_vm = WC3_LuaNewState();
         if (!level.lua_vm) {
             fprintf(stderr, "G_SpawnEntities: could not create Lua 5.3 state for %s\n",
                     gi.CvarString("map", "(unknown)"));
-        } else if (!G_LoadLuaMapScript(level.lua_vm, level.mapinfo->mapscript, "war3map.lua")) {
-            fprintf(stderr, "G_SpawnEntities: Lua load failed for %s: %s\n",
-                    gi.CvarString("map", "(unknown)"),
-                    WC3_LuaErrorMessage(level.lua_vm));
+        } else if (G_LoadLuaMapJassFile("Scripts\\common.j")) {
+            gi.LoadingFrame();
+            if (G_LoadLuaMapJassFile("Scripts\\Blizzard.j")) {
+                gi.LoadingFrame();
+            }
+            if (!WC3_LuaErrorPending(level.lua_vm) &&
+                !G_LoadLuaMapScript(level.lua_vm, level.mapinfo->mapscript, "war3map.lua")) {
+                fprintf(stderr, "G_SpawnEntities: Lua load failed for %s: %s\n",
+                        gi.CvarString("map", "(unknown)"),
+                        WC3_LuaErrorMessage(level.lua_vm));
+            }
+        } else {
+            fprintf(stderr, "G_SpawnEntities: Lua runtime prelude failed for %s\n",
+                    gi.CvarString("map", "(unknown)"));
         }
     } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && level.mapinfo->mapscript) {
+        jass_dofile(level.vm, "Scripts\\common.j");
+        gi.LoadingFrame();
+        jass_dofile(level.vm, "Scripts\\Blizzard.j");
+        gi.LoadingFrame();
         G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
         jass_dobuffer(level.vm, level.mapinfo->mapscript);
     } else {

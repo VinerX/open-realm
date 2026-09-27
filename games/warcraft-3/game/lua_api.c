@@ -1,4 +1,5 @@
 #include "g_local.h"
+#include "jass/jass.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -66,14 +67,67 @@ static int LuaDestroyGroup(lua_State *L) {
     return 0;
 }
 
+typedef struct {
+    wc3Lua_t *lua;
+    int filter_index;
+} luaGroupFilter_t;
+
+static bool LuaEvaluateCandidate(void *candidate, void *opaque) {
+    luaGroupFilter_t *context = opaque;
+    bool accepted = false;
+
+    if (WC3_LuaErrorPending(context->lua)) return false;
+    return WC3_LuaEvaluateFilter(context->lua, context->filter_index, candidate, &accepted) && accepted;
+}
+
+static bool LuaGroupFilter(edict_t *unit, void *opaque) {
+    return LuaEvaluateCandidate(unit, opaque);
+}
+
+static bool LuaPlayerFilter(player_t *player, void *opaque) {
+    return LuaEvaluateCandidate(player, opaque);
+}
+
 static int LuaGroupEnumUnitsOfPlayer(lua_State *L) {
     ggroup_t *group = lua_touserdata(L, 1);
     player_t *player = lua_touserdata(L, 2);
+    luaGroupFilter_t context;
     if (!G_JassGroupValid(group) || !player)
         return luaL_error(L, "GroupEnumUnitsOfPlayer: invalid group or player");
-    if (!lua_isnoneornil(L, 3))
-        return luaL_error(L, "GroupEnumUnitsOfPlayer: Lua boolexpr filters are unsupported");
-    G_EnumUnitsOfPlayer(group, player, NULL, NULL);
+    if (lua_isnoneornil(L, 3)) {
+        G_EnumUnitsOfPlayer(group, player, NULL, NULL);
+        return 0;
+    }
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    context.lua = level.lua_vm;
+    context.filter_index = lua_absindex(L, 3);
+    G_EnumUnitsOfPlayer(group, player, LuaGroupFilter, &context);
+    if (WC3_LuaErrorPending(context.lua)) {
+        char error[512];
+        strlcpy(error, WC3_LuaErrorMessage(context.lua), sizeof(error));
+        WC3_LuaClearError(context.lua);
+        return luaL_error(L, "GroupEnumUnitsOfPlayer: %s", error);
+    }
+    return 0;
+}
+
+static int LuaForceEnumPlayers(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    luaGroupFilter_t context = { level.lua_vm, lua_absindex(L, 2) };
+
+    if (!force) return 0;
+    if (lua_isnoneornil(L, 2)) {
+        G_ForceEnumPlayers(force, 0, NULL, NULL);
+        return 0;
+    }
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    G_ForceEnumPlayers(force, 0, LuaPlayerFilter, &context);
+    if (WC3_LuaErrorPending(context.lua)) {
+        char error[512];
+        strlcpy(error, WC3_LuaErrorMessage(context.lua), sizeof(error));
+        WC3_LuaClearError(context.lua);
+        return luaL_error(L, "ForceEnumPlayers: %s", error);
+    }
     return 0;
 }
 
@@ -242,6 +296,35 @@ static int LuaSetPlayerController(lua_State *L) {
     return 0;
 }
 
+static int LuaGetPlayerController(lua_State *L) {
+    lua_pushinteger(L, G_GetPlayerController(lua_touserdata(L, 1)));
+    return 1;
+}
+
+static int LuaGetPlayerSlotState(lua_State *L) {
+    lua_pushinteger(L, G_GetPlayerSlotState(lua_touserdata(L, 1)));
+    return 1;
+}
+
+static int LuaCreateSoundFromLabel(lua_State *L) {
+    gsound_t *sound = lua_newuserdata(L, sizeof(*sound));
+    char path[sizeof(sound->fileName)] = { 0 };
+    float volume = 1.0f;
+    int sound_index = 0;
+    memset(sound, 0, sizeof(*sound));
+    G_SoundLabelDescriptor(luaL_checkstring(L, 1), path, sizeof(path), &sound_index, &volume);
+    strlcpy(sound->fileName, path, sizeof(sound->fileName));
+    sound->looping = lua_toboolean(L, 2);
+    sound->is3D = lua_toboolean(L, 3);
+    sound->stopwhenoutofrange = lua_toboolean(L, 4);
+    sound->fadeInRate = (int32_t)luaL_checkinteger(L, 5);
+    sound->fadeOutRate = (int32_t)luaL_checkinteger(L, 6);
+    sound->soundIndex = sound_index;
+    G_JassSoundRuntimeInit(sound);
+    G_JassSoundSetVolume(sound, volume);
+    return 1;
+}
+
 static int LuaSetCameraBounds(lua_State *L) {
     float bounds[8];
     FOR_LOOP(i, 8) bounds[i] = (float)luaL_checknumber(L, i + 1);
@@ -312,6 +395,98 @@ static int LuaStringHash(lua_State *L) {
     return 1;
 }
 
+static int LuaGetPlayerNeutralPassive(lua_State *L) {
+    lua_pushinteger(L, G_GetPlayerNeutralPassive());
+    return 1;
+}
+
+static int LuaGetPlayerNeutralAggressive(lua_State *L) {
+    lua_pushinteger(L, G_GetPlayerNeutralAggressive());
+    return 1;
+}
+
+static int LuaGetBJMaxPlayers(lua_State *L) {
+    lua_pushinteger(L, G_GetBJMaxPlayers());
+    return 1;
+}
+
+static int LuaGetGameSpeed(lua_State *L) {
+    lua_pushinteger(L, G_GetGameSpeed());
+    return 1;
+}
+
+static int LuaIsFogEnabled(lua_State *L) {
+    lua_pushboolean(L, G_PlayerFogEnabled(NULL, false));
+    return 1;
+}
+
+static int LuaIsFogMaskEnabled(lua_State *L) {
+    lua_pushboolean(L, G_PlayerFogEnabled(NULL, true));
+    return 1;
+}
+
+static int LuaGetBJPlayerNeutralVictim(lua_State *L) {
+    lua_pushinteger(L, G_GetBJPlayerNeutralVictim());
+    return 1;
+}
+
+static int LuaGetBJPlayerNeutralExtra(lua_State *L) {
+    lua_pushinteger(L, G_GetBJPlayerNeutralExtra());
+    return 1;
+}
+
+static int LuaGetBJMaxPlayerSlots(lua_State *L) {
+    lua_pushinteger(L, G_GetBJMaxPlayerSlots());
+    return 1;
+}
+
+static int LuaSetPlayerAlliance(lua_State *L) {
+    player_t *source = lua_touserdata(L, 1);
+    player_t *other = lua_touserdata(L, 2);
+    if (!source) {
+        fprintf(stderr, "SetPlayerAlliance(): sourcePlayer is nil\n");
+        return 0;
+    }
+    if (!other) {
+        fprintf(stderr, "SetPlayerAlliance(): otherPlayer is nil\n");
+        return 0;
+    }
+    G_SetPlayerAlliance(source, other,
+        (PLAYERALLIANCE)luaL_checkinteger(L, 3), lua_toboolean(L, 4));
+    return 0;
+}
+
+static int LuaSetPlayerState(lua_State *L) {
+    G_SetPlayerState(lua_touserdata(L, 1),
+        (uint32_t)luaL_checkinteger(L, 2), (int32_t)luaL_checkinteger(L, 3));
+    return 0;
+}
+
+static int LuaFilter(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_pushvalue(L, 1);
+    return 1;
+}
+
+static int LuaGetFilterUnit(lua_State *L) {
+    void *unit = WC3_LuaFilterUnit(level.lua_vm);
+    if (unit) lua_pushlightuserdata(L, unit);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetFilterPlayer(lua_State *L) {
+    void *player = WC3_LuaFilterUnit(level.lua_vm);
+    if (player) lua_pushlightuserdata(L, player);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaConvertEnum(lua_State *L) {
+    lua_pushinteger(L, luaL_checkinteger(L, 1));
+    return 1;
+}
+
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetMapName", LuaSetMapName);
     WC3_LuaRegisterNative(L, "SetMapDescription", LuaSetMapDescription);
@@ -346,6 +521,9 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetPlayerRacePreference", LuaSetPlayerRacePreference);
     WC3_LuaRegisterNative(L, "SetPlayerRaceSelectable", LuaSetPlayerRaceSelectable);
     WC3_LuaRegisterNative(L, "SetPlayerController", LuaSetPlayerController);
+    WC3_LuaRegisterNative(L, "GetPlayerController", LuaGetPlayerController);
+    WC3_LuaRegisterNative(L, "GetPlayerSlotState", LuaGetPlayerSlotState);
+    WC3_LuaRegisterNative(L, "CreateSoundFromLabel", LuaCreateSoundFromLabel);
     WC3_LuaRegisterNative(L, "SetCameraBounds", LuaSetCameraBounds);
     WC3_LuaRegisterNative(L, "SetDayNightModels", LuaSetDayNightModels);
     WC3_LuaRegisterNative(L, "SetTerrainFogEx", LuaSetTerrainFogEx);
@@ -365,18 +543,85 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterInteger(L, "MAP_LOC_PRIO_HIGH", 1);
     WC3_LuaRegisterInteger(L, "MAP_LOC_PRIO_NOT", 2);
     WC3_LuaRegisterInteger(L, "PLAYER_NEUTRAL_PASSIVE", PLAYER_NEUTRAL_PASSIVE);
+    WC3_LuaRegisterInteger(L, "PLAYER_NEUTRAL_AGGRESSIVE", PLAYER_NEUTRAL_AGGRESSIVE);
+    WC3_LuaRegisterInteger(L, "PLAYER_NEUTRAL_VICTIM", PLAYER_NEUTRAL_VICTIM);
+    WC3_LuaRegisterInteger(L, "PLAYER_NEUTRAL_EXTRA", PLAYER_NEUTRAL_EXTRA);
     WC3_LuaRegisterNative(L, "CreateForce", LuaCreateForce);
     WC3_LuaRegisterNative(L, "DestroyForce", LuaDestroyForce);
     WC3_LuaRegisterNative(L, "ForceAddPlayer", LuaForceAddPlayer);
     WC3_LuaRegisterNative(L, "ForceRemovePlayer", LuaForceRemovePlayer);
     WC3_LuaRegisterNative(L, "ForceClear", LuaForceClear);
     WC3_LuaRegisterNative(L, "IsPlayerInForce", LuaIsPlayerInForce);
+    WC3_LuaRegisterNative(L, "ForceEnumPlayers", LuaForceEnumPlayers);
     WC3_LuaRegisterNative(L, "CreateRegion", LuaCreateRegion);
     WC3_LuaRegisterNative(L, "StringHash", LuaStringHash);
+    WC3_LuaRegisterNative(L, "GetPlayerNeutralPassive", LuaGetPlayerNeutralPassive);
+    WC3_LuaRegisterNative(L, "GetPlayerNeutralAggressive", LuaGetPlayerNeutralAggressive);
+    WC3_LuaRegisterNative(L, "GetBJMaxPlayers", LuaGetBJMaxPlayers);
+    WC3_LuaRegisterNative(L, "GetGameSpeed", LuaGetGameSpeed);
+    WC3_LuaRegisterNative(L, "IsFogEnabled", LuaIsFogEnabled);
+    WC3_LuaRegisterNative(L, "IsFogMaskEnabled", LuaIsFogMaskEnabled);
+    WC3_LuaRegisterNative(L, "GetBJPlayerNeutralVictim", LuaGetBJPlayerNeutralVictim);
+    WC3_LuaRegisterNative(L, "GetBJPlayerNeutralExtra", LuaGetBJPlayerNeutralExtra);
+    WC3_LuaRegisterNative(L, "GetBJMaxPlayerSlots", LuaGetBJMaxPlayerSlots);
+    WC3_LuaRegisterNative(L, "SetPlayerAlliance", LuaSetPlayerAlliance);
+    WC3_LuaRegisterNative(L, "SetPlayerState", LuaSetPlayerState);
+    WC3_LuaRegisterNative(L, "Filter", LuaFilter);
+    WC3_LuaRegisterNative(L, "GetFilterUnit", LuaGetFilterUnit);
+    WC3_LuaRegisterNative(L, "GetFilterPlayer", LuaGetFilterPlayer);
+
+    static cstring_t const enum_converters[] = {
+        "ConvertRace", "ConvertAllianceType", "ConvertRacePref", "ConvertIGameState",
+        "ConvertFGameState", "ConvertPlayerState", "ConvertPlayerGameResult", "ConvertUnitState",
+        "ConvertGameEvent", "ConvertPlayerEvent", "ConvertPlayerUnitEvent", "ConvertWidgetEvent",
+        "ConvertDialogEvent", "ConvertUnitEvent", "ConvertLimitOp", "ConvertUnitType",
+        "ConvertGameSpeed", "ConvertPlacement", "ConvertStartLocPrio", "ConvertGameDifficulty",
+        "ConvertGameType", "ConvertMapFlag", "ConvertMapVisibility", "ConvertMapSetting",
+        "ConvertMapDensity", "ConvertMapControl", "ConvertPlayerSlotState", "ConvertVolumeGroup",
+        "ConvertCameraField", "ConvertBlendMode", "ConvertRarityControl", "ConvertTexMapFlags",
+        "ConvertFogState", "ConvertEffectType", "ConvertEquipmentType", "ConvertItemTag",
+        "ConvertLoadoutSlot", "ConvertOriginFrameType", "ConvertFramePointType",
+        "ConvertTextAlignType", "ConvertFrameEventType", "ConvertOsKeyType",
+        "ConvertAbilityBooleanField", "ConvertAbilityBooleanLevelArrayField",
+        "ConvertAbilityBooleanLevelField", "ConvertAbilityIntegerField",
+        "ConvertAbilityIntegerLevelArrayField", "ConvertAbilityIntegerLevelField",
+        "ConvertAbilityRealField", "ConvertAbilityRealLevelArrayField",
+        "ConvertAbilityRealLevelField", "ConvertAbilityStringField",
+        "ConvertAbilityStringLevelArrayField", "ConvertAbilityStringLevelField",
+        "ConvertArmorType", "ConvertDefenseType", "ConvertHeroAttribute",
+        "ConvertItemBooleanField", "ConvertItemIntegerField", "ConvertItemRealField",
+        "ConvertItemStringField", "ConvertMoveType", "ConvertPathingFlag",
+        "ConvertRegenType", "ConvertTargetFlag", "ConvertUnitBooleanField",
+        "ConvertUnitCategory", "ConvertUnitIntegerField", "ConvertUnitRealField",
+        "ConvertUnitStringField", "ConvertUnitWeaponBooleanField",
+        "ConvertUnitWeaponIntegerField", "ConvertUnitWeaponRealField",
+        "ConvertUnitWeaponStringField",
+        "ConvertAnimType", "ConvertSubAnimType",
+        "ConvertVersion", "ConvertItemType",
+        "ConvertAttackType", "ConvertDamageType", "ConvertWeaponType", "ConvertSoundType",
+        "ConvertPathingType", "ConvertMouseButtonType", "ConvertAIDifficulty", "ConvertPlayerScore",
+    };
+    for (uint32_t i = 0; i < sizeof(enum_converters) / sizeof(enum_converters[0]); ++i)
+        WC3_LuaRegisterNative(L, enum_converters[i], LuaConvertEnum);
 }
 
 bool G_LoadLuaMapScript(wc3Lua_t *L, cstring_t source, cstring_t chunk_name) {
     if (!L) return false;
     G_RegisterLuaMapRuntimeNatives(L);
     return WC3_LuaLoadBuffer(L, source, chunk_name);
+}
+
+bool G_LoadLuaMapJass(wc3Lua_t *L, jass_t *J, cstring_t source, cstring_t chunk_name) {
+    string_t lua_source = NULL;
+    bool result;
+
+    if (!L || !J || !source || !chunk_name) return false;
+    G_RegisterLuaMapRuntimeNatives(L);
+    if (!jass_transpile_to_lua(J, source, &lua_source)) {
+        fprintf(stderr, "WC3 Lua: failed to transpile %s\n", chunk_name);
+        return false;
+    }
+    result = WC3_LuaLoadBuffer(L, lua_source, chunk_name);
+    free(lua_source);
+    return result;
 }

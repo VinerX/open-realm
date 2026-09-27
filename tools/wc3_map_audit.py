@@ -272,6 +272,8 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
             output = proc.stdout + proc.stderr
             exit_code = proc.returncode
             status = "completed" if exit_code == 0 else "crashed"
+            if status == "completed" and re.search(r"^G_StartScripts: .* failed for ", output, re.MULTILINE):
+                status = "script_error"
         except subprocess.TimeoutExpired as error:
             stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
             stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
@@ -304,8 +306,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"**{report['frames']} frames / {sim:.0f} simulated {sim_unit}**. Each process used "
         f"an isolated writable home, a unique UDP port, and a {report['timeout_seconds']}s wall timeout. "
         f"The {report['jobs']}-worker sweep finished in {report['wall_seconds']:.1f}s.", "",
-        f"Result: **{status['completed']} reached the frame limit, {status['crashed']} crashed, "
-        f"{status['timeout']} timed out**. {reproduced} crashes reproduced serially.", "",
+        f"Result: **{status['completed']} reached the frame limit, {status['script_error']} had script startup errors, "
+        f"{status['crashed']} crashed, {status['timeout']} timed out**. {reproduced} crashes reproduced serially.", "",
         "> Reaching the frame limit is a startup/runtime smoke result. It does not prove objectives, combat, "
         "cinematics, mission completion, or visual correctness.", "", "### Error-family reach", "",
         "| Family | Maps | Meaning |", "| --- | ---: | --- |",

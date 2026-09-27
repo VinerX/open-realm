@@ -2043,7 +2043,7 @@ TOKENFUNC(TOKENS) {
  * Buffer / file execution
  * ========================================================================= */
 
-static void jass_remove_comments(string_t buf) {
+void jass_remove_comments(string_t buf) {
     bool in_line  = false;
     bool in_block = false;
     uint32_t quotes  = 0;

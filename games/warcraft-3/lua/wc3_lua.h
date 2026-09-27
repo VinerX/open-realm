@@ -40,4 +40,8 @@ void WC3_LuaClearError(wc3Lua_t *L);
 void WC3_LuaRegisterNative(wc3Lua_t *L, const char *name, wc3LuaCFunction fn);
 void WC3_LuaRegisterInteger(wc3Lua_t *L, const char *name, int64_t value);
 
+/* Evaluate a Lua boolexpr synchronously with the candidate exposed by GetFilterUnit(). */
+bool WC3_LuaEvaluateFilter(wc3Lua_t *L, int function_index, void *unit, bool *accepted);
+void *WC3_LuaFilterUnit(wc3Lua_t const *L);
+
 #endif

@@ -2050,11 +2050,18 @@ typedef struct {
 
 // g_main.c
 player_t *G_GetPlayerByNumber(uint32_t);
+uint32_t G_GetPlayerNeutralPassive(void);
+uint32_t G_GetPlayerNeutralAggressive(void);
+uint32_t G_GetBJMaxPlayers(void);
+uint32_t G_GetBJPlayerNeutralVictim(void);
+uint32_t G_GetBJPlayerNeutralExtra(void);
+uint32_t G_GetBJMaxPlayerSlots(void);
 void G_InitJassHost(void);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
 void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *lua);
 uint32_t G_StringHash(cstring_t text);
 bool G_LoadLuaMapScript(wc3Lua_t *lua, cstring_t source, cstring_t chunk_name);
+bool G_LoadLuaMapJass(wc3Lua_t *lua, jass_t *jass, cstring_t source, cstring_t chunk_name);
 edict_t *G_GetPlayerEntityByNumber(uint32_t);
 gameClient_t *G_GetPlayerClientByNumber(uint32_t);
 void G_SetClientConnected(edict_t *player, bool connected);
@@ -2901,6 +2908,13 @@ void G_RemoveQuest(quest_t *);
 void G_InitPlayerAlliances(mapInfo_t const *);
 void G_SetPlayerAlliance(player_t const *, player_t const *, PLAYERALLIANCE, bool);
 bool G_GetPlayerAlliance(player_t const *, player_t const *, PLAYERALLIANCE);
+void G_SetPlayerState(player_t *, uint32_t, int32_t);
+typedef bool (*forcePlayerFilter_t)(player_t *, void *);
+void G_ForceEnumPlayers(uint32_t *, int32_t, forcePlayerFilter_t, void *);
+uint32_t G_GetGameSpeed(void);
+bool G_PlayerFogEnabled(player_t const *, bool);
+uint32_t G_GetPlayerController(player_t const *);
+uint32_t G_GetPlayerSlotState(player_t const *);
 bool G_PlayerTreatsPlayerAsAlly(uint32_t, uint32_t);
 
 // m_unit.c
