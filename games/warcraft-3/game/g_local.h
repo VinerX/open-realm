@@ -2358,6 +2358,18 @@ void G_ClearSaveRegistries(void);
 bool G_GetSaveMap(cstring_t filename, string_t map, uint32_t map_size);
 void G_HeroSaveLoadAuditFrame(void);
 void G_FormatHeroSaveSnap(edict_t const *hero, string_t out, uint32_t out_size);
+/* Deterministic scenario driver: one bounded scripted map test per process. */
+void G_LogScriptPhase(cstring_t phase, cstring_t kind, cstring_t status, cstring_t detail);
+void G_ScenarioFrame(void);
+typedef enum {
+    SCENARIO_IDLE,
+    SCENARIO_RUNNING,
+    SCENARIO_PASSED,
+    SCENARIO_FAILED,
+} scenarioStatus_t;
+scenarioStatus_t G_ScenarioStatus(void);
+cstring_t G_ScenarioDetail(void);
+void G_ScenarioReset(void);
 void G_RunTimers(void);
 void G_StartProjectilePresentation(edict_t *ent);
 void G_TimerStart(gtimer_t *timer, uint32_t timeout, bool periodic, struct jass_function const *handler);

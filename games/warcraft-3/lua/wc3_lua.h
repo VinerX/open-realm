@@ -38,6 +38,12 @@ bool WC3_LuaLoadBuffer(wc3Lua_t *L, const char *source, const char *chunk_name);
 bool WC3_LuaCall(wc3Lua_t *L, const char *function_name);
 /* Call a zero-argument global function that returns a number. */
 bool WC3_LuaCallNumber(wc3Lua_t *L, const char *function_name, double *out);
+/* Call a global function with one numeric argument and copy its string result
+ * into out.  A missing function or a Lua error returns false and leaves out
+ * untouched; a non-string result is reported as an empty string.  The scenario
+ * driver passes the current frame index. */
+bool WC3_LuaCallStringWithNumber(wc3Lua_t *L, const char *function_name, double argument,
+                                 char *out, size_t out_size);
 
 /* Runtime error boundary: mirrors jass_rterror_pending()/jass_rterror_message(). */
 bool WC3_LuaErrorPending(wc3Lua_t const *L);

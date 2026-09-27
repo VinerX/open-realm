@@ -144,6 +144,33 @@ bool WC3_LuaCallNumber(wc3Lua_t *state, const char *function_name, double *out) 
     return true;
 }
 
+bool WC3_LuaCallStringWithNumber(wc3Lua_t *state, const char *function_name, double argument,
+                                 char *out, size_t out_size) {
+    const char *value = "";
+
+    if (!state || !state->L || !function_name) return false;
+    lua_getglobal(state->L, function_name);
+    if (!lua_isfunction(state->L, -1)) {
+        lua_pop(state->L, 1);
+        WC3_LuaSetError(state, function_name, "not a function");
+        return false;
+    }
+    lua_pushnumber(state->L, argument);
+    if (WC3_LuaPCall(state->L, 1, 1) != LUA_OK) {
+        WC3_LuaCaptureError(state, function_name);
+        lua_remove(state->L, -1);
+        return false;
+    }
+    value = lua_tostring(state->L, -1);
+    if (out && out_size) {
+        snprintf(out, out_size, "%s", value ? value : "");
+    }
+    lua_pop(state->L, 1);
+    lua_remove(state->L, -1);
+    WC3_LuaClearError(state);
+    return true;
+}
+
 bool WC3_LuaErrorPending(wc3Lua_t const *state) {
     return state && state->error_pending;
 }

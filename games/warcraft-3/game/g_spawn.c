@@ -780,12 +780,15 @@ void G_SpawnEntities(void) {
     }
     S_MineOverlayBindPreplaced();
     SP_worldspawn(NULL);
-    
+
+    G_LogScriptPhase("selection", level.mapinfo->scriptKind == WC3_SCRIPT_LUA ? "lua" : "jass",
+                     NULL, NULL);
     if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.mapinfo->mapscript) {
         level.lua_vm = WC3_LuaNewState();
         if (!level.lua_vm) {
             fprintf(stderr, "G_SpawnEntities: could not create Lua 5.3 state for %s\n",
                     gi.CvarString("map", "(unknown)"));
+            G_LogScriptPhase("load", NULL, "failed", "could not create Lua state");
         } else if (G_LoadLuaMapJassFile("Scripts\\common.j")) {
             gi.LoadingFrame();
             if (G_LoadLuaMapJassFile("Scripts\\Blizzard.j")) {
@@ -796,10 +799,14 @@ void G_SpawnEntities(void) {
                 fprintf(stderr, "G_SpawnEntities: Lua load failed for %s: %s\n",
                         gi.CvarString("map", "(unknown)"),
                         WC3_LuaErrorMessage(level.lua_vm));
+                G_LogScriptPhase("load", NULL, "failed", WC3_LuaErrorMessage(level.lua_vm));
+            } else {
+                G_LogScriptPhase("load", NULL, "ok", NULL);
             }
         } else {
             fprintf(stderr, "G_SpawnEntities: Lua runtime prelude failed for %s\n",
                     gi.CvarString("map", "(unknown)"));
+            G_LogScriptPhase("load", NULL, "failed", "Lua runtime prelude");
         }
     } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && level.mapinfo->mapscript) {
         jass_dofile(level.vm, "Scripts\\common.j");
@@ -808,9 +815,11 @@ void G_SpawnEntities(void) {
         gi.LoadingFrame();
         G_DumpPrologue02BurrowHandoffSource(level.mapinfo->mapscript);
         jass_dobuffer(level.vm, level.mapinfo->mapscript);
+        G_LogScriptPhase("load", NULL, "ok", NULL);
     } else {
         fprintf(stderr, "G_SpawnEntities: missing selected map script in %s\n",
                 gi.CvarString("map", "(unknown)"));
+        G_LogScriptPhase("load", NULL, "failed", "missing selected map script");
     }
     gi.LoadingFrame();
 
@@ -818,15 +827,19 @@ void G_SpawnEntities(void) {
     if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.lua_vm &&
         WC3_LuaCall(level.lua_vm, "config")) {
         level.scriptsConfigured = true;
+        G_LogScriptPhase("config", NULL, "ok", NULL);
     } else if (level.mapinfo->scriptKind == WC3_SCRIPT_LUA && level.lua_vm) {
         fprintf(stderr, "G_SpawnEntities: Lua config failed for %s: %s\n",
                 gi.CvarString("map", "(unknown)"),
                 WC3_LuaErrorMessage(level.lua_vm));
+        G_LogScriptPhase("config", NULL, "failed", WC3_LuaErrorMessage(level.lua_vm));
     } else if (level.mapinfo->scriptKind == WC3_SCRIPT_JASS && !level.scriptsConfigured && level.mapinfo && level.mapinfo->mapscript &&
         strstr(level.mapinfo->mapscript, "function config")) {
         jass_callbyname(level.vm, "config", false);
         if (!jass_rterror_pending(level.vm)) level.scriptsConfigured = true;
     }
+    if (level.scriptsConfigured && level.mapinfo->scriptKind == WC3_SCRIPT_JASS)
+        G_LogScriptPhase("config", NULL, "ok", NULL);
 
     UI_Init();
     CM_BakeStaticObstacles();

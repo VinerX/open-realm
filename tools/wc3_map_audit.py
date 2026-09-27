@@ -59,6 +59,58 @@ SCRIPT_STARTUP_FAILURE_PATTERN = (
 SCRIPT_STARTUP_FAILURE_RE = re.compile(rf"^(?:{SCRIPT_STARTUP_FAILURE_PATTERN})", re.MULTILINE)
 
 
+# The engine emits one line per script lifecycle phase. Parsing them lets the
+# report distinguish reaching the frame budget from config/main completing,
+# which the spec requires as three separate levels.
+SCRIPT_PHASE_RE = re.compile(
+    r"^WC3_SCRIPT\s+phase=(?P<phase>\w+)(?:\s+kind=(?P<kind>\w+))?"
+    r"(?:\s+status=(?P<status>\w+))?",
+    re.MULTILINE,
+)
+SCRIPT_PHASES = ("selection", "load", "config", "main")
+UNSUPPORTED_NATIVE_RE = re.compile(r"^WC3 Lua: (?P<name>\w+)", re.MULTILINE)
+SCENARIO_RE = re.compile(
+    r"^WC3_SCENARIO\s+name=(?P<name>\S+)\s+status=(?P<status>PASS|FAIL)"
+    r"(?:\s+steps=(?P<steps>\d+))?(?:\s+detail=\"(?P<detail>[^\"]*)\")?",
+    re.MULTILINE,
+)
+
+
+def parse_script_phases(output: str) -> dict[str, str | None]:
+    """Read the engine per-phase script markers.
+
+    The kind field is recorded once from the selection line. Each phase
+    defaults to None so a missing line stays distinct from an explicit ok.
+    """
+    phases: dict[str, str | None] = {name: None for name in SCRIPT_PHASES}
+    phases["kind"] = None
+    for match in SCRIPT_PHASE_RE.finditer(output):
+        phase = match.group("phase")
+        if match.group("kind"):
+            phases["kind"] = match.group("kind")
+        if phase in phases:
+            phases[phase] = match.group("status") or "ok"
+    return phases
+
+
+def parse_unsupported_natives(output: str) -> list[str]:
+    """List the exact native names the Lua bridge reported unimplemented."""
+    return sorted({match.group("name") for match in UNSUPPORTED_NATIVE_RE.finditer(output)})
+
+
+def parse_scenarios(output: str) -> list[dict[str, Any]]:
+    """Read deterministic scenario PASS/FAIL lines emitted by the driver."""
+    scenarios: list[dict[str, Any]] = []
+    for match in SCENARIO_RE.finditer(output):
+        scenarios.append({
+            "name": match.group("name"),
+            "status": match.group("status"),
+            "steps": int(match.group("steps")) if match.group("steps") else None,
+            "detail": match.group("detail") or "",
+        })
+    return scenarios
+
+
 def classify_run_status(exit_code: int | None, output: str) -> str:
     """Map one bounded run to its honest outcome.
 
@@ -69,10 +121,17 @@ def classify_run_status(exit_code: int | None, output: str) -> str:
     """
     if exit_code is None:
         return "timeout"
+    phases = parse_script_phases(output)
+    # A script-level failure is the more precise diagnosis than the raw exit
+    # code: an explicit failed phase, a FAIL scenario marker, or a startup
+    # signature all mean config()/main()/the scenario did not complete, even
+    # though the driver may return nonzero on purpose.
+    if (SCRIPT_STARTUP_FAILURE_RE.search(output)
+            or any(phases[phase] not in (None, "ok") for phase in SCRIPT_PHASES)
+            or any(scenario["status"] == "FAIL" for scenario in parse_scenarios(output))):
+        return "script_error"
     if exit_code != 0:
         return "crashed"
-    if SCRIPT_STARTUP_FAILURE_RE.search(output):
-        return "script_error"
     return "completed"
 
 
@@ -182,24 +241,32 @@ def parse_w3i_name(info: bytes, wts: str, fallback: str) -> str:
 
 def map_name(item: dict[str, str], mpqtool: Path) -> str:
     """Extract nested W3I/WTS metadata and resolve the report-facing name."""
-    if item.get("loose"):
-        archive = Path(item["archive"])
-        info = run_mpqtool(mpqtool, archive, "cat", "war3map.w3i")
-        try:
-            wts = run_mpqtool(mpqtool, archive, "cat", "war3map.wts").decode(errors="replace")
-        except RuntimeError:
-            wts = ""
-        return parse_w3i_name(info, wts, Path(item["filename"]).stem)
-    payload = run_mpqtool(mpqtool, Path(item["archive"]), "cat", item["path"])
-    with tempfile.NamedTemporaryFile(prefix="wc3-map-audit-", suffix=Path(item["filename"]).suffix) as nested:
-        nested.write(payload)
-        nested.flush()
-        info = run_mpqtool(mpqtool, Path(nested.name), "cat", "war3map.w3i")
-        try:
-            wts = run_mpqtool(mpqtool, Path(nested.name), "cat", "war3map.wts").decode(errors="replace")
-        except RuntimeError:
-            wts = ""
-    return parse_w3i_name(info, wts, Path(item["filename"]).stem)
+    fallback = Path(item["filename"]).stem
+    try:
+        if item.get("loose"):
+            archive = Path(item["archive"])
+            info = run_mpqtool(mpqtool, archive, "cat", "war3map.w3i")
+            try:
+                wts = run_mpqtool(mpqtool, archive, "cat", "war3map.wts").decode(errors="replace")
+            except RuntimeError:
+                wts = ""
+            return parse_w3i_name(info, wts, fallback)
+        payload = run_mpqtool(mpqtool, Path(item["archive"]), "cat", item["path"])
+        with tempfile.NamedTemporaryFile(prefix="wc3-map-audit-", suffix=Path(item["filename"]).suffix) as nested:
+            nested.write(payload)
+            nested.flush()
+            info = run_mpqtool(mpqtool, Path(nested.name), "cat", "war3map.w3i")
+            try:
+                wts = run_mpqtool(mpqtool, Path(nested.name), "cat", "war3map.wts").decode(errors="replace")
+            except RuntimeError:
+                wts = ""
+        return parse_w3i_name(info, wts, fallback)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        # A display-name lookup must not discard an otherwise complete audit;
+        # the map already has a result and a log.  Record why the friendly name
+        # is unavailable and keep the filename stem.
+        print(f"warning: could not read map name for {item['filename']}: {error}", file=sys.stderr)
+        return fallback
 
 
 def compact_diagnostics(output: str, status: str, exit_code: int | None,
@@ -297,6 +364,8 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
             "+set", "com_fast_forward", "1", "+set", "vid_hidden", "1",
             "+set", "skip_cutscene", "1", "+map", item["path"],
             "+com_frame_limit", str(args.frames),
+            *(["+set", "wc3_scenario", args.scenario] if args.scenario else []),
+            *(["+set", "wc3_scenario_name", args.scenario_name] if args.scenario_name else []),
         ]
         try:
             proc = subprocess.run(
@@ -348,6 +417,21 @@ def render_markdown(report: dict[str, Any]) -> str:
         meaning = (f"Unimplemented native `{family.split(':', 1)[1]}` executed."
                    if family.startswith("JASS:") else FAMILY_MEANINGS.get(family, family))
         lines.append(f"| `{family}` | {count} | {meaning.replace('|', '&#124;')} |")
+    if any(item.get("script") or item.get("scenarios") for item in maps):
+        lines.extend([
+            "", "### Script phases and scenarios", "",
+            "| Map | Kind | selection | load | config | main | Scenarios | Unsupported natives |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ])
+        for item in maps:
+            script = item.get("script") or {}
+            scenarios = item.get("scenarios") or []
+            rendered = ", ".join(f"`{s['name']}` {s['status']}" for s in scenarios) or "none"
+            natives = ", ".join(f"`{n}`" for n in item.get("unsupported_natives") or []) or "none"
+            phases = " | ".join(script.get(name) or "—" for name in SCRIPT_PHASES)
+            lines.append(
+                f"| {item['name'].replace('|', '&#124;')} | {script.get('kind') or '—'} | "
+                f"{phases} | {rendered.replace('|', '&#124;')} | {natives.replace('|', '&#124;')} |")
     editions = ("RoC", "TFT") if kind == "campaign" else (None,)
     for edition in editions:
         title = f"{edition}: per-map results" if edition else "Per-map results"
@@ -387,6 +471,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rerun-crashes", action="store_true", help="confirm first-pass crashes serially")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build/wc3-map-audit")
     parser.add_argument("--fail-on-crash", action="store_true", help="exit nonzero after writing the report")
+    parser.add_argument(
+        "--scenario", default="", metavar="PATH",
+        help="run a Lua scenario file (VFS path) for a deterministic PASS/FAIL result")
+    parser.add_argument(
+        "--scenario-name", default="", metavar="NAME",
+        help="report label for --scenario (defaults to the scenario file path)")
     return parser.parse_args(argv)
 
 
@@ -460,6 +550,9 @@ def main() -> int:
             errors, families = compact_diagnostics(
                 output, item["status"], item["exit_code"], item.get("serial_crash", False))
             item["compact_errors"], item["families"] = errors, sorted(families)
+            item["script"] = parse_script_phases(output)
+            item["unsupported_natives"] = parse_unsupported_natives(output)
+            item["scenarios"] = parse_scenarios(output)
         report = {
             "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

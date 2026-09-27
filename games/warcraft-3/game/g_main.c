@@ -818,6 +818,8 @@ static void G_StartScripts(void) {
             level.scriptsStarted = true;
             fprintf(stderr, "G_StartScripts: Lua main failed for %s: %s\n",
                     level.map_path, level.lua_vm ? WC3_LuaErrorMessage(level.lua_vm) : "Lua state unavailable");
+            G_LogScriptPhase("main", NULL, "failed",
+                             level.lua_vm ? WC3_LuaErrorMessage(level.lua_vm) : "Lua state unavailable");
             G_SetDestructableScriptBinding(false);
             return;
         }
@@ -826,6 +828,7 @@ static void G_StartScripts(void) {
     }
     level.scriptsStarted = true;
     jass_runevents(level.vm);
+    G_LogScriptPhase("main", NULL, "ok", NULL);
 
     G_SetDestructableScriptBinding(false);
 }
@@ -981,6 +984,8 @@ static void G_RunFrame(void) {
     G_FowSendDeltas();
     /* Optional live-map diagnostic: walk the player Hero, save, load, compare. */
     G_HeroSaveLoadAuditFrame();
+    /* Optional deterministic scenario driver: one scripted map test per process. */
+    G_ScenarioFrame();
 }
 
 static cstring_t G_GetThemeValue(cstring_t filename) {

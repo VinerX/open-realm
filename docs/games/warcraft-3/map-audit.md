@@ -79,6 +79,51 @@ Useful direct options include:
 --output-dir PATH   report/log destination
 ```
 
+## Per-Phase Script Result and Scenarios
+
+The engine prints one `WC3_SCRIPT` line per script lifecycle phase
+(`selection`, `load`, `config`, `main`) and a `WC3_SCENARIO` line when a
+deterministic scenario runs. The report parses these into a script table so a
+map that reached the frame budget without completing `config()`/`main()` can
+no longer be reported as `completed`:
+
+```text
+WC3_SCRIPT phase=selection kind=lua
+WC3_SCRIPT phase=load status=ok
+WC3_SCRIPT phase=config status=ok
+WC3_SCRIPT phase=main status=ok
+WC3_SCENARIO name=legion-smoke status=PASS steps=201 detail=""
+```
+
+Pass `--scenario PATH` to run a Lua scenario file in the map's own VM after
+`config()`/`main()`; `--scenario-name NAME` sets the report label. A scenario
+file defines one hook:
+
+```lua
+function scenario_step(frame)
+  if frame < 200 then return nil end  -- keep advancing the simulation
+  if not SomeObservedState() then return 'FAIL: what was expected' end
+  return 'PASS'
+end
+```
+
+Returning `nil` keeps the run advancing, `"PASS"` finishes it successfully, and
+any other string fails with that text as the detail. A failed phase, a `FAIL`
+scenario marker, or a startup signature all classify the run as `script_error`.
+
+Minimal invocation against 23-Race Legion (reads CASC read-only, so the game
+data path stays outside the workspace):
+
+```sh
+python tools/wc3_map_audit.py \
+  --data 'E:\Games\Warcraft III' \
+  --binary build/bin/openwarcraft3 --mpqtool build/bin/mpqtool \
+  --jobs 1 --frames 600 --timeout 240 \
+  --scenario scenarios/23-race-legion-smoke.lua --scenario-name legion-smoke \
+  --loose-map 'C:\Development\Warcraft 3\23-Race-Legion\23-Race-Legion.w3x' \
+  --output-dir build/wc3-map-audit-legion
+```
+
 Each worker receives a temporary `XDG_DATA_HOME` and a unique `game_port`.
 This prevents persistent campaign state and socket collisions from leaking
 between maps. Four workers is intentionally conservative because large maps can

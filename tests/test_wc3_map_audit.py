@@ -8,6 +8,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -33,6 +34,15 @@ def w3i_fixture(name: str, title: str, subtitle: str) -> bytes:
 
 
 class MapMetadataTest(unittest.TestCase):
+    def test_name_lookup_failure_keeps_filename_stem(self):
+        item = {
+            "filename": "23-Race-Legion.w3x",
+            "archive": "/nonexistent/map.w3x",
+            "loose": "1",
+        }
+        with mock.patch.object(AUDIT, "run_mpqtool", side_effect=RuntimeError("mpqtool exited 1")):
+            self.assertEqual(AUDIT.map_name(item, Path("mpqtool")), "23-Race-Legion")
+
     def test_wts_zero_id_and_loading_title_are_resolved(self):
         wts = "\ufeffSTRING 0\n{\nChapter Five\n}\nSTRING 1\n{\nMarch of the Scourge\n}\n"
         name = AUDIT.parse_w3i_name(w3i_fixture("Human05", "TRIGSTR_000", "TRIGSTR_001"), wts, "fallback")
@@ -109,6 +119,112 @@ class RunStatusTest(unittest.TestCase):
         errors, families = AUDIT.compact_diagnostics(output, "script_error", 0, False)
         self.assertIn("SCRIPT_STARTUP", families)
         self.assertTrue(any("SCRIPT_STARTUP" in error for error in errors))
+
+
+class ScriptPhaseTest(unittest.TestCase):
+    def test_lua_phases_and_kind_are_parsed(self):
+        output = (
+            "WC3_SCRIPT phase=selection kind=lua map=23-Race-Legion.w3x\n"
+            "WC3_SCRIPT phase=load status=ok\n"
+            "WC3_SCRIPT phase=config status=ok\n"
+            "WC3_SCRIPT phase=main status=ok\n"
+        )
+        phases = AUDIT.parse_script_phases(output)
+        self.assertEqual(phases["kind"], "lua")
+        for phase in ("selection", "load", "config", "main"):
+            self.assertEqual(phases[phase], "ok", phase)
+
+    def test_failed_phase_is_recorded(self):
+        output = (
+            "WC3_SCRIPT phase=selection kind=lua map=map.w3x\n"
+            "WC3_SCRIPT phase=load status=ok\n"
+            "WC3_SCRIPT phase=config status=failed\n"
+        )
+        phases = AUDIT.parse_script_phases(output)
+        self.assertEqual(phases["config"], "failed")
+        self.assertIsNone(phases["main"])
+
+    def test_missing_phase_lines_leave_none(self):
+        phases = AUDIT.parse_script_phases("Game initialized.\n")
+        self.assertTrue(all(value is None for value in phases.values()))
+
+    def test_failed_engine_phase_downgrades_completed_run(self):
+        output = (
+            "WC3_SCRIPT phase=selection kind=lua map=map.w3x\n"
+            "WC3_SCRIPT phase=config status=failed\n"
+            "frame limit reached\n"
+        )
+        self.assertEqual(AUDIT.classify_run_status(0, output), "script_error")
+
+    def test_unsupported_natives_are_listed_by_exact_name(self):
+        output = (
+            "WC3 Lua: SetWaterBaseColor presentation is not implemented\n"
+            "WC3 Lua: SetWaterBaseColor presentation is not implemented\n"
+            "WC3 Lua: NewSoundEnvironment('Default') audio environment is not implemented\n"
+        )
+        names = AUDIT.parse_unsupported_natives(output)
+        self.assertIn("SetWaterBaseColor", names)
+        self.assertIn("NewSoundEnvironment", names)
+        self.assertEqual(names.count("SetWaterBaseColor"), 1)
+
+
+class ScenarioTest(unittest.TestCase):
+    def test_pass_and_fail_scenarios_are_parsed(self):
+        output = (
+            "WC3_SCENARIO name=legion-spawn status=PASS steps=12\n"
+            "WC3_SCENARIO name=legion-order status=FAIL detail=\"unit missing at step 4\"\n"
+        )
+        scenarios = AUDIT.parse_scenarios(output)
+        self.assertEqual(scenarios[0]["name"], "legion-spawn")
+        self.assertEqual(scenarios[0]["status"], "PASS")
+        self.assertEqual(scenarios[1]["status"], "FAIL")
+        self.assertIn("unit missing", scenarios[1]["detail"])
+
+    def test_scenario_failure_downgrades_completed_run(self):
+        output = "WC3_SCENARIO name=legion-spawn status=FAIL detail=\"boom\"\nframe limit reached\n"
+        self.assertEqual(AUDIT.classify_run_status(0, output), "script_error")
+
+    def test_scenario_pass_keeps_completed_run(self):
+        output = "WC3_SCENARIO name=legion-spawn status=PASS steps=8\nframe limit reached\n"
+        self.assertEqual(AUDIT.classify_run_status(0, output), "completed")
+
+    def test_parse_args_accepts_scenario(self):
+        args = AUDIT.parse_args([
+            "--loose-map", "data/Warcraft III/Maps/Fake.w3x",
+            "--scenario", "scenarios/legion-spawn.lua",
+            "--scenario-name", "legion-spawn",
+        ])
+        self.assertEqual(args.scenario, "scenarios/legion-spawn.lua")
+        self.assertEqual(args.scenario_name, "legion-spawn")
+
+
+    def test_report_renders_script_phases_and_scenarios(self):
+        report = {
+            "kind": "loose",
+            "commit": "abc123",
+            "frames": 600,
+            "simulated_seconds": 60,
+            "timeout_seconds": 240,
+            "jobs": 1,
+            "wall_seconds": 5.0,
+            "maps": [{
+                "edition": "TFT",
+                "name": "23 Race Legion",
+                "filename": "23-Race-Legion.w3x",
+                "status": "completed",
+                "compact_errors": [],
+                "families": [],
+                "script": {"kind": "lua", "selection": "ok", "load": "ok",
+                           "config": "ok", "main": "ok"},
+                "unsupported_natives": ["SetWaterBaseColor"],
+                "scenarios": [{"name": "legion-spawn", "status": "PASS", "steps": 12, "detail": ""}],
+            }],
+        }
+        markdown = AUDIT.render_markdown(report)
+        self.assertIn("### Script phases and scenarios", markdown)
+        self.assertIn("| lua | ok | ok | ok | ok |", markdown)
+        self.assertIn("`legion-spawn` PASS", markdown)
+        self.assertIn("`SetWaterBaseColor`", markdown)
 
 
 class ReportTest(unittest.TestCase):

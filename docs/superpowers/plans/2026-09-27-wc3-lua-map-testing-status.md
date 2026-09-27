@@ -20,8 +20,17 @@ must reject unsupported syntax rather than silently omit it.
 frame limit, 0 script startup errors, 0 crashes, 0 timeouts). This is a startup
 smoke result, not objective/combat/visual correctness.
 
-Remaining runtime gaps in that log: `SetWaterBaseColor` presentation, ambient
-sound hookup, and local-only camera fields 8-10 (`CAMERA_FIELD_LOCAL_*`).
+`config()`/`main()` completion is now the frozen bootstrap milestone, not the
+goal. The active phase is deterministic scenario testing: run a bounded script
+against the loaded map, advance the simulation, assert world state, and return a
+machine-readable PASS/FAIL. Presentation-only gaps (`SetWaterBaseColor`,
+ambient sound, local-only camera fields 8-10) are logged by exact name and are
+not priorities unless a scenario needs them.
+
+The first scenario is in place: `scenarios/23-race-legion-smoke.lua` advances
+201 frames, then asserts the 24-slot setup and a live playing player slot. The
+bounded CASC audit reports `WC3_SCENARIO name=legion-smoke status=PASS steps=201`
+alongside `WC3_SCRIPT phase=selection kind=lua` and `load/config/main ok`.
 
 ## Implemented and verified
 
@@ -62,20 +71,19 @@ save/load paths, `dup2` redirect), not Lua regressions.
 
 ## Remaining work
 
-1. Implement Lua trigger handles, event registration, conditions/actions, and
-   callback execution using the existing engine trigger lifecycle. Preserve
-   callback semantics in the shared Lua VM; do not fake Lua callbacks as JASS
-   function pointers.
-2. Continue the map audit after each bounded native slice. Follow actual
-   initialization order and use focused regressions before changing behavior.
-   The map references hundreds of WC3 natives; implement them in slices that
-   reuse the existing JASS/engine implementations rather than in bulk.
-3. Extend the audit report from a binary startup result to per-phase detail
-   (`kind`, `selection`, `load`, `config`, `main`, `runtime_error`,
-   `unsupported_natives`) as planned in the implementation plan's Task 6.
-4. Keep JASS regressions green, complete map initialization, then proceed to
-   runtime map behavior and report remaining unsupported natives explicitly.
-5. Before a checkpoint, run focused tests, `git diff --check`, and a production
+The bootstrap phase is complete; the remaining work is scenario testing, not
+more native coverage for its own sake.
+
+1. Grow the deterministic scenario suite from real map-behavior checks: unit
+   spawn, ownership, orders, casts, ability/state outcomes, trigger fire counts,
+   and variable/table values, each asserted with a bounded step budget. Add a
+   new scenario file per behavior rather than one broad run.
+2. Add a native only when a named scenario is blocked by its absence. Report
+   the missing name exactly, implement the slice by reusing the existing
+   JASS/engine implementation, add a focused regression, then re-run the
+   scenario. Do not port natives speculatively.
+3. Keep JASS regressions green on every JASS-adjacent change.
+4. Before a checkpoint, run focused tests, `git diff --check`, and a production
    build. Stage only task files; leave the unrelated
    `renderer/conchars_sysfont.h` modification untouched.
 

@@ -117,6 +117,42 @@ static void test_native_registration(void) {
     WC3_LuaClose(L);
 }
 
+static void test_string_result_and_missing_function(void) {
+    wc3Lua_t *L = WC3_LuaNewState();
+    char buffer[32] = "unchanged";
+
+    assert(L);
+    assert(WC3_LuaLoadBuffer(L,
+        "function label() return 'legion' end\n"
+        "function nothing() return nil end\n",
+        "=(string)"));
+    assert(WC3_LuaCallStringWithNumber(L, "label", 0.0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "legion") == 0);
+    assert(WC3_LuaCallStringWithNumber(L, "nothing", 0.0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "") == 0);
+    assert(!WC3_LuaCallStringWithNumber(L, "missing", 0.0, buffer, sizeof(buffer)));
+    assert(WC3_LuaErrorPending(L));
+    WC3_LuaClose(L);
+}
+
+static void test_string_result_with_number_argument(void) {
+    wc3Lua_t *L = WC3_LuaNewState();
+    char buffer[32] = "";
+
+    assert(L);
+    assert(WC3_LuaLoadBuffer(L,
+        "function step(frame)\n"
+        "  if frame >= 3 then return 'PASS' end\n"
+        "  return nil\n"
+        "end\n",
+        "=(step)"));
+    assert(WC3_LuaCallStringWithNumber(L, "step", 1.0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "") == 0);
+    assert(WC3_LuaCallStringWithNumber(L, "step", 3.0, buffer, sizeof(buffer)));
+    assert(strcmp(buffer, "PASS") == 0);
+    WC3_LuaClose(L);
+}
+
 int main(void) {
     test_arithmetic_and_function();
     test_closure_retains_state();
@@ -124,6 +160,8 @@ int main(void) {
     test_runtime_error_preserves_state();
     test_state_isolation_across_reload();
     test_native_registration();
+    test_string_result_and_missing_function();
+    test_string_result_with_number_argument();
     printf("t_wc3_lua: all checks passed\n");
     return 0;
 }
