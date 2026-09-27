@@ -20,6 +20,8 @@ typedef struct {
     void *timer;
     void *region;
     int32_t event_value;
+    float point_x, point_y;
+    bool has_point;
 } wc3LuaTriggerContext_t;
 /* Forward declaration matches Lua's own lua_State tag, so C natives keep the
  * exact lua_CFunction signature without this header including lua.h. */
@@ -52,12 +54,21 @@ void WC3_LuaClearError(wc3Lua_t *L);
 
 /* Register a native function under a global name. */
 void WC3_LuaRegisterNative(wc3Lua_t *L, const char *name, wc3LuaCFunction fn);
+/* Register fn with the native's own name captured as upvalue 1 (for stubs that
+ * report which native they stand in for). */
+void WC3_LuaRegisterNativeNamed(wc3Lua_t *L, const char *name, wc3LuaCFunction fn);
 void WC3_LuaRegisterInteger(wc3Lua_t *L, const char *name, int64_t value);
 
 /* Evaluate a Lua boolexpr synchronously with the candidate exposed by GetFilterUnit(). */
 bool WC3_LuaEvaluateFilter(wc3Lua_t *L, int function_index, void *unit, bool *accepted);
 bool WC3_LuaEvaluateFilterRef(wc3Lua_t *L, int reference, void *unit, bool *accepted);
 void *WC3_LuaFilterUnit(wc3Lua_t const *L);
+/* ForGroup/ForForce expose each candidate through GetEnumUnit()/GetEnumPlayer(),
+ * matching the JASS currentunit/currentenumplayer globals. */
+void WC3_LuaSetEnumUnit(wc3Lua_t *L, void *unit);
+void *WC3_LuaEnumUnit(wc3Lua_t const *L);
+void WC3_LuaSetEnumPlayer(wc3Lua_t *L, void *player);
+void *WC3_LuaEnumPlayer(wc3Lua_t const *L);
 
 /* Retain and invoke a Lua closure for engine-owned trigger callbacks. */
 int WC3_LuaRefFunction(wc3Lua_t *L, int function_index);

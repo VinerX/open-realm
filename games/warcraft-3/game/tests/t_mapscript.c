@@ -1034,4 +1034,268 @@ TEST(wc3_mapscript, lua_init_hashtable_returns_engine_handle) {
     G_ClearHashtableRegistry();
 }
 
+TEST(wc3_mapscript, lua_create_unit_and_ability_helpers_use_shared_engine) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t hero = MAKEFOURCC('H', 'p', 'a', 'l');
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunCreateUnitTest()\n"
+        "local u = CreateUnit(Player(0), unit_id, 32.0, 32.0, 0.0)\n"
+        "assert(u ~= nil)\n"
+        "assert(GetUnitTypeId(u) == unit_id)\n"
+        "assert(GetOwningPlayer(u) == Player(0))\n"
+        "assert(type(GetUnitX(u)) == 'number' and type(GetUnitY(u)) == 'number')\n"
+        "assert(type(UnitAddAbility(u, ability_id)) == 'boolean')\n"
+        "assert(type(UnitRemoveAbility(u, ability_id)) == 'boolean')\n"
+        "assert(GetUnitAbilityLevel(u, ability_id) >= 0)\n"
+        "end\n",
+        "lua-create-unit-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", hero);
+    WC3_LuaRegisterInteger(lua, "ability_id", MAKEFOURCC('A', 'H', 'b', 'z'));
+    T_ASSERT(WC3_LuaCall(lua, "RunCreateUnitTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_condition_returns_callable_and_drives_trigger) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunConditionTest()\n"
+        "local trigger = CreateTrigger()\n"
+        "TriggerAddCondition(trigger, Condition(function() return true end))\n"
+        "TriggerAddAction(trigger, function() ran = true end)\n"
+        "assert(IsTriggerEnabled(trigger))\n"
+        "DisableTrigger(trigger)\n"
+        "assert(not IsTriggerEnabled(trigger))\n"
+        "EnableTrigger(trigger)\n"
+        "assert(IsTriggerEnabled(trigger))\n"
+        "assert(TriggerEvaluate(trigger))\n"
+        "TriggerExecute(trigger)\n"
+        "assert(ran == true)\n"
+        "end\n",
+        "lua-condition-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunConditionTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_trigger_register_timer_event_allocates_timer) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t timers_before = level.num_timers;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunRegisterTimerTest()\n"
+        "local trigger = CreateTrigger()\n"
+        "local event = TriggerRegisterTimerEvent(trigger, 1.0, true)\n"
+        "assert(event ~= nil)\n"
+        "end\n",
+        "lua-register-timer-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunRegisterTimerTest"));
+    T_EQ(level.num_timers, timers_before + 1);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_for_group_exposes_enum_unit) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+    double visited = -1.0;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunForGroupTest()\n"
+        "local group = CreateGroup()\n"
+        "local u = CreateUnit(Player(0), unit_id, 10.0, 20.0, 0.0)\n"
+        "GroupAddUnit(group, u)\n"
+        "assert(BlzGroupGetSize(group) == 1)\n"
+        "count = 0\n"
+        "ForGroup(group, function() count = count + 1; assert(GetEnumUnit() == u) end)\n"
+        "assert(FirstOfGroup(group) == u)\n"
+        "GroupRemoveUnit(group, u)\n"
+        "assert(BlzGroupGetSize(group) == 0)\n"
+        "end\n"
+        "function GetCount() return count end\n",
+        "lua-for-group-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunForGroupTest"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "GetCount", &visited));
+    T_EQ(visited, 1.0);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_string_and_math_helpers_match_jass) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunStringTest()\n"
+        "assert(SubString('hello', 1, 3) == 'el')\n"
+        "assert(StringLength('hello') == 5)\n"
+        "assert(I2S(42) == '42')\n"
+        "assert(I2R(3) == 3.0)\n"
+        "assert(R2I(3.9) == 3)\n"
+        "return I2R(R2I(7.5))\n"
+        "end\n",
+        "lua-string-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunStringTest", &value));
+    T_EQ(value, 7.0);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_get_world_bounds_returns_engine_bounds) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0.0;
+    box2_t bounds = CM_GetWorldBounds();
+    float expected = (bounds.min.x + bounds.max.x) * 0.5f;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunWorldBoundsTest()\n"
+        "local r = GetWorldBounds()\n"
+        "return GetRectCenterX(r)\n"
+        "end\n",
+        "lua-world-bounds-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunWorldBoundsTest", &value));
+    T_FEQ((float)value, expected, 0.001f);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_r2s_and_string_helpers_match_jass) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunR2STest()\n"
+        "assert(R2S(1.5) == '1.500000')\n"
+        "assert(StringLength(R2S(0.0)) == 8)\n"
+        "return R2S(2.5)\n"
+        "end\n",
+        "lua-r2s-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunR2STest", &value));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_quest_setters_populate_quest_record) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    quest_t *quest = NULL;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunQuestTest()\n"
+        "question = CreateQuest()\n"
+        "QuestSetTitle(question, 'The Title')\n"
+        "QuestSetDescription(question, 'The Description')\n"
+        "QuestSetIconPath(question, 'ReplaceableTextures\\\\CommandButtons\\\\BTNTest.blp')\n"
+        "QuestSetRequired(question, true)\n"
+        "QuestSetDiscovered(question, true)\n"
+        "QuestSetEnabled(question, true)\n"
+        "end\n",
+        "lua-quest-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunQuestTest"));
+    /* Locate the quest the script created by its title. */
+    FOR_LOOP(i, MAX_QUESTS) if (level.quests[i].inuse && level.quests[i].title &&
+                                !strcmp(level.quests[i].title, "The Title")) quest = &level.quests[i];
+    T_NOT_NULL(quest);
+    if (quest) {
+        T_STREQ(quest->description, "The Description");
+        T_ASSERT(quest->required && quest->discovered && quest->enabled);
+    }
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_trigger_sleep_action_does_not_abort_action) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double reached = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunSleepTest()\n"
+        "local trigger = CreateTrigger()\n"
+        "TriggerAddAction(trigger, function() TriggerSleepAction(1.0); after_sleep = 1 end)\n"
+        "TriggerExecute(trigger)\n"
+        "return after_sleep\n"
+        "end\n",
+        "lua-sleep-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunSleepTest", &reached));
+    T_EQ(reached, 1.0);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_rect_edges_and_create_unit_at_loc_match_jass) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double result = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunRectUnitTest()\n"
+        "local rect = Rect(10.0, 20.0, 30.0, 40.0)\n"
+        "assert(GetRectMinX(rect) == 10.0)\n"
+        "assert(GetRectMinY(rect) == 20.0)\n"
+        "assert(GetRectMaxX(rect) == 30.0)\n"
+        "assert(GetRectMaxY(rect) == 40.0)\n"
+        "local loc = Location(5.0, 6.0)\n"
+        "local u = CreateUnitAtLoc(Player(0), unit_id, loc, 0.0)\n"
+        "assert(u ~= nil)\n"
+        "assert(GetUnitTypeId(u) == unit_id)\n"
+        "return GetUnitX(u) + GetUnitY(u)\n"
+        "end\n",
+        "lua-rect-unit-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunRectUnitTest", &result));
+    T_FEQ((float)result, 11.0f, 0.001f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 #endif /* BZ_TESTS */

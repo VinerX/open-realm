@@ -16,6 +16,8 @@ struct wc3Lua_s {
     char error[WC3_LUA_ERROR_MAX];
     bool error_pending;
     void *filter_unit;
+    void *enum_unit;
+    void *enum_player;
     wc3LuaTriggerContext_t trigger_context;
 };
 
@@ -191,6 +193,13 @@ void WC3_LuaRegisterNative(wc3Lua_t *state, const char *name, wc3LuaCFunction fn
     lua_setglobal(state->L, name);
 }
 
+void WC3_LuaRegisterNativeNamed(wc3Lua_t *state, const char *name, wc3LuaCFunction fn) {
+    if (!state || !state->L || !name) return;
+    lua_pushstring(state->L, name);
+    lua_pushcclosure(state->L, fn, 1);
+    lua_setglobal(state->L, name);
+}
+
 void WC3_LuaRegisterInteger(wc3Lua_t *state, const char *name, int64_t value) {
     if (!state || !state->L || !name) return;
     lua_pushinteger(state->L, (lua_Integer)value);
@@ -294,4 +303,20 @@ void WC3_LuaSetTriggerContext(wc3Lua_t *state, wc3LuaTriggerContext_t const *con
 
 void *WC3_LuaFilterUnit(wc3Lua_t const *state) {
     return state ? state->filter_unit : NULL;
+}
+
+void WC3_LuaSetEnumUnit(wc3Lua_t *state, void *unit) {
+    if (state) state->enum_unit = unit;
+}
+
+void *WC3_LuaEnumUnit(wc3Lua_t const *state) {
+    return state ? state->enum_unit : NULL;
+}
+
+void WC3_LuaSetEnumPlayer(wc3Lua_t *state, void *player) {
+    if (state) state->enum_player = player;
+}
+
+void *WC3_LuaEnumPlayer(wc3Lua_t const *state) {
+    return state ? state->enum_player : NULL;
 }

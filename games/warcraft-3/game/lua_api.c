@@ -198,6 +198,30 @@ static int LuaGetRectCenterY(lua_State *L) {
     return 1;
 }
 
+static int LuaGetRectMinX(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? rect->min.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetRectMinY(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? rect->min.y : 0.0f);
+    return 1;
+}
+
+static int LuaGetRectMaxX(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? rect->max.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetRectMaxY(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    lua_pushnumber(L, rect ? rect->max.y : 0.0f);
+    return 1;
+}
+
 static int LuaDestroyGroup(lua_State *L) {
     G_FreeJassGroup(lua_touserdata(L, 1));
     return 0;
@@ -330,6 +354,512 @@ static int LuaTriggerRegisterUnitEvent(lua_State *L) {
     return 1;
 }
 
+/* Report a native the Lua bridge cannot honor yet.  The machine-readable line
+ * is what tools/wc3_map_audit.py parses, and the set of names is deduped so one
+ * unfinished feature does not flood the log across every frame. */
+#define LUA_UNSUPPORTED_MAX 32
+static void LuaReportUnsupportedNative(cstring_t name) {
+    static cstring_t reported[LUA_UNSUPPORTED_MAX];
+    static uint32_t count;
+    uint32_t i;
+
+    for (i = 0; i < count; ++i)
+        if (!strcmp(reported[i], name)) return;
+    if (count < LUA_UNSUPPORTED_MAX) reported[count++] = name;
+    fprintf(stderr, "WC3 Lua: %s is not implemented\n", name);
+    fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=%s\n", name);
+}
+
+/* Condition/Filter wrap a callback.  The Lua bridge keeps a bare Lua closure and
+ * TriggerAddCondition/AddAction accept it directly, so Condition is identity and
+ * DestroyBoolExpr only has to accept-and-ignore. */
+static int LuaCondition(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_pushvalue(L, 1);
+    return 1;
+}
+
+static int LuaDestroyBoolExpr(lua_State *L) {
+    (void)L;
+    return 0;
+}
+
+static int LuaEnableTrigger(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    if (trigger) trigger->disabled = false;
+    return 0;
+}
+
+static int LuaDisableTrigger(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    if (trigger) trigger->disabled = true;
+    return 0;
+}
+
+static int LuaIsTriggerEnabled(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    lua_pushboolean(L, trigger ? !trigger->disabled : false);
+    return 1;
+}
+
+/* Retain an optional Lua closure as an event filter, mirroring the JASS
+ * boolexpr argument.  NULL when the argument is absent or nil. */
+static bool LuaRefEventFilter(lua_State *L, int index, event_t *event) {
+    if (!event || lua_isnoneornil(L, index)) return true;
+    luaL_checktype(L, index, LUA_TFUNCTION);
+    event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, index);
+    if (event->lua_filter_ref == LUA_NOREF || event->lua_filter_ref == LUA_REFNIL) {
+        event->inuse = false;
+        return false;
+    }
+    event->lua_filter_vm = level.lua_vm;
+    return true;
+}
+
+static int LuaTriggerRegisterTimerEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    float timeout = (float)luaL_checknumber(L, 2);
+    bool periodic = lua_toboolean(L, 3);
+    gtimer_t *timer;
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerRegisterTimerEvent: invalid Lua trigger");
+    timer = G_AllocJassTimer();
+    if (!timer) return luaL_error(L, "TriggerRegisterTimerEvent: timer registry is full");
+    G_TimerStart(timer, (uint32_t)(MAX(0.0f, timeout) * 1000.0f), periodic, NULL);
+    event = G_MakeEvent(EVENT_GAME_TIMER_EXPIRED);
+    if (!event) return luaL_error(L, "TriggerRegisterTimerEvent: event registry is full");
+    event->trigger = trigger;
+    event->timer = timer;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterPlayerEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    EVENTTYPE type = (EVENTTYPE)luaL_checkinteger(L, 3);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !player)
+        return luaL_error(L, "TriggerRegisterPlayerEvent: invalid trigger or player");
+    event = G_MakeEvent(type);
+    if (!event) return luaL_error(L, "TriggerRegisterPlayerEvent: event registry is full");
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->trigger = trigger;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterDeathEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    edict_t *widget = lua_touserdata(L, 2);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !widget)
+        return luaL_error(L, "TriggerRegisterDeathEvent: invalid trigger or widget");
+    event = G_MakeEvent(EVENT_UNIT_DEATH);
+    if (!event) return luaL_error(L, "TriggerRegisterDeathEvent: event registry is full");
+    G_SetEventSubject(event, widget);
+    event->trigger = trigger;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+/* Chat events are not routed by the headless server (there is no human
+ * chatter), but the map's diagnostic triggers must still register cleanly.
+ * Return a real event handle so the registration graph stays well-formed. */
+static int LuaTriggerRegisterPlayerChatEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    event_t *event;
+
+    (void)luaL_checkstring(L, 3);
+    (void)lua_toboolean(L, 4);
+    if (!trigger || trigger->lua_vm != level.lua_vm || !player)
+        return luaL_error(L, "TriggerRegisterPlayerChatEvent: invalid trigger or player");
+    event = G_MakeEvent(EVENT_PLAYER_CHAT);
+    if (!event) return luaL_error(L, "TriggerRegisterPlayerChatEvent: event registry is full");
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->trigger = trigger;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+/* Player state limit events (e.g. LimitGolda at PLAYER_STATE_RESOURCE_GOLD).
+ * Shares the EVENT_GAME_STATE_LIMIT shape the JASS native uses, with the
+ * player's edict as subject so the owner match fires for that player. */
+static int LuaTriggerRegisterPlayerStateEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    uint32_t *state = lua_touserdata(L, 3);
+    uint32_t *opcode = lua_touserdata(L, 4);
+    float limitval = (float)luaL_checknumber(L, 5);
+    uint32_t whichState = state ? *state : (uint32_t)luaL_checkinteger(L, 3);
+    uint32_t whichOp = opcode ? *opcode : (uint32_t)luaL_checkinteger(L, 4);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !player)
+        return luaL_error(L, "TriggerRegisterPlayerStateEvent: invalid trigger or player");
+    event = G_MakeEvent(EVENT_GAME_STATE_LIMIT);
+    if (!event) return luaL_error(L, "TriggerRegisterPlayerStateEvent: event registry is full");
+    event->trigger = trigger;
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->state = whichState;
+    event->limitop = whichOp;
+    event->limitval = limitval;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterUnitStateEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    uint32_t *state = lua_touserdata(L, 3);
+    uint32_t *opcode = lua_touserdata(L, 4);
+    float limitval = (float)luaL_checknumber(L, 5);
+    uint32_t whichState = state ? *state : (uint32_t)luaL_checkinteger(L, 3);
+    uint32_t whichOp = opcode ? *opcode : (uint32_t)luaL_checkinteger(L, 4);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !unit)
+        return luaL_error(L, "TriggerRegisterUnitStateEvent: invalid trigger or unit");
+    if (whichState != WC3_UNIT_STATE_LIFE || whichOp > WC3_LIMITOP_NOT_EQUAL) {
+        LuaReportUnsupportedNative("TriggerRegisterUnitStateEvent");
+        lua_pushnil(L);
+        return 1;
+    }
+    event = G_MakeEvent(EVENT_GAME_STATE_LIMIT);
+    if (!event) return luaL_error(L, "TriggerRegisterUnitStateEvent: event registry is full");
+    event->trigger = trigger;
+    G_SetEventSubject(event, unit);
+    event->state = whichState;
+    event->limitop = whichOp;
+    event->limitval = limitval;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterUnitInRange(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    float range = (float)luaL_checknumber(L, 3);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !unit)
+        return luaL_error(L, "TriggerRegisterUnitInRange: invalid trigger or unit");
+    event = G_MakeEvent(EVENT_UNIT_IN_RANGE);
+    if (!event) return luaL_error(L, "TriggerRegisterUnitInRange: event registry is full");
+    G_SetEventSubject(event, unit);
+    event->trigger = trigger;
+    event->range = range;
+    if (!LuaRefEventFilter(L, 4, event))
+        return luaL_error(L, "TriggerRegisterUnitInRange: could not retain filter");
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterRegionEvent(lua_State *L, EVENTTYPE type, cstring_t name) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    handle_t region = lua_touserdata(L, 2);
+    region_t *whichRegion = G_RegionFromHandle(region);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !whichRegion)
+        return luaL_error(L, "%s: invalid Lua trigger or region", name);
+    event = G_MakeEvent(type);
+    if (!event) return luaL_error(L, "%s: event registry is full", name);
+    event->trigger = trigger;
+    event->region = region;
+    if (!LuaRefEventFilter(L, 3, event))
+        return luaL_error(L, "%s: could not retain filter", name);
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterEnterRegion(lua_State *L) {
+    return LuaTriggerRegisterRegionEvent(L, EVENT_GAME_ENTER_REGION, "TriggerRegisterEnterRegion");
+}
+
+static int LuaTriggerRegisterLeaveRegion(lua_State *L) {
+    return LuaTriggerRegisterRegionEvent(L, EVENT_GAME_LEAVE_REGION, "TriggerRegisterLeaveRegion");
+}
+
+static int LuaRegionAddRect(lua_State *L) {
+    region_t *region = G_RegionFromHandle(lua_touserdata(L, 1));
+    box2_t *rect = lua_touserdata(L, 2);
+    if (!region || !rect) return 0;
+    if (region->num_rects >= MAX_REGION_SIZE) {
+        fprintf(stderr, "WC3 Lua: RegionAddRect rejected rectangle: MAX_REGION_SIZE (%u) reached\n",
+                (unsigned)MAX_REGION_SIZE);
+        return 0;
+    }
+    region->rects[region->num_rects++] = *rect;
+    return 0;
+}
+
+static int LuaGetTriggerPlayer(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    edict_t *ent = unit;
+    player_t *player = NULL;
+
+    if (ent) player = ent->client ? &ent->client->ps : G_GetPlayerByNumber(ent->s.player);
+    if (player) lua_pushlightuserdata(L, player); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaCreateUnit(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t unitid = (uint32_t)luaL_checkinteger(L, 2);
+    vec2_t location = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
+    float facing = (float)luaL_checknumber(L, 5);
+    edict_t *unit;
+
+    if (!player) {
+        lua_pushnil(L);
+        return 1;
+    }
+    unit = unit_create(PLAYER_NUM(player), unitid, &location, facing);
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaCreateUnitAtLoc(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t unitid = (uint32_t)luaL_checkinteger(L, 2);
+    vec2_t *location = lua_touserdata(L, 3);
+    float facing = (float)luaL_checknumber(L, 4);
+    edict_t *unit;
+
+    if (!player || !location) {
+        lua_pushnil(L);
+        return 1;
+    }
+    unit = unit_create(PLAYER_NUM(player), unitid, location, facing);
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaUnitAddAbility(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushboolean(L, G_ActorAddSkill(unit, abilityId));
+    return 1;
+}
+
+static int LuaUnitRemoveAbility(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushboolean(L, G_ActorRemoveSkill(unit, abilityId));
+    return 1;
+}
+
+static int LuaGetUnitAbilityLevel(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushinteger(L, unit ? (lua_Integer)G_UnitAbilityLevel(unit, abilityId) : 0);
+    return 1;
+}
+
+static int LuaSetUnitAbilityLevel(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    int32_t level = (int32_t)luaL_checkinteger(L, 3);
+    lua_pushinteger(L, unit ? (lua_Integer)G_UnitSetAbilityLevel(unit, abilityId, level) : 0);
+    return 1;
+}
+
+static int LuaIncUnitAbilityLevel(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    uint32_t current;
+
+    if (!unit) { lua_pushinteger(L, 0); return 1; }
+    current = G_UnitAbilityLevel(unit, abilityId);
+    if (!current) { lua_pushinteger(L, 0); return 1; }
+    lua_pushinteger(L, (lua_Integer)G_UnitSetAbilityLevel(unit, abilityId, (int32_t)current + 1));
+    return 1;
+}
+
+static int LuaSetPlayerAbilityAvailable(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t abilityId = (uint32_t)luaL_checkinteger(L, 2);
+    bool available = lua_toboolean(L, 3);
+    if (player) G_SetPlayerAbilityAvailable(PLAYER_CLIENT(player), abilityId, available);
+    return 0;
+}
+
+/* IsUnitType/UnitAddType/UnitRemoveType mirror the JASS script_unit_types
+ * bitmask plus the authored-data checks in api_unit.h. */
+static bool LuaResolveUnitType(edict_t *unit, uint32_t type) {
+    if (!unit) return false;
+    if (type < 32 && (unit->script_unit_types & (1u << type))) return true;
+    if (type == WC3_UNIT_TYPE_STRUCTURE) return G_UnitIsBuilding(unit->class_id);
+    if (type == 0) return G_UnitIsHero(unit);
+    if (type == 1) return M_IsDead(unit);
+    if (type == WC3_UNIT_TYPE_POLYMORPHED) return S_UnitPolymorphed(unit);
+    if (type == 23) return G_UnitIsSleeping(unit);
+    if (type == 11) return unit->stunned;
+    if (type == 3) return (unit->aiflags & AI_FLYING) != 0;
+    if (type == 10) return unit->summon_ability != 0;
+    if (type == 14) return unit->data.UnitData && WC3_RaceFromString(unit->data.UnitData->race) == RACE_UNDEAD;
+    return false;
+}
+
+static int LuaIsUnitType(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *type = lua_touserdata(L, 2);
+    uint32_t whichType = type ? *type : (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushboolean(L, unit && LuaResolveUnitType(unit, whichType));
+    return 1;
+}
+
+static int LuaUnitAddType(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *type = lua_touserdata(L, 2);
+    uint32_t whichType = type ? *type : (uint32_t)luaL_checkinteger(L, 2);
+    if (!unit || whichType >= 32) { lua_pushboolean(L, false); return 1; }
+    unit->script_unit_types |= 1u << whichType;
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int LuaUnitRemoveType(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *type = lua_touserdata(L, 2);
+    uint32_t whichType = type ? *type : (uint32_t)luaL_checkinteger(L, 2);
+    if (!unit || whichType >= 32) { lua_pushboolean(L, false); return 1; }
+    unit->script_unit_types &= ~(1u << whichType);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int LuaUnitDamageTarget(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    edict_t *target = lua_touserdata(L, 2);
+    float amount = (float)luaL_checknumber(L, 3);
+    if (!unit || !target || amount <= 0.0f || target->invulnerable || M_IsDead(target)) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    T_Damage(target, unit, (int)amount);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+static int LuaKillUnit(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit && unit->inuse && !(unit->svflags & SVF_DEADMONSTER)) unit_die(unit, NULL);
+    return 0;
+}
+
+static int LuaRemoveUnit(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) {
+        gameClient_t *owner = G_GetPlayerClientByNumber(unit->s.player);
+        if (owner && owner->ps.number == unit->s.player) G_InvalidateCommands(owner);
+        G_DeferFreeEdict(unit);
+    }
+    return 0;
+}
+
+static int LuaSetUnitOwner(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    bool change_color = lua_toboolean(L, 3);
+    if (unit && player) {
+        uint32_t const previous_player = unit->s.player;
+        uint32_t const previous_color = G_GetUnitTeamColor(unit);
+        G_SetUnitPlayer(unit, PLAYER_NUM(player));
+        if (change_color) {
+            G_ClearUnitColorOverride(unit);
+            G_SetUnitTeamColor(unit, player->color);
+        } else if (previous_player != PLAYER_NUM(player)) {
+            G_SetUnitColorOverride(unit, previous_color);
+        }
+    }
+    return 0;
+}
+
+static int LuaGetUnitX(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit ? unit->s.origin.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetUnitY(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit ? unit->s.origin.y : 0.0f);
+    return 1;
+}
+
+static int LuaGetUnitTypeId(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushinteger(L, unit ? (lua_Integer)unit->class_id : 0);
+    return 1;
+}
+
+static int LuaGetOwningPlayer(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *player = unit ? G_GetPlayerByNumber(unit->s.player) : NULL;
+    if (player) lua_pushlightuserdata(L, player); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetUnitState(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *state = lua_touserdata(L, 2);
+    uint32_t which = state ? *state : (uint32_t)luaL_checkinteger(L, 2);
+    if (!unit) { lua_pushnumber(L, 0.0f); return 1; }
+    lua_pushnumber(L, (&unit->health.value)[which]);
+    return 1;
+}
+
+static int LuaGetUnitCurrentOrder(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushinteger(L, unit ? (lua_Integer)G_GetIssuedOrderId(unit) : 0);
+    return 1;
+}
+
+static int LuaGetSpellAbilityId(lua_State *L) {
+    lua_pushinteger(L, WC3_LuaGetTriggerContext(level.lua_vm).event_value);
+    return 1;
+}
+
+static int LuaGetSpellAbilityUnit(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetSpellTargetUnit(lua_State *L) {
+    void *target = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (target && (((edict_t *)target)->svflags & SVF_MONSTER)) lua_pushlightuserdata(L, target);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetSpellTargetX(lua_State *L) {
+    wc3LuaTriggerContext_t ctx = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushnumber(L, ctx.has_point ? ctx.point_x : 0.0f);
+    return 1;
+}
+
+static int LuaGetSpellTargetY(lua_State *L) {
+    wc3LuaTriggerContext_t ctx = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushnumber(L, ctx.has_point ? ctx.point_y : 0.0f);
+    return 1;
+}
+
+static int LuaGetSpellTargetLoc(lua_State *L) {
+    wc3LuaTriggerContext_t ctx = WC3_LuaGetTriggerContext(level.lua_vm);
+    vec2_t *location = lua_newuserdata(L, sizeof(*location));
+    location->x = ctx.has_point ? ctx.point_x : 0.0f;
+    location->y = ctx.has_point ? ctx.point_y : 0.0f;
+    return 1;
+}
+
 bool G_LuaTriggerEvaluate(trigger_t *trigger, wc3LuaTriggerContext_t const *context) {
     wc3Lua_t *lua = trigger ? trigger->lua_vm : NULL;
     wc3LuaTriggerContext_t previous;
@@ -400,6 +930,9 @@ static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t con
         .timer = context ? context->timer : NULL,
         .region = context ? context->region : NULL,
         .event_value = context ? context->value : 0,
+        .point_x = context ? context->point_x : 0.0f,
+        .point_y = context ? context->point_y : 0.0f,
+        .has_point = context ? context->has_point : false,
     };
 }
 
@@ -1421,6 +1954,630 @@ static int LuaGetFilterPlayer(lua_State *L) {
     return 1;
 }
 
+static int LuaGetEnumUnit(lua_State *L) {
+    void *unit = WC3_LuaEnumUnit(level.lua_vm);
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetEnumPlayer(lua_State *L) {
+    void *player = WC3_LuaEnumPlayer(level.lua_vm);
+    if (player) lua_pushlightuserdata(L, player); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGroupAddUnit(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    lua_pushboolean(L, G_JassGroupValid(group) && unit && G_AddUnitToGroup(group, unit));
+    return 1;
+}
+
+static int LuaGroupRemoveUnit(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    bool removed = false;
+
+    if (G_JassGroupValid(group) && unit) {
+        FOR_LOOP(i, group->num_units) {
+            if (group->units[i] == unit) {
+                for (uint32_t j = i; j < group->num_units - 1; ++j)
+                    group->units[j] = group->units[j + 1];
+                group->num_units--;
+                removed = true;
+                break;
+            }
+        }
+    }
+    lua_pushboolean(L, removed);
+    return 1;
+}
+
+static int LuaGroupClear(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    if (G_JassGroupValid(group)) group->num_units = 0;
+    return 0;
+}
+
+static int LuaFirstOfGroup(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    if (G_JassGroupValid(group) && group->num_units > 0) lua_pushlightuserdata(L, group->units[0]);
+    else lua_pushnil(L);
+    return 1;
+}
+
+/* Enumerate a group into the callback with each candidate exposed through
+ * GetEnumUnit(), mirroring the JASS ForGroup/currentunit pair. */
+static int LuaForGroup(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    void *previous;
+    uint32_t index;
+
+    if (!G_JassGroupValid(group)) return 0;
+    if (!lua_isnoneornil(L, 2)) {
+        int reference;
+        luaL_checktype(L, 2, LUA_TFUNCTION);
+        reference = WC3_LuaRefFunction(level.lua_vm, 2);
+        if (reference == LUA_NOREF || reference == LUA_REFNIL)
+            return luaL_error(L, "ForGroup: could not retain callback");
+        previous = WC3_LuaEnumUnit(level.lua_vm);
+        for (index = 0; index < group->num_units; ++index) {
+            WC3_LuaSetEnumUnit(level.lua_vm, group->units[index]);
+            if (!WC3_LuaCallRef(level.lua_vm, reference)) {
+                char error[512];
+                strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+                WC3_LuaClearError(level.lua_vm);
+                WC3_LuaSetEnumUnit(level.lua_vm, previous);
+                WC3_LuaUnrefFunction(level.lua_vm, reference);
+                return luaL_error(L, "ForGroup: %s", error);
+            }
+        }
+        WC3_LuaSetEnumUnit(level.lua_vm, previous);
+        WC3_LuaUnrefFunction(level.lua_vm, reference);
+    }
+    return 0;
+}
+
+static int LuaForForce(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    void *previous;
+    int reference;
+
+    if (!force || lua_isnoneornil(L, 2)) return 0;
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    reference = WC3_LuaRefFunction(level.lua_vm, 2);
+    if (reference == LUA_NOREF || reference == LUA_REFNIL)
+        return luaL_error(L, "ForForce: could not retain callback");
+    previous = WC3_LuaEnumPlayer(level.lua_vm);
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
+        player_t *candidate;
+        if (!(*force & (1u << i))) continue;
+        candidate = G_GetPlayerByNumber(i);
+        if (!candidate) continue;
+        WC3_LuaSetEnumPlayer(level.lua_vm, candidate);
+        if (!WC3_LuaCallRef(level.lua_vm, reference)) {
+            char error[512];
+            strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+            WC3_LuaClearError(level.lua_vm);
+            WC3_LuaSetEnumPlayer(level.lua_vm, previous);
+            WC3_LuaUnrefFunction(level.lua_vm, reference);
+            return luaL_error(L, "ForForce: %s", error);
+        }
+    }
+    WC3_LuaSetEnumPlayer(level.lua_vm, previous);
+    WC3_LuaUnrefFunction(level.lua_vm, reference);
+    return 0;
+}
+
+static int LuaGroupEnumUnitsInRect(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    box2_t *rect = lua_touserdata(L, 2);
+    luaGroupFilter_t context;
+
+    if (!G_JassGroupValid(group) || !rect)
+        return luaL_error(L, "GroupEnumUnitsInRect: invalid group or rect");
+    context.lua = level.lua_vm;
+    context.filter_index = lua_absindex(L, 3);
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = &globals.edicts[i];
+        if (!(ent->svflags & SVF_MONSTER) || G_IsDeferredFree(ent)) continue;
+        if (!Box2_containsPoint(rect, &ent->s.origin2)) continue;
+        if (!lua_isnoneornil(L, 3) && !LuaEvaluateCandidate(ent, &context)) continue;
+        G_AddUnitToGroup(group, ent);
+    }
+    if (WC3_LuaErrorPending(level.lua_vm)) {
+        char error[512];
+        strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+        WC3_LuaClearError(level.lua_vm);
+        return luaL_error(L, "GroupEnumUnitsInRect: %s", error);
+    }
+    return 0;
+}
+
+static int LuaGroupEnumUnitsInRange(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    vec2_t center = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
+    float radius = (float)luaL_checknumber(L, 4);
+    luaGroupFilter_t context;
+
+    if (!G_JassGroupValid(group))
+        return luaL_error(L, "GroupEnumUnitsInRange: invalid group");
+    context.lua = level.lua_vm;
+    context.filter_index = lua_absindex(L, 5);
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = &globals.edicts[i];
+        if (!(ent->svflags & SVF_MONSTER) || G_IsDeferredFree(ent)) continue;
+        if (Vector2_distance(&ent->s.origin2, &center) > radius) continue;
+        if (!lua_isnoneornil(L, 5) && !LuaEvaluateCandidate(ent, &context)) continue;
+        G_AddUnitToGroup(group, ent);
+    }
+    if (WC3_LuaErrorPending(level.lua_vm)) {
+        char error[512];
+        strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+        WC3_LuaClearError(level.lua_vm);
+        return luaL_error(L, "GroupEnumUnitsInRange: %s", error);
+    }
+    return 0;
+}
+
+static int LuaDisplayTextToPlayer(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2);
+    float y = (float)luaL_checknumber(L, 3);
+    cstring_t message = luaL_checkstring(L, 4);
+    UI_ShowText(PLAYER_ENT(player), &MAKE(vec2_t, x, y), message, -1.0f);
+    return 0;
+}
+
+static int LuaDisplayTimedTextToPlayer(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2);
+    float y = (float)luaL_checknumber(L, 3);
+    float duration = (float)luaL_checknumber(L, 4);
+    cstring_t message = luaL_checkstring(L, 5);
+    UI_ShowText(PLAYER_ENT(player), &MAKE(vec2_t, x, y), message, duration);
+    return 0;
+}
+
+static int LuaDisplayTimedTextFromPlayer(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2);
+    float y = (float)luaL_checknumber(L, 3);
+    float duration = (float)luaL_checknumber(L, 4);
+    cstring_t message = luaL_checkstring(L, 5);
+    UI_ShowText(PLAYER_ENT(player), &MAKE(vec2_t, x, y), message, duration);
+    return 0;
+}
+
+static int LuaI2R(lua_State *L) {
+    lua_pushnumber(L, (lua_Number)luaL_checkinteger(L, 1));
+    return 1;
+}
+
+static int LuaR2I(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)luaL_checknumber(L, 1));
+    return 1;
+}
+
+static int LuaI2S(lua_State *L) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%d", (int)luaL_checkinteger(L, 1));
+    lua_pushstring(L, buffer);
+    return 1;
+}
+
+/* R2S mirrors the JASS api_misc.h twin exactly: the fixed "%f" form (six
+ * fractional digits), not a trimmed number, so tooltip text matches JASS. */
+static int LuaR2S(lua_State *L) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%f", (double)luaL_checknumber(L, 1));
+    lua_pushstring(L, buffer);
+    return 1;
+}
+
+static int LuaSubString(lua_State *L) {
+    cstring_t source = luaL_checkstring(L, 1);
+    int32_t start = (int32_t)luaL_checkinteger(L, 2);
+    int32_t end = (int32_t)luaL_checkinteger(L, 3);
+    int32_t len, n;
+
+    if (!source) { lua_pushstring(L, ""); return 1; }
+    len = (int32_t)strlen(source);
+    if (start < 0) start = 0;
+    if (end > len) end = len;
+    if (start >= end) { lua_pushstring(L, ""); return 1; }
+    n = end - start;
+    lua_pushlstring(L, source + start, (size_t)n);
+    return 1;
+}
+
+static int LuaStringLength(lua_State *L) {
+    size_t length = 0;
+    luaL_checklstring(L, 1, &length);
+    lua_pushinteger(L, (lua_Integer)length);
+    return 1;
+}
+
+static int LuaGetRandomInt(lua_State *L) {
+    int32_t low = (int32_t)luaL_checkinteger(L, 1);
+    int32_t high = (int32_t)luaL_checkinteger(L, 2);
+    if (low >= high) { lua_pushinteger(L, low); return 1; }
+    lua_pushinteger(L, low + rand() % (high - low + 1));
+    return 1;
+}
+
+static int LuaGetRandomReal(lua_State *L) {
+    float low = (float)luaL_checknumber(L, 1);
+    float high = (float)luaL_checknumber(L, 2);
+    if (low >= high) { lua_pushnumber(L, low); return 1; }
+    lua_pushnumber(L, low + ((float)rand() / (float)RAND_MAX) * (high - low));
+    return 1;
+}
+
+static int LuaGetLocationX(lua_State *L) {
+    vec2_t *location = lua_touserdata(L, 1);
+    lua_pushnumber(L, location ? location->x : 0.0f);
+    return 1;
+}
+
+static int LuaGetLocationY(lua_State *L) {
+    vec2_t *location = lua_touserdata(L, 1);
+    lua_pushnumber(L, location ? location->y : 0.0f);
+    return 1;
+}
+
+static int LuaRemoveLocation(lua_State *L) {
+    (void)L;
+    return 0;
+}
+
+static int LuaRemoveRect(lua_State *L) {
+    (void)L;
+    return 0;
+}
+
+static int LuaGetWorldBounds(lua_State *L) {
+    box2_t *rect = lua_newuserdata(L, sizeof(*rect));
+    *rect = CM_GetWorldBounds();
+    return 1;
+}
+
+static int LuaSetGameSpeed(lua_State *L) {
+    uint32_t *value = lua_touserdata(L, 1);
+    if (value) level.setup.speed = *value;
+    return 0;
+}
+
+static int LuaSetMapFlag(lua_State *L) {
+    uint32_t *flag = lua_touserdata(L, 1);
+    bool value = lua_toboolean(L, 2);
+    if (flag) {
+        SET_FLAG(level.setup.map_flags, *flag, value);
+    }
+    return 0;
+}
+
+static int LuaCreateItem(lua_State *L) {
+    int32_t itemid = (int32_t)luaL_checkinteger(L, 1);
+    float x = (float)luaL_checknumber(L, 2);
+    float y = (float)luaL_checknumber(L, 3);
+    ItemData_t const *data;
+    edict_t *item;
+
+    if (!itemid) {
+        fprintf(stderr, "WC3 Lua: CreateItem refusing empty item ID at (%.1f, %.1f)\n", x, y);
+        lua_pushnil(L);
+        return 1;
+    }
+    data = G_ItemData((uint32_t)itemid);
+    if (!data || !data->file) {
+        fprintf(stderr, "WC3 Lua: CreateItem unresolved item ID 0x%08x at (%.1f, %.1f)\n",
+                (uint32_t)itemid, x, y);
+        lua_pushnil(L);
+        return 1;
+    }
+    item = SP_SpawnAtLocation((uint32_t)itemid, 0, &MAKE(vec2_t, x, y));
+    if (item) lua_pushlightuserdata(L, item); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaRemoveItem(lua_State *L) {
+    edict_t *item = lua_touserdata(L, 1);
+    if (item) G_RemoveItem(item);
+    return 0;
+}
+
+static int LuaAddSpecialEffect(lua_State *L) {
+    cstring_t model = luaL_checkstring(L, 1);
+    vec2_t where = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
+    edict_t *effect = G_SpawnModelEffect(model, &where, NULL, NULL, false);
+    if (effect) lua_pushlightuserdata(L, effect); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaAddSpecialEffectTarget(lua_State *L) {
+    cstring_t model = luaL_checkstring(L, 1);
+    edict_t *target = lua_touserdata(L, 2);
+    cstring_t attach = luaL_checkstring(L, 3);
+    edict_t *effect = target ? G_SpawnModelEffect(model, NULL, target, attach, false) : NULL;
+    if (effect) lua_pushlightuserdata(L, effect); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaDestroyEffect(lua_State *L) {
+    G_DestroyEffect(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaAddLightning(lua_State *L) {
+    cstring_t code = luaL_checkstring(L, 1);
+    bool check_visibility = lua_toboolean(L, 2);
+    vec3_t source = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4), 0.0f };
+    vec3_t target = { (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6), 0.0f };
+    uint32_t effect_id = code && strlen(code) >= 4
+        ? MAKEFOURCC(code[0], code[1], code[2], code[3]) : 0;
+    gLightning_t *bolt;
+
+    (void)check_visibility;
+    bolt = G_LightningAdd(&(lightningAddParams_t){
+        .effect_id = effect_id, .source = &source, .target = &target, .color = COLOR32_WHITE,
+    });
+    if (bolt) lua_pushlightuserdata(L, bolt); else lua_pushnil(L);
+    return 1;
+}
+
+/* Preload* warm the client's file cache.  OpenRealm has no preloader, so these
+ * accept their arguments and do nothing. */
+static int LuaNoop(lua_State *L) {
+    (void)L;
+    return 0;
+}
+
+/* Blz* frame/sync/tooltip natives belong to the Reforged UI layer OpenRealm does
+ * not implement.  Report each name once and return an empty string: several
+ * getters feed string operations such as #tooltip, so a nil would turn a missing
+ * UI feature into a script abort instead of a reported gap. */
+static int LuaBlzUnsupported(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, lua_upvalueindex(1));
+    LuaReportUnsupportedNative(name);
+    lua_pushstring(L, "");
+    return 1;
+}
+
+static int LuaBlzGetTriggerSyncData(lua_State *L) {
+    LuaReportUnsupportedNative("BlzGetTriggerSyncData");
+    lua_pushstring(L, "");
+    return 1;
+}
+
+/* ExecuteFunc runs a global function by name; the Lua VM calls it directly,
+ * matching the JASS coroutine-by-name dispatch for ordinary (non-yielding)
+ * bodies. */
+static int LuaExecuteFunc(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    lua_getglobal(L, name);
+    if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 1);
+        fprintf(stderr, "WC3 Lua: ExecuteFunc('%s') is not a function\n", name);
+        return 0;
+    }
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        fprintf(stderr, "WC3 Lua: ExecuteFunc('%s') failed: %s\n", name, lua_tostring(L, -1));
+        lua_pop(L, 1);
+    }
+    return 0;
+}
+
+/* TriggerSleepAction yields the current JASS coroutine; the Lua bridge runs a
+ * trigger action to completion on the shared main state and has no coroutine
+ * scheduler to resume it, so a sleep cannot yet be honored.  Report the gap
+ * once and return immediately rather than blocking or aborting the action, so
+ * the 201 other natives in the same trigger still execute.  A real yield needs
+ * a deferred callback queue driven from G_ScenarioFrame/G_RunEvents. */
+static int LuaTriggerSleepAction(lua_State *L) {
+    (void)L;
+    LuaReportUnsupportedNative("TriggerSleepAction");
+    return 0;
+}
+
+static int LuaGetLocalPlayer(lua_State *L) {
+    if (currentplayer) lua_pushlightuserdata(L, currentplayer); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetPlayerId(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    lua_pushinteger(L, player ? (lua_Integer)player->number : 0);
+    return 1;
+}
+
+static int LuaGetPlayerState(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *state = lua_touserdata(L, 2);
+    uint32_t which = state ? *state : (uint32_t)luaL_checkinteger(L, 2);
+    gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
+    lua_pushinteger(L, client ? (lua_Integer)client->ps.stats[which] : 0);
+    return 1;
+}
+
+static int LuaGetPlayerColor(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *color = lua_newuserdata(L, sizeof(*color));
+    *color = player ? player->color : 0;
+    return 1;
+}
+
+static int LuaGetPlayerName(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
+    cstring_t name = "";
+
+    if (client && client->jass.name[0]) name = client->jass.name;
+    else if (player && player->name) name = player->name;
+    lua_pushstring(L, name);
+    return 1;
+}
+
+static int LuaGetPlayerTechCount(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t techid = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushinteger(L, player ? (lua_Integer)G_GetPlayerTechCountValue(PLAYER_CLIENT(player), techid) : 0);
+    return 1;
+}
+
+static int LuaGetHeroStr(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    (void)lua_toboolean(L, 2);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.str : 0);
+    return 1;
+}
+
+static int LuaGetHeroAgi(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    (void)lua_toboolean(L, 2);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.agi : 0);
+    return 1;
+}
+
+static int LuaGetHeroInt(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    (void)lua_toboolean(L, 2);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.intel : 0);
+    return 1;
+}
+
+static int LuaCreateQuest(lua_State *L) {
+    quest_t *quest = G_MakeQuest();
+    if (quest) lua_pushlightuserdata(L, quest); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaDestroyQuest(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) G_RemoveQuest(quest);
+    return 0;
+}
+
+/* Quest property setters mirror the JASS api_quest.h twins.  Blizzard.j's
+ * CreateQuestBJ sets all six on the quest it creates, so the map's quest
+ * journal needs every one of them, not just the first that fails. */
+static int LuaQuestSetTitle(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    cstring_t title = luaL_checkstring(L, 2);
+    if (!G_QuestValid(quest)) return 0;
+    free(quest->title);
+    quest->title = strdup(title);
+    return 0;
+}
+
+static int LuaQuestSetDescription(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    cstring_t description = luaL_checkstring(L, 2);
+    if (!G_QuestValid(quest)) return 0;
+    free(quest->description);
+    quest->description = strdup(description);
+    return 0;
+}
+
+static int LuaQuestSetIconPath(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    cstring_t iconPath = luaL_checkstring(L, 2);
+    if (!G_QuestValid(quest)) return 0;
+    free(quest->iconPath);
+    quest->iconPath = strdup(iconPath);
+    return 0;
+}
+
+static int LuaQuestSetRequired(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) quest->required = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaQuestSetDiscovered(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) quest->discovered = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaQuestSetEnabled(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) quest->enabled = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaQuestSetCompleted(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) quest->completed = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaQuestSetFailed(lua_State *L) {
+    quest_t *quest = lua_touserdata(L, 1);
+    if (G_QuestValid(quest)) quest->failed = lua_toboolean(L, 2);
+    return 0;
+}
+
+/* Timer dialogs present the same authoritative engine timer through the HUD
+ * countdown; the Lua natives delegate to the same G_* entry points as JASS. */
+static int LuaCreateTimerDialog(lua_State *L) {
+    gtimer_t *timer = lua_touserdata(L, 1);
+    timerdialog_t *dialog = G_AllocTimerDialog(timer);
+    if (!dialog) return luaL_error(L, "CreateTimerDialog: timer-dialog registry is full");
+    lua_pushlightuserdata(L, dialog);
+    return 1;
+}
+
+static int LuaDestroyTimerDialog(lua_State *L) {
+    G_FreeTimerDialog(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaTimerDialogSetTitle(lua_State *L) {
+    timerdialog_t *dialog = lua_touserdata(L, 1);
+    cstring_t title = luaL_checkstring(L, 2);
+    if (!dialog || !dialog->inuse) return 0;
+    strlcpy(dialog->title, G_LevelString(title), sizeof(dialog->title));
+    dialog->title_set = true;
+    G_MarkTimerDialogDirty(dialog);
+    return 0;
+}
+
+static int LuaTimerDialogDisplay(lua_State *L) {
+    timerdialog_t *dialog = lua_touserdata(L, 1);
+    bool display = lua_toboolean(L, 2);
+    G_SetTimerDialogVisible(dialog, currentplayer, display);
+    return 0;
+}
+
+static int LuaCreateFogModifierRect(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t *state = lua_touserdata(L, 2);
+    box2_t *rect = lua_touserdata(L, 3);
+    bool useSharedVision = lua_toboolean(L, 4);
+    fogModifier_t *mod = lua_newuserdata(L, sizeof(*mod));
+
+    memset(mod, 0, sizeof(*mod));
+    mod->player = player ? PLAYER_NUM(player) : 0;
+    mod->state = state ? *state : 0;
+    mod->use_shared_vision = useSharedVision;
+    if (rect) {
+        mod->is_rect = true;
+        mod->rect = *rect;
+    }
+    return 1;
+}
+
+static int LuaFogModifierStart(lua_State *L) {
+    G_FogModifierStart(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaFogModifierStop(lua_State *L) {
+    G_FogModifierStop(lua_touserdata(L, 1));
+    return 0;
+}
+
 static int LuaConvertEnum(lua_State *L) {
     lua_pushinteger(L, luaL_checkinteger(L, 1));
     return 1;
@@ -1455,6 +2612,10 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "WaygateActivate", LuaWaygateActivate);
     WC3_LuaRegisterNative(L, "GetRectCenterX", LuaGetRectCenterX);
     WC3_LuaRegisterNative(L, "GetRectCenterY", LuaGetRectCenterY);
+    WC3_LuaRegisterNative(L, "GetRectMinX", LuaGetRectMinX);
+    WC3_LuaRegisterNative(L, "GetRectMinY", LuaGetRectMinY);
+    WC3_LuaRegisterNative(L, "GetRectMaxX", LuaGetRectMaxX);
+    WC3_LuaRegisterNative(L, "GetRectMaxY", LuaGetRectMaxY);
     WC3_LuaRegisterNative(L, "DestroyGroup", LuaDestroyGroup);
     WC3_LuaRegisterNative(L, "CreateTrigger", LuaCreateTrigger);
     WC3_LuaRegisterNative(L, "TriggerAddAction", LuaTriggerAddAction);
@@ -1463,8 +2624,78 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "TriggerRegisterTimerExpireEvent", LuaTriggerRegisterTimerExpireEvent);
     WC3_LuaRegisterNative(L, "TriggerRegisterPlayerUnitEvent", LuaTriggerRegisterPlayerUnitEvent);
     WC3_LuaRegisterNative(L, "TriggerRegisterUnitEvent", LuaTriggerRegisterUnitEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterTimerEvent", LuaTriggerRegisterTimerEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterPlayerEvent", LuaTriggerRegisterPlayerEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterDeathEvent", LuaTriggerRegisterDeathEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterPlayerChatEvent", LuaTriggerRegisterPlayerChatEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterPlayerStateEvent", LuaTriggerRegisterPlayerStateEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterUnitStateEvent", LuaTriggerRegisterUnitStateEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterUnitInRange", LuaTriggerRegisterUnitInRange);
+    WC3_LuaRegisterNative(L, "TriggerRegisterEnterRegion", LuaTriggerRegisterEnterRegion);
+    WC3_LuaRegisterNative(L, "TriggerRegisterLeaveRegion", LuaTriggerRegisterLeaveRegion);
+    WC3_LuaRegisterNative(L, "RegionAddRect", LuaRegionAddRect);
+    WC3_LuaRegisterNative(L, "Condition", LuaCondition);
+    WC3_LuaRegisterNative(L, "DestroyBoolExpr", LuaDestroyBoolExpr);
+    WC3_LuaRegisterNative(L, "EnableTrigger", LuaEnableTrigger);
+    WC3_LuaRegisterNative(L, "DisableTrigger", LuaDisableTrigger);
+    WC3_LuaRegisterNative(L, "IsTriggerEnabled", LuaIsTriggerEnabled);
+    WC3_LuaRegisterNative(L, "CreateUnit", LuaCreateUnit);
+    WC3_LuaRegisterNative(L, "CreateUnitAtLoc", LuaCreateUnitAtLoc);
+    WC3_LuaRegisterNative(L, "UnitAddAbility", LuaUnitAddAbility);
+    WC3_LuaRegisterNative(L, "UnitRemoveAbility", LuaUnitRemoveAbility);
+    WC3_LuaRegisterNative(L, "GetUnitAbilityLevel", LuaGetUnitAbilityLevel);
+    WC3_LuaRegisterNative(L, "SetUnitAbilityLevel", LuaSetUnitAbilityLevel);
+    WC3_LuaRegisterNative(L, "IncUnitAbilityLevel", LuaIncUnitAbilityLevel);
+    WC3_LuaRegisterNative(L, "SetPlayerAbilityAvailable", LuaSetPlayerAbilityAvailable);
+    WC3_LuaRegisterNative(L, "IsUnitType", LuaIsUnitType);
+    WC3_LuaRegisterNative(L, "UnitAddType", LuaUnitAddType);
+    WC3_LuaRegisterNative(L, "UnitRemoveType", LuaUnitRemoveType);
+    WC3_LuaRegisterNative(L, "UnitDamageTarget", LuaUnitDamageTarget);
+    WC3_LuaRegisterNative(L, "KillUnit", LuaKillUnit);
+    WC3_LuaRegisterNative(L, "RemoveUnit", LuaRemoveUnit);
+    WC3_LuaRegisterNative(L, "SetUnitOwner", LuaSetUnitOwner);
+    WC3_LuaRegisterNative(L, "GetUnitX", LuaGetUnitX);
+    WC3_LuaRegisterNative(L, "GetUnitY", LuaGetUnitY);
+    WC3_LuaRegisterNative(L, "GetUnitTypeId", LuaGetUnitTypeId);
+    WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
+    WC3_LuaRegisterNative(L, "GetUnitState", LuaGetUnitState);
+    WC3_LuaRegisterNative(L, "GetUnitCurrentOrder", LuaGetUnitCurrentOrder);
+    WC3_LuaRegisterNative(L, "GetSpellAbilityId", LuaGetSpellAbilityId);
+    WC3_LuaRegisterNative(L, "GetSpellAbilityUnit", LuaGetSpellAbilityUnit);
+    WC3_LuaRegisterNative(L, "GetSpellTargetUnit", LuaGetSpellTargetUnit);
+    WC3_LuaRegisterNative(L, "GetSpellTargetX", LuaGetSpellTargetX);
+    WC3_LuaRegisterNative(L, "GetSpellTargetY", LuaGetSpellTargetY);
+    WC3_LuaRegisterNative(L, "GetSpellTargetLoc", LuaGetSpellTargetLoc);
+    WC3_LuaRegisterNative(L, "GetTriggerPlayer", LuaGetTriggerPlayer);
+    WC3_LuaRegisterNative(L, "GetLocalPlayer", LuaGetLocalPlayer);
+    WC3_LuaRegisterNative(L, "GetPlayerId", LuaGetPlayerId);
+    WC3_LuaRegisterNative(L, "GetPlayerState", LuaGetPlayerState);
+    WC3_LuaRegisterNative(L, "GetPlayerColor", LuaGetPlayerColor);
+    WC3_LuaRegisterNative(L, "GetPlayerName", LuaGetPlayerName);
+    WC3_LuaRegisterNative(L, "GetPlayerTechCount", LuaGetPlayerTechCount);
+    WC3_LuaRegisterNative(L, "GetHeroStr", LuaGetHeroStr);
+    WC3_LuaRegisterNative(L, "GetHeroAgi", LuaGetHeroAgi);
+    WC3_LuaRegisterNative(L, "GetHeroInt", LuaGetHeroInt);
+    WC3_LuaRegisterNative(L, "CreateQuest", LuaCreateQuest);
+    WC3_LuaRegisterNative(L, "DestroyQuest", LuaDestroyQuest);
+    WC3_LuaRegisterNative(L, "QuestSetTitle", LuaQuestSetTitle);
+    WC3_LuaRegisterNative(L, "QuestSetDescription", LuaQuestSetDescription);
+    WC3_LuaRegisterNative(L, "QuestSetIconPath", LuaQuestSetIconPath);
+    WC3_LuaRegisterNative(L, "QuestSetRequired", LuaQuestSetRequired);
+    WC3_LuaRegisterNative(L, "QuestSetDiscovered", LuaQuestSetDiscovered);
+    WC3_LuaRegisterNative(L, "QuestSetEnabled", LuaQuestSetEnabled);
+    WC3_LuaRegisterNative(L, "QuestSetCompleted", LuaQuestSetCompleted);
+    WC3_LuaRegisterNative(L, "QuestSetFailed", LuaQuestSetFailed);
+    WC3_LuaRegisterNative(L, "CreateTimerDialog", LuaCreateTimerDialog);
+    WC3_LuaRegisterNative(L, "DestroyTimerDialog", LuaDestroyTimerDialog);
+    WC3_LuaRegisterNative(L, "TimerDialogSetTitle", LuaTimerDialogSetTitle);
+    WC3_LuaRegisterNative(L, "TimerDialogDisplay", LuaTimerDialogDisplay);
+    WC3_LuaRegisterNative(L, "CreateFogModifierRect", LuaCreateFogModifierRect);
+    WC3_LuaRegisterNative(L, "FogModifierStart", LuaFogModifierStart);
+    WC3_LuaRegisterNative(L, "FogModifierStop", LuaFogModifierStop);
     WC3_LuaRegisterNative(L, "TriggerEvaluate", LuaTriggerEvaluate);
     WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
+    WC3_LuaRegisterNative(L, "TriggerSleepAction", LuaTriggerSleepAction);
     WC3_LuaRegisterNative(L, "GetTriggerUnit", LuaGetTriggerUnit);
     WC3_LuaRegisterNative(L, "GetTriggeringTrigger", LuaGetTriggeringTrigger);
     WC3_LuaRegisterNative(L, "GetExpiredTimer", LuaGetExpiredTimer);
@@ -1601,6 +2832,75 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "Filter", LuaFilter);
     WC3_LuaRegisterNative(L, "GetFilterUnit", LuaGetFilterUnit);
     WC3_LuaRegisterNative(L, "GetFilterPlayer", LuaGetFilterPlayer);
+    WC3_LuaRegisterNative(L, "GetEnumUnit", LuaGetEnumUnit);
+    WC3_LuaRegisterNative(L, "GetEnumPlayer", LuaGetEnumPlayer);
+    WC3_LuaRegisterNative(L, "GroupAddUnit", LuaGroupAddUnit);
+    WC3_LuaRegisterNative(L, "GroupRemoveUnit", LuaGroupRemoveUnit);
+    WC3_LuaRegisterNative(L, "GroupClear", LuaGroupClear);
+    WC3_LuaRegisterNative(L, "FirstOfGroup", LuaFirstOfGroup);
+    WC3_LuaRegisterNative(L, "ForGroup", LuaForGroup);
+    WC3_LuaRegisterNative(L, "ForForce", LuaForForce);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsInRect", LuaGroupEnumUnitsInRect);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsInRange", LuaGroupEnumUnitsInRange);
+    WC3_LuaRegisterNative(L, "DisplayTextToPlayer", LuaDisplayTextToPlayer);
+    WC3_LuaRegisterNative(L, "DisplayTimedTextToPlayer", LuaDisplayTimedTextToPlayer);
+    WC3_LuaRegisterNative(L, "DisplayTimedTextFromPlayer", LuaDisplayTimedTextFromPlayer);
+    WC3_LuaRegisterNative(L, "ExecuteFunc", LuaExecuteFunc);
+    WC3_LuaRegisterNative(L, "I2R", LuaI2R);
+    WC3_LuaRegisterNative(L, "R2I", LuaR2I);
+    WC3_LuaRegisterNative(L, "I2S", LuaI2S);
+    WC3_LuaRegisterNative(L, "R2S", LuaR2S);
+    WC3_LuaRegisterNative(L, "SubString", LuaSubString);
+    WC3_LuaRegisterNative(L, "StringLength", LuaStringLength);
+    WC3_LuaRegisterNative(L, "GetRandomInt", LuaGetRandomInt);
+    WC3_LuaRegisterNative(L, "GetRandomReal", LuaGetRandomReal);
+    WC3_LuaRegisterNative(L, "GetLocationX", LuaGetLocationX);
+    WC3_LuaRegisterNative(L, "GetLocationY", LuaGetLocationY);
+    WC3_LuaRegisterNative(L, "RemoveLocation", LuaRemoveLocation);
+    WC3_LuaRegisterNative(L, "RemoveRect", LuaRemoveRect);
+    WC3_LuaRegisterNative(L, "GetWorldBounds", LuaGetWorldBounds);
+    WC3_LuaRegisterNative(L, "SetGameSpeed", LuaSetGameSpeed);
+    WC3_LuaRegisterNative(L, "SetMapFlag", LuaSetMapFlag);
+    WC3_LuaRegisterNative(L, "CreateItem", LuaCreateItem);
+    WC3_LuaRegisterNative(L, "RemoveItem", LuaRemoveItem);
+    WC3_LuaRegisterNative(L, "AddSpecialEffect", LuaAddSpecialEffect);
+    WC3_LuaRegisterNative(L, "AddSpecialEffectTarget", LuaAddSpecialEffectTarget);
+    WC3_LuaRegisterNative(L, "DestroyEffect", LuaDestroyEffect);
+    WC3_LuaRegisterNative(L, "AddLightning", LuaAddLightning);
+    WC3_LuaRegisterNative(L, "Preload", LuaNoop);
+    WC3_LuaRegisterNative(L, "PreloadEnd", LuaNoop);
+    WC3_LuaRegisterNative(L, "PreloadGenClear", LuaNoop);
+    WC3_LuaRegisterNative(L, "PreloadGenStart", LuaNoop);
+    WC3_LuaRegisterNative(L, "PreloadGenEnd", LuaNoop);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerSyncData", LuaBlzGetTriggerSyncData);
+
+    /* Reforged Blz* UI/sync/tooltip natives: registered as reporting stubs that
+     * log WC3_UNSUPPORTED_NATIVE once and yield nil. */
+    static cstring_t const blz_stubs[] = {
+        "BlzGetFrameByName", "BlzCreateFrame", "BlzCreateFrameByType", "BlzGetOriginFrame",
+        "BlzLoadTOCFile", "BlzGetAbilityTooltip", "BlzSetAbilityTooltip",
+        "BlzSetAbilityExtendedTooltip", "BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData",
+        "BlzFrameSetText", "BlzFrameSetSize", "BlzFrameSetPoint", "BlzFrameSetAbsPoint",
+        "BlzFrameSetAllPoints", "BlzFrameSetEnable", "BlzFrameSetScale", "BlzFrameSetVisible",
+        "BlzFrameSetLevel", "BlzFrameSetTexture", "BlzFrameSetTooltip", "BlzFrameSetTextAlignment",
+        "BlzFrameClearAllPoints", "BlzFrameClick", "BlzFrameGetChild",
+        "BlzGetTriggerPlayerMouseButton", "BlzGetTriggerPlayerMousePosition",
+        "BlzEnableSelections", "BlzGetEventAttackType", "BlzGetEventDamageSource",
+        "BlzGetEventDamageTarget", "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
+        "BlzGetUnitAbilityCooldownRemaining", "BlzGetUnitArmor", "BlzGetUnitBaseDamage",
+        "BlzGetUnitBooleanField", "BlzGetUnitMaxHP", "BlzGetUnitMaxMana", "BlzGetUnitRealField",
+        "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
+        "BlzIsUnitInvulnerable", "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
+        "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime", "BlzSetUnitArmor",
+        "BlzSetUnitBaseDamage", "BlzSetUnitIntegerFieldBJ", "BlzSetUnitMaxHP", "BlzSetUnitMaxMana",
+        "BlzSetUnitName", "BlzSetUnitRealFieldBJ", "BlzSetUnitStringFieldBJ",
+        "BlzSetUnitWeaponBooleanFieldBJ", "BlzSetUnitWeaponIntegerFieldBJ",
+        "BlzStartUnitAbilityCooldown", "BlzEndUnitAbilityCooldown", "BlzUnitCancelTimedLife",
+        "BlzUnitDisableAbility", "BlzUnitHideAbility", "BlzUnitInterruptAttack",
+    };
+    for (uint32_t i = 0; i < sizeof(blz_stubs) / sizeof(blz_stubs[0]); ++i) {
+        WC3_LuaRegisterNativeNamed(L, blz_stubs[i], LuaBlzUnsupported);
+    }
 
     static cstring_t const enum_converters[] = {
         "ConvertRace", "ConvertAllianceType", "ConvertRacePref", "ConvertIGameState",
