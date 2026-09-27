@@ -13,6 +13,16 @@ in-tree JASS parser converts those libraries to Lua and loads them before the
 map script. This avoids cross-VM handle and callback marshalling. The converter
 must reject unsupported syntax rather than silently omit it.
 
+## Milestone
+
+`23-Race-Legion.w3x` now completes `config()` and `main()` and reaches the
+600-frame budget: the bounded CASC audit reports `completed` (1 reached the
+frame limit, 0 script startup errors, 0 crashes, 0 timeouts). This is a startup
+smoke result, not objective/combat/visual correctness.
+
+Remaining runtime gaps in that log: `SetWaterBaseColor` presentation, ambient
+sound hookup, and local-only camera fields 8-10 (`CAMERA_FIELD_LOCAL_*`).
+
 ## Implemented and verified
 
 - The parser-based translator handles the library syntax encountered so far,
@@ -41,8 +51,14 @@ must reject unsupported syntax rather than silently omit it.
   and pan natives reuse the shared `g_camera.h` helpers now factored out of
   `api_camera.h`.
 - The read-only CASC audit advanced past `CreateTrigger`, `CreateSound`, weather,
-  camera creation, and `BlzCreateUnitWithSkin`; map startup now stops in `main`
-  at `TriggerRegisterUnitEvent` (then `SetUnitColor`), the next missing slices.
+  camera creation, and `BlzCreateUnitWithSkin`; the startup-blocking natives
+  `TriggerRegisterUnitEvent`, `SetUnitColor`, `SetUnitState`, `WaygateActivate`,
+  `WaygateSetDestination`, and `GetRectCenterX/Y` are now implemented, and map
+  startup completes.
+
+Note on the 18 failing `wc3_api.*` assertions in this environment: they also
+fail on the pre-change base commit `dc683593` and are platform issues (`/tmp`
+save/load paths, `dup2` redirect), not Lua regressions.
 
 ## Remaining work
 

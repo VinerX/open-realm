@@ -705,6 +705,39 @@ TEST(wc3_mapscript, lua_trigger_register_unit_event_uses_shared_event_registry) 
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_set_unit_state_and_rect_center_reuse_shared_helpers) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double center_x = 0.0, center_y = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunSetUnitStateTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "SetUnitState(u, UNIT_STATE_MANA, 123.0)\n"
+        "local r = Rect(-10.0, -20.0, 30.0, 40.0)\n"
+        "center_x = GetRectCenterX(r)\n"
+        "center_y = GetRectCenterY(r)\n"
+        "end\n"
+        "function GetCenterX() return center_x end\n"
+        "function GetCenterY() return center_y end\n",
+        "lua-set-unit-state-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    WC3_LuaRegisterInteger(lua, "UNIT_STATE_MANA", UNIT_STATE_MANA);
+    T_ASSERT(WC3_LuaCall(lua, "RunSetUnitStateTest"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "GetCenterX", &center_x));
+    T_ASSERT(WC3_LuaCallNumber(lua, "GetCenterY", &center_y));
+    T_FEQ((float)center_x, 10.0f, 0.001f);
+    T_FEQ((float)center_y, 10.0f, 0.001f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
