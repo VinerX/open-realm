@@ -55,6 +55,64 @@ static int LuaCreateTimer(lua_State *L) {
     return 1;
 }
 
+static int LuaTimerStart(lua_State *L) {
+    gtimer_t *timer = lua_touserdata(L, 1);
+    float timeout = (float)luaL_checknumber(L, 2);
+    bool periodic = lua_toboolean(L, 3);
+    int reference = LUA_NOREF;
+
+    if (!timer) return luaL_error(L, "TimerStart: invalid timer");
+    if (!lua_isnoneornil(L, 4)) {
+        luaL_checktype(L, 4, LUA_TFUNCTION);
+        reference = WC3_LuaRefFunction(level.lua_vm, 4);
+        if (reference == LUA_NOREF || reference == LUA_REFNIL)
+            return luaL_error(L, "TimerStart: could not retain callback");
+    }
+    if (timer->lua_vm) WC3_LuaUnrefFunction(timer->lua_vm, timer->lua_ref);
+    G_TimerStart(timer, (uint32_t)(MAX(0.0f, timeout) * 1000.0f), periodic, NULL);
+    timer->lua_vm = reference == LUA_NOREF ? NULL : level.lua_vm;
+    timer->lua_ref = reference;
+    return 0;
+}
+
+static int LuaDestroyTimer(lua_State *L) {
+    gtimer_t *timer = lua_touserdata(L, 1);
+    if (timer && timer->lua_vm) {
+        WC3_LuaUnrefFunction(timer->lua_vm, timer->lua_ref);
+        timer->lua_vm = NULL;
+        timer->lua_ref = LUA_NOREF;
+    }
+    G_TimerDestroy(timer);
+    return 0;
+}
+
+static int LuaPauseTimer(lua_State *L) {
+    G_TimerPause(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaResumeTimer(lua_State *L) {
+    G_TimerResume(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaTimerGetRemaining(lua_State *L) {
+    lua_pushnumber(L, G_TimerRemaining(lua_touserdata(L, 1)) / 1000.0f);
+    return 1;
+}
+
+static int LuaTimerGetElapsed(lua_State *L) {
+    gtimer_t *timer = lua_touserdata(L, 1);
+    lua_pushnumber(L, timer ? (timer->duration - G_TimerRemaining(timer)) / 1000.0f : 0.0f);
+    return 1;
+}
+
+static int LuaTimerGetTimeout(lua_State *L) {
+    gtimer_t *timer = lua_touserdata(L, 1);
+    lua_pushnumber(L, timer ? timer->duration / 1000.0f : 0.0f);
+    return 1;
+}
+
 static int LuaCreateGroup(lua_State *L) {
     ggroup_t *group = G_AllocJassGroup();
     if (!group) return luaL_error(L, "CreateGroup: group registry is full");
@@ -65,6 +123,246 @@ static int LuaCreateGroup(lua_State *L) {
 static int LuaDestroyGroup(lua_State *L) {
     G_FreeJassGroup(lua_touserdata(L, 1));
     return 0;
+}
+
+static int LuaCreateTrigger(lua_State *L) {
+    trigger_t *trigger = G_AllocJassTrigger();
+    if (!trigger) return luaL_error(L, "CreateTrigger: trigger registry is full");
+    trigger->lua_vm = level.lua_vm;
+    lua_pushlightuserdata(L, trigger);
+    return 1;
+}
+
+static int LuaTriggerAddAction(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    gTriggerAction_t *action;
+    int reference;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerAddAction: invalid Lua trigger");
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    reference = WC3_LuaRefFunction(level.lua_vm, 2);
+    if (reference == LUA_NOREF || reference == LUA_REFNIL)
+        return luaL_error(L, "TriggerAddAction: could not retain callback");
+    action = gi.MemAlloc(sizeof(*action));
+    if (!action) {
+        WC3_LuaUnrefFunction(level.lua_vm, reference);
+        return luaL_error(L, "TriggerAddAction: allocation failed");
+    }
+    memset(action, 0, sizeof(*action));
+    action->lua_vm = level.lua_vm;
+    action->lua_ref = reference;
+    ADD_TO_LIST(action, trigger->actions);
+    return 0;
+}
+
+static int LuaTriggerAddCondition(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    gTriggerCondition_t *condition;
+    int reference;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerAddCondition: invalid Lua trigger");
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    reference = WC3_LuaRefFunction(level.lua_vm, 2);
+    if (reference == LUA_NOREF || reference == LUA_REFNIL)
+        return luaL_error(L, "TriggerAddCondition: could not retain callback");
+    condition = gi.MemAlloc(sizeof(*condition));
+    if (!condition) {
+        WC3_LuaUnrefFunction(level.lua_vm, reference);
+        return luaL_error(L, "TriggerAddCondition: allocation failed");
+    }
+    memset(condition, 0, sizeof(*condition));
+    condition->lua_vm = level.lua_vm;
+    condition->lua_ref = reference;
+    ADD_TO_LIST(condition, trigger->conditions);
+    lua_pushlightuserdata(L, condition);
+    return 1;
+}
+
+static int LuaTriggerRegisterGameStateEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerRegisterGameStateEvent: invalid Lua trigger");
+    event = G_MakeEvent(EVENT_GAME_STATE_LIMIT);
+    if (!event) return luaL_error(L, "TriggerRegisterGameStateEvent: event registry is full");
+    event->trigger = trigger;
+    event->state = (uint32_t)luaL_checkinteger(L, 2);
+    event->limitop = (uint32_t)luaL_checkinteger(L, 3);
+    event->limitval = (float)luaL_checknumber(L, 4);
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterTimerExpireEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    gtimer_t *timer = lua_touserdata(L, 2);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !timer)
+        return luaL_error(L, "TriggerRegisterTimerExpireEvent: invalid trigger or timer");
+    event = G_MakeEvent(EVENT_GAME_TIMER_EXPIRED);
+    if (!event) return luaL_error(L, "TriggerRegisterTimerExpireEvent: event registry is full");
+    event->trigger = trigger;
+    event->timer = timer;
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaTriggerRegisterPlayerUnitEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    EVENTTYPE type = (EVENTTYPE)luaL_checkinteger(L, 3);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !player)
+        return luaL_error(L, "TriggerRegisterPlayerUnitEvent: invalid trigger or player");
+    event = G_MakeEvent(type);
+    if (!event) return luaL_error(L, "TriggerRegisterPlayerUnitEvent: event registry is full");
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->trigger = trigger;
+    if (!lua_isnoneornil(L, 4)) {
+        luaL_checktype(L, 4, LUA_TFUNCTION);
+        event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, 4);
+        if (event->lua_filter_ref == LUA_NOREF || event->lua_filter_ref == LUA_REFNIL) {
+            event->inuse = false;
+            return luaL_error(L, "TriggerRegisterPlayerUnitEvent: could not retain filter");
+        }
+        event->lua_filter_vm = level.lua_vm;
+    }
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+bool G_LuaTriggerEvaluate(trigger_t *trigger, wc3LuaTriggerContext_t const *context) {
+    wc3Lua_t *lua = trigger ? trigger->lua_vm : NULL;
+    wc3LuaTriggerContext_t previous;
+
+    if (!lua || !context) return false;
+    previous = WC3_LuaGetTriggerContext(lua);
+    WC3_LuaSetTriggerContext(lua, context);
+    FOR_EACH_LIST(gTriggerCondition_t, condition, trigger->conditions) {
+        bool result = false;
+        if (condition->lua_vm != lua ||
+            !WC3_LuaCallRefBoolean(lua, condition->lua_ref, &result)) {
+            WC3_LuaSetTriggerContext(lua, &previous);
+            return false;
+        }
+        if (!result) {
+            WC3_LuaSetTriggerContext(lua, &previous);
+            return false;
+        }
+    }
+    WC3_LuaSetTriggerContext(lua, &previous);
+    return true;
+}
+
+bool G_LuaTriggerExecute(trigger_t *trigger, wc3LuaTriggerContext_t const *context) {
+    wc3Lua_t *lua = trigger ? trigger->lua_vm : NULL;
+    wc3LuaTriggerContext_t previous, current;
+
+    if (!lua) return false;
+    previous = WC3_LuaGetTriggerContext(lua);
+    current = context ? *context : previous;
+    current.trigger = trigger;
+    WC3_LuaSetTriggerContext(lua, &current);
+    FOR_EACH_LIST(gTriggerAction_t, action, trigger->actions) {
+        if (action->lua_vm != lua || !WC3_LuaCallRef(lua, action->lua_ref)) {
+            WC3_LuaSetTriggerContext(lua, &previous);
+            return false;
+        }
+    }
+    WC3_LuaSetTriggerContext(lua, &previous);
+    return true;
+}
+
+bool G_LuaTimerExpired(gtimer_t *timer) {
+    wc3Lua_t *lua = timer ? timer->lua_vm : NULL;
+    wc3LuaTriggerContext_t previous, context = { 0 };
+    char error[512];
+
+    if (!lua || timer->lua_ref == LUA_NOREF || timer->lua_ref == LUA_REFNIL) return false;
+    previous = WC3_LuaGetTriggerContext(lua);
+    context.timer = timer;
+    WC3_LuaSetTriggerContext(lua, &context);
+    if (WC3_LuaCallRef(lua, timer->lua_ref)) {
+        WC3_LuaSetTriggerContext(lua, &previous);
+        return true;
+    }
+    WC3_LuaSetTriggerContext(lua, &previous);
+    strlcpy(error, WC3_LuaErrorMessage(lua), sizeof(error));
+    fprintf(stderr, "WC3 Lua: timer callback failed: %s\n", error);
+    WC3_LuaClearError(lua);
+    return false;
+}
+
+static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t const *context) {
+    return (wc3LuaTriggerContext_t){
+        .trigger = context ? context->trigger : NULL,
+        .unit = context ? context->unit : NULL,
+        .source = context ? context->source : NULL,
+        .timer = context ? context->timer : NULL,
+        .region = context ? context->region : NULL,
+        .event_value = context ? context->value : 0,
+    };
+}
+
+bool G_LuaTriggerEvaluateHost(handle_t handle, jassTriggerContext_t const *context) {
+    wc3LuaTriggerContext_t lua_context = LuaTriggerContextFromJass(context);
+    return G_LuaTriggerEvaluate(handle, &lua_context);
+}
+
+bool G_LuaTriggerExecuteHost(handle_t handle, jassTriggerContext_t const *context) {
+    wc3LuaTriggerContext_t lua_context = LuaTriggerContextFromJass(context);
+    return G_LuaTriggerExecute(handle, &lua_context);
+}
+
+static int LuaTriggerExecute(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    wc3LuaTriggerContext_t context;
+    char error[512];
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerExecute: invalid Lua trigger");
+    context = WC3_LuaGetTriggerContext(level.lua_vm);
+    if (!G_LuaTriggerExecute(trigger, &context)) {
+        strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+        WC3_LuaClearError(level.lua_vm);
+        return luaL_error(L, "TriggerExecute: %s", error);
+    }
+    return 0;
+}
+
+static int LuaTriggerEvaluate(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    wc3LuaTriggerContext_t context;
+    bool result;
+    if (!trigger || trigger->lua_vm != level.lua_vm)
+        return luaL_error(L, "TriggerEvaluate: invalid Lua trigger");
+    context = WC3_LuaGetTriggerContext(level.lua_vm);
+    context.trigger = trigger;
+    result = G_LuaTriggerEvaluate(trigger, &context);
+    lua_pushboolean(L, result);
+    return 1;
+}
+
+static int LuaGetTriggerUnit(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetTriggeringTrigger(lua_State *L) {
+    void *trigger = WC3_LuaGetTriggerContext(level.lua_vm).trigger;
+    if (trigger) lua_pushlightuserdata(L, trigger); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetExpiredTimer(lua_State *L) {
+    void *timer = WC3_LuaGetTriggerContext(level.lua_vm).timer;
+    if (timer) lua_pushlightuserdata(L, timer); else lua_pushnil(L);
+    return 1;
 }
 
 typedef struct {
@@ -332,6 +630,26 @@ static int LuaSetCameraBounds(lua_State *L) {
     return 0;
 }
 
+static int LuaGetCameraBoundMinX(lua_State *L) {
+    lua_pushnumber(L, level.camera_bounds.min.x);
+    return 1;
+}
+
+static int LuaGetCameraBoundMinY(lua_State *L) {
+    lua_pushnumber(L, level.camera_bounds.min.y);
+    return 1;
+}
+
+static int LuaGetCameraBoundMaxX(lua_State *L) {
+    lua_pushnumber(L, level.camera_bounds.max.x);
+    return 1;
+}
+
+static int LuaGetCameraBoundMaxY(lua_State *L) {
+    lua_pushnumber(L, level.camera_bounds.max.y);
+    return 1;
+}
+
 static int LuaSetDayNightModels(lua_State *L) {
     G_SetDayNightModels(luaL_checkstring(L, 1), luaL_checkstring(L, 2));
     return 0;
@@ -440,6 +758,21 @@ static int LuaGetBJMaxPlayerSlots(lua_State *L) {
     return 1;
 }
 
+static int LuaVersionGet(lua_State *L) {
+    lua_pushinteger(L, G_GetWarcraftVersion());
+    return 1;
+}
+
+static int LuaVersionCompatible(lua_State *L) {
+    lua_pushboolean(L, luaL_checkinteger(L, 1) == 0);
+    return 1;
+}
+
+static int LuaVersionSupported(lua_State *L) {
+    lua_pushboolean(L, luaL_checkinteger(L, 1) == 0);
+    return 1;
+}
+
 static int LuaSetPlayerAlliance(lua_State *L) {
     player_t *source = lua_touserdata(L, 1);
     player_t *other = lua_touserdata(L, 2);
@@ -459,6 +792,50 @@ static int LuaSetPlayerAlliance(lua_State *L) {
 static int LuaSetPlayerState(lua_State *L) {
     G_SetPlayerState(lua_touserdata(L, 1),
         (uint32_t)luaL_checkinteger(L, 2), (int32_t)luaL_checkinteger(L, 3));
+    return 0;
+}
+
+static int LuaGetPlayerTechResearched(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t tech = (uint32_t)luaL_checkinteger(L, 2);
+    (void)lua_toboolean(L, 3);
+    lua_pushboolean(L, player &&
+        G_GetPlayerTechResearchedLevel(PLAYER_CLIENT(player), tech) > 0);
+    return 1;
+}
+
+static int LuaSetPlayerTechMaxAllowed(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t tech = (uint32_t)luaL_checkinteger(L, 2);
+    int32_t maximum = (int32_t)luaL_checkinteger(L, 3);
+    if (player) G_SetPlayerTechMaxAllowed(PLAYER_CLIENT(player), tech, maximum);
+    return 0;
+}
+
+static int LuaGetPlayerTechMaxAllowed(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t tech = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushinteger(L, player ? G_GetPlayerTechMaxAllowed(PLAYER_CLIENT(player), tech) : -1);
+    return 1;
+}
+
+static int LuaSetAllItemTypeSlots(lua_State *L) {
+    G_SetAllStockSlots(true, (int32_t)luaL_checkinteger(L, 1));
+    return 0;
+}
+
+static int LuaSetAllUnitTypeSlots(lua_State *L) {
+    G_SetAllStockSlots(false, (int32_t)luaL_checkinteger(L, 1));
+    return 0;
+}
+
+static int LuaSetItemTypeSlots(lua_State *L) {
+    G_SetStockSlots(lua_touserdata(L, 1), true, (int32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaSetUnitTypeSlots(lua_State *L) {
+    G_SetStockSlots(lua_touserdata(L, 1), false, (int32_t)luaL_checkinteger(L, 2));
     return 0;
 }
 
@@ -496,6 +873,13 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "DefineStartLocation", LuaDefineStartLocation);
     WC3_LuaRegisterNative(L, "InitHashtable", LuaInitHashtable);
     WC3_LuaRegisterNative(L, "CreateTimer", LuaCreateTimer);
+    WC3_LuaRegisterNative(L, "TimerStart", LuaTimerStart);
+    WC3_LuaRegisterNative(L, "DestroyTimer", LuaDestroyTimer);
+    WC3_LuaRegisterNative(L, "PauseTimer", LuaPauseTimer);
+    WC3_LuaRegisterNative(L, "ResumeTimer", LuaResumeTimer);
+    WC3_LuaRegisterNative(L, "TimerGetRemaining", LuaTimerGetRemaining);
+    WC3_LuaRegisterNative(L, "TimerGetElapsed", LuaTimerGetElapsed);
+    WC3_LuaRegisterNative(L, "TimerGetTimeout", LuaTimerGetTimeout);
     WC3_LuaRegisterInteger(L, "MAP_PLACEMENT_TEAMS_TOGETHER", 3);
 }
 
@@ -503,6 +887,17 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     G_RegisterLuaMapConfigNatives(L);
     WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
     WC3_LuaRegisterNative(L, "DestroyGroup", LuaDestroyGroup);
+    WC3_LuaRegisterNative(L, "CreateTrigger", LuaCreateTrigger);
+    WC3_LuaRegisterNative(L, "TriggerAddAction", LuaTriggerAddAction);
+    WC3_LuaRegisterNative(L, "TriggerAddCondition", LuaTriggerAddCondition);
+    WC3_LuaRegisterNative(L, "TriggerRegisterGameStateEvent", LuaTriggerRegisterGameStateEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterTimerExpireEvent", LuaTriggerRegisterTimerExpireEvent);
+    WC3_LuaRegisterNative(L, "TriggerRegisterPlayerUnitEvent", LuaTriggerRegisterPlayerUnitEvent);
+    WC3_LuaRegisterNative(L, "TriggerEvaluate", LuaTriggerEvaluate);
+    WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
+    WC3_LuaRegisterNative(L, "GetTriggerUnit", LuaGetTriggerUnit);
+    WC3_LuaRegisterNative(L, "GetTriggeringTrigger", LuaGetTriggeringTrigger);
+    WC3_LuaRegisterNative(L, "GetExpiredTimer", LuaGetExpiredTimer);
     WC3_LuaRegisterNative(L, "GroupEnumUnitsOfPlayer", LuaGroupEnumUnitsOfPlayer);
     WC3_LuaRegisterNative(L, "BlzGroupGetSize", LuaBlzGroupGetSize);
     WC3_LuaRegisterNative(L, "BlzGroupUnitAt", LuaBlzGroupUnitAt);
@@ -525,6 +920,10 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetPlayerSlotState", LuaGetPlayerSlotState);
     WC3_LuaRegisterNative(L, "CreateSoundFromLabel", LuaCreateSoundFromLabel);
     WC3_LuaRegisterNative(L, "SetCameraBounds", LuaSetCameraBounds);
+    WC3_LuaRegisterNative(L, "GetCameraBoundMinX", LuaGetCameraBoundMinX);
+    WC3_LuaRegisterNative(L, "GetCameraBoundMinY", LuaGetCameraBoundMinY);
+    WC3_LuaRegisterNative(L, "GetCameraBoundMaxX", LuaGetCameraBoundMaxX);
+    WC3_LuaRegisterNative(L, "GetCameraBoundMaxY", LuaGetCameraBoundMaxY);
     WC3_LuaRegisterNative(L, "SetDayNightModels", LuaSetDayNightModels);
     WC3_LuaRegisterNative(L, "SetTerrainFogEx", LuaSetTerrainFogEx);
     WC3_LuaRegisterNative(L, "ConvertFogStyle", LuaConvertFogStyle);
@@ -564,8 +963,18 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetBJPlayerNeutralVictim", LuaGetBJPlayerNeutralVictim);
     WC3_LuaRegisterNative(L, "GetBJPlayerNeutralExtra", LuaGetBJPlayerNeutralExtra);
     WC3_LuaRegisterNative(L, "GetBJMaxPlayerSlots", LuaGetBJMaxPlayerSlots);
+    WC3_LuaRegisterNative(L, "VersionGet", LuaVersionGet);
+    WC3_LuaRegisterNative(L, "VersionCompatible", LuaVersionCompatible);
+    WC3_LuaRegisterNative(L, "VersionSupported", LuaVersionSupported);
     WC3_LuaRegisterNative(L, "SetPlayerAlliance", LuaSetPlayerAlliance);
     WC3_LuaRegisterNative(L, "SetPlayerState", LuaSetPlayerState);
+    WC3_LuaRegisterNative(L, "GetPlayerTechResearched", LuaGetPlayerTechResearched);
+    WC3_LuaRegisterNative(L, "SetPlayerTechMaxAllowed", LuaSetPlayerTechMaxAllowed);
+    WC3_LuaRegisterNative(L, "GetPlayerTechMaxAllowed", LuaGetPlayerTechMaxAllowed);
+    WC3_LuaRegisterNative(L, "SetAllItemTypeSlots", LuaSetAllItemTypeSlots);
+    WC3_LuaRegisterNative(L, "SetAllUnitTypeSlots", LuaSetAllUnitTypeSlots);
+    WC3_LuaRegisterNative(L, "SetItemTypeSlots", LuaSetItemTypeSlots);
+    WC3_LuaRegisterNative(L, "SetUnitTypeSlots", LuaSetUnitTypeSlots);
     WC3_LuaRegisterNative(L, "Filter", LuaFilter);
     WC3_LuaRegisterNative(L, "GetFilterUnit", LuaGetFilterUnit);
     WC3_LuaRegisterNative(L, "GetFilterPlayer", LuaGetFilterPlayer);

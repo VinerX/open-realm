@@ -179,7 +179,9 @@ void G_RunTimers(void) {
         if (timer->remaining) continue;
         timer->remaining = timer->periodic ? timer->duration : 0;
         timer->running = timer->periodic;
-        if (timer->handler)
+        if (timer->lua_vm)
+            G_LuaTimerExpired(timer);
+        else if (timer->handler)
             jass_startcoroutine(level.vm, &MAKE(jassContext_t,
                 .func = timer->handler, .timer = timer,
                 .timer_generation = timer->generation, .timer_pending = true));

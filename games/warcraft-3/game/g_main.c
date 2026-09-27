@@ -459,6 +459,8 @@ static void G_RunJassTests(cstring_t script, cstring_t entry) {
         .natives            = jass_funcs,
         .GetPlayerByNumber  = G_GetPlayerByNumber,
         .TimerCoroutineValid = G_TimerCoroutineValid,
+        .LuaTriggerEvaluate = G_LuaTriggerEvaluateHost,
+        .LuaTriggerExecute = G_LuaTriggerExecuteHost,
     ));
 
     jass_t *j = jass_newstate();
@@ -1030,6 +1032,10 @@ uint32_t G_GetPlayerNeutralAggressive(void) {
 
 uint32_t G_GetBJMaxPlayers(void) {
     return game.max_clients;
+}
+
+uint32_t G_GetWarcraftVersion(void) {
+    return gi.CvarString && atoi(gi.CvarString("fs_expansion", "0")) != 0 ? 1u : 0u;
 }
 
 uint32_t G_GetBJPlayerNeutralVictim(void) {

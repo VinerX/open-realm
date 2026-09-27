@@ -17,6 +17,18 @@ typedef struct {
     void *handles;
 } jassSnapshot_t;
 
+typedef struct jassTriggerContext_s {
+    handle_t trigger;
+    handle_t unit;
+    handle_t source;
+    handle_t timer;
+    handle_t region;
+    int32_t value;
+    float point_x, point_y;
+    bool has_point;
+    bool timer_pending;
+} jassTriggerContext_t;
+
 struct jass_module {
     cstring_t name;
     jassCFunction_t func;
@@ -47,6 +59,8 @@ typedef struct {
                            uint32_t now, uint32_t wake_time, bool yielded, bool done);
     bool (*TimerCoroutineValid)(handle_t timer, uint32_t generation);
     void (*VariableChanged)(cstring_t name, float before, float after);
+    bool (*LuaTriggerEvaluate)(handle_t trigger, jassTriggerContext_t const *context);
+    bool (*LuaTriggerExecute)(handle_t trigger, jassTriggerContext_t const *context);
 } jassHost_t;
 
 /* VM lifecycle */

@@ -376,6 +376,163 @@ TEST(wc3_mapscript, lua_player_slot_state_reads_shared_state) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, lua_trigger_execute_calls_registered_lua_action) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunTriggerTest()\n"
+        "local count = 0\n"
+        "local trigger = CreateTrigger()\n"
+        "TriggerAddCondition(trigger, function() return GetTriggeringTrigger() == trigger end)\n"
+        "TriggerAddAction(trigger, function() count = count + 1 end)\n"
+        "assert(TriggerEvaluate(trigger))\n"
+        "TriggerExecute(trigger)\n"
+        "assert(count == 1)\n"
+        "end\n",
+        "lua-trigger-action-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunTriggerTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_version_get_matches_active_edition) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    int32_t expected = atoi(gi.CvarString("fs_expansion", "0")) != 0 ? 1 : 0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunVersionTest() assert(VersionGet() == expected_version) end\n",
+        "lua-version-test.lua"));
+    WC3_LuaRegisterInteger(lua, "expected_version", expected);
+    T_ASSERT(WC3_LuaCall(lua, "RunVersionTest"));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_camera_bounds_reads_shared_map_bounds) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunCameraBoundsTest() return GetCameraBoundMinX() end\n",
+        "lua-camera-bounds-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunCameraBoundsTest", &value));
+    T_EQ((float)value, level.camera_bounds.min.x);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_get_player_tech_researched_reads_shared_tech_state) {
+    player_t *player = G_GetPlayerByNumber(0);
+    gameClient_t *client = PLAYER_CLIENT(player);
+    uint32_t tech = MAKEFOURCC('R', 'h', 'r', 't');
+    int32_t previous = G_GetPlayerTechResearchedLevel(client, tech);
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    G_SetPlayerTechResearched(client, tech, 1);
+    T_NOT_NULL(lua);
+    if (!lua) {
+        G_SetPlayerTechResearched(client, tech, previous);
+        return;
+    }
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunTechTest() assert(GetPlayerTechResearched(Player(0), tech_id, true)) end\n",
+        "lua-player-tech-test.lua"));
+    WC3_LuaRegisterInteger(lua, "tech_id", tech);
+    T_ASSERT(WC3_LuaCall(lua, "RunTechTest"));
+    G_SetPlayerTechResearched(client, tech, previous);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_player_tech_max_allowed_uses_shared_state) {
+    player_t *player = G_GetPlayerByNumber(0);
+    gameClient_t *client = PLAYER_CLIENT(player);
+    uint32_t tech = MAKEFOURCC('R', 'h', 'r', 't');
+    int32_t previous = G_GetPlayerTechMaxAllowed(client, tech);
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunTechMaxTest()\n"
+        "SetPlayerTechMaxAllowed(Player(0), tech_id, 7)\n"
+        "assert(GetPlayerTechMaxAllowed(Player(0), tech_id) == 7)\n"
+        "end\n",
+        "lua-player-tech-max-test.lua"));
+    WC3_LuaRegisterInteger(lua, "tech_id", tech);
+    T_ASSERT(WC3_LuaCall(lua, "RunTechMaxTest"));
+    G_SetPlayerTechMaxAllowed(client, tech, previous);
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_set_all_item_type_slots_uses_shared_stock_state) {
+    int32_t previous = level.stock.item_slots;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunItemSlotsTest() SetAllItemTypeSlots(7) end\n",
+        "lua-item-slots-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunItemSlotsTest"));
+    T_EQ(level.stock.item_slots, 7);
+    level.stock.item_slots = previous;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_timer_start_accepts_and_retains_lua_callback) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    uint32_t previous_timers = level.num_timers;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunTimerSetup()\n"
+        "timer_calls = 0\n"
+        "timer = CreateTimer()\n"
+        "TimerStart(timer, 1.0, false, function()\n"
+        "assert(GetExpiredTimer() == timer)\n"
+        "timer_calls = timer_calls + 1\n"
+        "end)\n"
+        "end\n"
+        "function CheckTimerCallback() assert(timer_calls == 1) end\n",
+        "lua-timer-callback-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunTimerSetup"));
+    if (level.num_timers > previous_timers) {
+        T_ASSERT(G_LuaTimerExpired(&level.timers[previous_timers]));
+        T_ASSERT(WC3_LuaCall(lua, "CheckTimerCallback"));
+    }
+    level.num_timers = previous_timers;
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_player_unit_event_registration_uses_shared_event_registry) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunPlayerUnitEventTest()\n"
+        "local trigger = CreateTrigger()\n"
+        "local event = TriggerRegisterPlayerUnitEvent(trigger, Player(0), ConvertPlayerUnitEvent(21), nil)\n"
+        "assert(event ~= nil)\n"
+        "end\n",
+        "lua-player-unit-event-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunPlayerUnitEventTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 

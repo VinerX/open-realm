@@ -318,10 +318,15 @@ uint32_t TriggerRegisterPlayerUnitEvent(jass_t *j) {
     trigger_t *whichTrigger = jass_checkhandle(j, 1, "trigger");
     player_t *whichPlayer = jass_checkhandle(j, 2, "player");
     EVENTTYPE *whichPlayerUnitEvent = jass_checkhandle(j, 3, "playerunitevent");
-    //handle_t filter = jass_checkhandle(j, 4, "boolexpr");
-    event_t *evt = G_MakeEvent(*whichPlayerUnitEvent);
+    jassFunc_t const *filter = jass_checkhandle(j, 4, "boolexpr");
+    event_t *evt;
+    if (!whichTrigger || !whichPlayer || !whichPlayerUnitEvent)
+        return jass_pushnullhandle(j, "event");
+    evt = G_MakeEvent(*whichPlayerUnitEvent);
+    if (!evt) return jass_pushnullhandle(j, "event");
     G_SetPlayerEventSubject(evt, PLAYER_ENT(whichPlayer));
     evt->trigger = whichTrigger;
+    evt->filter = filter;
     QuestPeonStageLogRegistration(whichTrigger, *whichPlayerUnitEvent, evt->subject, "player-unit");
     if (WC3_TUTORIAL_DEBUG_ENABLED() &&
         (*whichPlayerUnitEvent == EVENT_PLAYER_UNIT_CONSTRUCT_START ||

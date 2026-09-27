@@ -16,6 +16,7 @@ struct wc3Lua_s {
     char error[WC3_LUA_ERROR_MAX];
     bool error_pending;
     void *filter_unit;
+    wc3LuaTriggerContext_t trigger_context;
 };
 
 static int WC3_LuaFourCC(lua_State *L) {
@@ -188,6 +189,80 @@ bool WC3_LuaEvaluateFilter(wc3Lua_t *state, int function_index, void *unit, bool
     if (accepted) *accepted = lua_toboolean(state->L, -1);
     lua_settop(state->L, top);
     return true;
+}
+
+bool WC3_LuaEvaluateFilterRef(wc3Lua_t *state, int reference, void *unit, bool *accepted) {
+    int const top = state && state->L ? lua_gettop(state->L) : 0;
+    void *previous;
+    int status;
+
+    if (!state || !state->L || reference == LUA_NOREF || reference == LUA_REFNIL) return false;
+    previous = state->filter_unit;
+    state->filter_unit = unit;
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, reference);
+    status = WC3_LuaPCall(state->L, 0, 1);
+    state->filter_unit = previous;
+    if (status != LUA_OK) {
+        WC3_LuaCaptureError(state, "event filter");
+        lua_settop(state->L, top);
+        return false;
+    }
+    if (accepted) *accepted = lua_toboolean(state->L, -1);
+    lua_settop(state->L, top);
+    return true;
+}
+
+int WC3_LuaRefFunction(wc3Lua_t *state, int function_index) {
+    if (!state || !state->L || !lua_isfunction(state->L, function_index)) return LUA_NOREF;
+    lua_pushvalue(state->L, function_index);
+    return luaL_ref(state->L, LUA_REGISTRYINDEX);
+}
+
+void WC3_LuaUnrefFunction(wc3Lua_t *state, int reference) {
+    if (state && state->L && reference != LUA_NOREF && reference != LUA_REFNIL)
+        luaL_unref(state->L, LUA_REGISTRYINDEX, reference);
+}
+
+bool WC3_LuaCallRef(wc3Lua_t *state, int reference) {
+    int const top = state && state->L ? lua_gettop(state->L) : 0;
+    int status;
+
+    if (!state || !state->L || reference == LUA_NOREF || reference == LUA_REFNIL) return false;
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, reference);
+    status = WC3_LuaPCall(state->L, 0, 0);
+    if (status != LUA_OK) {
+        WC3_LuaCaptureError(state, "trigger callback");
+        lua_settop(state->L, top);
+        return false;
+    }
+    lua_settop(state->L, top);
+    return true;
+}
+
+bool WC3_LuaCallRefBoolean(wc3Lua_t *state, int reference, bool *result) {
+    int const top = state && state->L ? lua_gettop(state->L) : 0;
+    int status;
+
+    if (!state || !state->L || reference == LUA_NOREF || reference == LUA_REFNIL) return false;
+    lua_rawgeti(state->L, LUA_REGISTRYINDEX, reference);
+    status = WC3_LuaPCall(state->L, 0, 1);
+    if (status != LUA_OK) {
+        WC3_LuaCaptureError(state, "trigger condition");
+        lua_settop(state->L, top);
+        return false;
+    }
+    if (result) *result = lua_toboolean(state->L, -1);
+    lua_settop(state->L, top);
+    return true;
+}
+
+wc3LuaTriggerContext_t WC3_LuaGetTriggerContext(wc3Lua_t const *state) {
+    return state ? state->trigger_context : (wc3LuaTriggerContext_t){ 0 };
+}
+
+void WC3_LuaSetTriggerContext(wc3Lua_t *state, wc3LuaTriggerContext_t const *context) {
+    if (!state) return;
+    state->trigger_context = context ? *context : (wc3LuaTriggerContext_t){ 0 };
 }
 
 void *WC3_LuaFilterUnit(wc3Lua_t const *state) {

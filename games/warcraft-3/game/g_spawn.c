@@ -76,6 +76,8 @@ void G_InitJassHost(void) {
         .LoadHandle = G_LoadJassHandle,
         .CoroutineTrace = G_JassCoroutineTrace,
         .VariableChanged = G_JassVariableChanged,
+        .LuaTriggerEvaluate = G_LuaTriggerEvaluateHost,
+        .LuaTriggerExecute = G_LuaTriggerExecuteHost,
     ));
 }
 

@@ -13,6 +13,14 @@
 #include <stdint.h>
 
 typedef struct wc3Lua_s wc3Lua_t;
+typedef struct {
+    void *trigger;
+    void *unit;
+    void *source;
+    void *timer;
+    void *region;
+    int32_t event_value;
+} wc3LuaTriggerContext_t;
 /* Forward declaration matches Lua's own lua_State tag, so C natives keep the
  * exact lua_CFunction signature without this header including lua.h. */
 struct lua_State;
@@ -42,6 +50,15 @@ void WC3_LuaRegisterInteger(wc3Lua_t *L, const char *name, int64_t value);
 
 /* Evaluate a Lua boolexpr synchronously with the candidate exposed by GetFilterUnit(). */
 bool WC3_LuaEvaluateFilter(wc3Lua_t *L, int function_index, void *unit, bool *accepted);
+bool WC3_LuaEvaluateFilterRef(wc3Lua_t *L, int reference, void *unit, bool *accepted);
 void *WC3_LuaFilterUnit(wc3Lua_t const *L);
+
+/* Retain and invoke a Lua closure for engine-owned trigger callbacks. */
+int WC3_LuaRefFunction(wc3Lua_t *L, int function_index);
+void WC3_LuaUnrefFunction(wc3Lua_t *L, int reference);
+bool WC3_LuaCallRef(wc3Lua_t *L, int reference);
+bool WC3_LuaCallRefBoolean(wc3Lua_t *L, int reference, bool *result);
+wc3LuaTriggerContext_t WC3_LuaGetTriggerContext(wc3Lua_t const *L);
+void WC3_LuaSetTriggerContext(wc3Lua_t *L, wc3LuaTriggerContext_t const *context);
 
 #endif

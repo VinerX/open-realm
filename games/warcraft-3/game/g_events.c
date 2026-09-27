@@ -229,6 +229,21 @@ static void G_ExecuteEvent(gameEvent_t *evt) {
                             (unsigned)direct, (unsigned)owner_match);
                     }
                     if (direct || owner_match) {
+                        if (e->filter && !jass_evaluateboolexpr(level.vm, e->filter, subject))
+                            continue;
+                        if (e->lua_filter_vm) {
+                            bool accepted = false;
+                            if (!WC3_LuaEvaluateFilterRef(e->lua_filter_vm,
+                                                         e->lua_filter_ref, subject, &accepted)) {
+                                if (WC3_LuaErrorPending(e->lua_filter_vm)) {
+                                    fprintf(stderr, "WC3 Lua: player unit event filter failed: %s\n",
+                                            WC3_LuaErrorMessage(e->lua_filter_vm));
+                                    WC3_LuaClearError(e->lua_filter_vm);
+                                }
+                                continue;
+                            }
+                            if (!accepted) continue;
+                        }
                         bool queued = jass_calltriggerevent(level.vm, e->trigger, evt);
                         if (quest_build_event) {
                             fprintf(stderr,

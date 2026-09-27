@@ -1027,6 +1027,22 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
     if (params->trigger->disabled) {
         return false;
     }
+    if (params->trigger->lua_vm) {
+        jassTriggerContext_t context = {
+            .trigger = params->trigger,
+            .unit = params->unit,
+            .source = params->source,
+            .timer = params->timer,
+            .region = params->region,
+            .value = params->value,
+            .point_x = params->point ? params->point->x : 0.0f,
+            .point_y = params->point ? params->point->y : 0.0f,
+            .has_point = params->has_point,
+            .timer_pending = params->timer_pending,
+        };
+        return jass_host.LuaTriggerEvaluate &&
+            jass_host.LuaTriggerEvaluate(params->trigger, &context);
+    }
     jass_t tmp_state;
     FOR_EACH_LIST(gTriggerCondition_t, cond, params->trigger->conditions) {
         memcpy(&tmp_state, j, sizeof(struct jass_s));
@@ -1096,6 +1112,23 @@ bool jass_evaluateplayerexpr(jass_t *j, jassFunc_t const *expr, player_t *player
 
 static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t const *params, bool immediate) {
     jasscoroutine_t *first = NULL, *last = NULL;
+    if (params->trigger->lua_vm) {
+        jassTriggerContext_t context = {
+            .trigger = params->trigger,
+            .unit = params->unit,
+            .source = params->source,
+            .timer = params->timer,
+            .region = params->region,
+            .value = params->value,
+            .point_x = params->point ? params->point->x : 0.0f,
+            .point_y = params->point ? params->point->y : 0.0f,
+            .has_point = params->has_point,
+            .timer_pending = params->timer_pending,
+        };
+        if (jass_host.LuaTriggerExecute)
+            jass_host.LuaTriggerExecute(params->trigger, &context);
+        return;
+    }
     FOR_EACH_LIST(gTriggerAction_t, action, params->trigger->actions) {
         player_t *player = jass_eventplayer(params->unit);
         jasscoroutine_t *co = jass_startcoroutine(j, &MAKE(jassContext_t,

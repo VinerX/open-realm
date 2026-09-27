@@ -105,6 +105,7 @@ FILTER_EDICTS(ENT, G_IsEntitySelected(client_t, ENT))
 FILTER_EDICTS(ENT, G_IsEntitySelected(client_t, ENT) && G_UnitCanControl(client_t, ENT))
 
 struct jass_function;
+struct jassTriggerContext_s;
 KNOWN_AS(jass_s, jass_t);
 KNOWN_AS(gcamerasetup_s, camerasetup_t);
 KNOWN_AS(gregion_s, region_t);
@@ -1000,22 +1001,29 @@ typedef struct abilityLightningParams_s {
 
 typedef struct gtriggeraction_s {
     struct jass_function const *func;
+    wc3Lua_t *lua_vm;
+    int lua_ref;
     struct gtriggeraction_s *next;
 } gTriggerAction_t;
 
 typedef struct gtriggercondition_s {
     struct jass_function const *expr;
+    wc3Lua_t *lua_vm;
+    int lua_ref;
     struct gtriggercondition_s *next;
 } gTriggerCondition_t;
 
 struct gtrigger_s {
     gTriggerAction_t *actions;
     gTriggerCondition_t *conditions;
+    wc3Lua_t *lua_vm;
     bool disabled;
 };
 
 struct gtimer_s {
     struct jass_function const *handler;
+    wc3Lua_t *lua_vm;
+    int lua_ref;
     uint32_t duration, remaining;
     uint32_t generation;
     bool periodic, paused, running;
@@ -1743,6 +1751,8 @@ struct gevent_s {
     trigger_t *trigger;
     gtimer_t *timer;
     struct jass_function const *filter;
+    wc3Lua_t *lua_filter_vm;
+    int lua_filter_ref;
     handle_t region;
     float range;
     uint32_t state;
@@ -2053,12 +2063,18 @@ player_t *G_GetPlayerByNumber(uint32_t);
 uint32_t G_GetPlayerNeutralPassive(void);
 uint32_t G_GetPlayerNeutralAggressive(void);
 uint32_t G_GetBJMaxPlayers(void);
+uint32_t G_GetWarcraftVersion(void);
 uint32_t G_GetBJPlayerNeutralVictim(void);
 uint32_t G_GetBJPlayerNeutralExtra(void);
 uint32_t G_GetBJMaxPlayerSlots(void);
 void G_InitJassHost(void);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
 void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *lua);
+bool G_LuaTriggerEvaluate(trigger_t *trigger, wc3LuaTriggerContext_t const *context);
+bool G_LuaTriggerExecute(trigger_t *trigger, wc3LuaTriggerContext_t const *context);
+bool G_LuaTriggerEvaluateHost(handle_t trigger, struct jassTriggerContext_s const *context);
+bool G_LuaTriggerExecuteHost(handle_t trigger, struct jassTriggerContext_s const *context);
+bool G_LuaTimerExpired(gtimer_t *timer);
 uint32_t G_StringHash(cstring_t text);
 bool G_LoadLuaMapScript(wc3Lua_t *lua, cstring_t source, cstring_t chunk_name);
 bool G_LoadLuaMapJass(wc3Lua_t *lua, jass_t *jass, cstring_t source, cstring_t chunk_name);

@@ -2060,7 +2060,7 @@ uint32_t SetUbersplatRenderAlways(jass_t *j) { jassUbersplat_t *u = jass_checkha
 
 uint32_t VersionGet(jass_t *j) {
     API_ALLOC(uint32_t, version);
-    *version = 0;
+    *version = G_GetWarcraftVersion();
     return 1;
 }
 /* Version enums are typed handles from ConvertVersion, not integer arguments. */
