@@ -4,6 +4,8 @@
 #include "lua.h"
 #include "lauxlib.h"
 
+extern player_t *currentplayer;
+
 static int LuaSetMapName(lua_State *L) {
     strlcpy(level.setup.name, luaL_checkstring(L, 1), sizeof(level.setup.name));
     return 0;
@@ -461,6 +463,24 @@ static int LuaLocation(lua_State *L) {
     return 1;
 }
 
+static int LuaAddWeatherEffect(lua_State *L) {
+    box2_t *where = lua_touserdata(L, 1);
+    gweather_t *effect = G_WeatherAdd(where, (uint32_t)luaL_checkinteger(L, 2), false);
+    if (effect) lua_pushlightuserdata(L, effect);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaRemoveWeatherEffect(lua_State *L) {
+    G_WeatherRemove(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaEnableWeatherEffect(lua_State *L) {
+    G_WeatherEnable(lua_touserdata(L, 1), lua_toboolean(L, 2));
+    return 0;
+}
+
 static int LuaPlayer(lua_State *L) {
     int32_t number = (int32_t)luaL_checkinteger(L, 1);
     player_t *player = number >= 0 && number < WC3_MAX_PLAYER_SLOTS
@@ -621,6 +641,200 @@ static int LuaCreateSoundFromLabel(lua_State *L) {
     G_JassSoundRuntimeInit(sound);
     G_JassSoundSetVolume(sound, volume);
     return 1;
+}
+
+/* Sound descriptors are game-owned handles; Lua receives one light userdata
+ * per handle, matching CreateSoundFromLabel above and the JASS sound path. */
+static int LuaCreateSound(lua_State *L) {
+    gsound_t *sound = lua_newuserdata(L, sizeof(*sound));
+    cstring_t fileName = luaL_checkstring(L, 1);
+    memset(sound, 0, sizeof(*sound));
+    strlcpy(sound->fileName, fileName, sizeof(sound->fileName));
+    sound->looping = lua_toboolean(L, 2);
+    sound->is3D = lua_toboolean(L, 3);
+    sound->stopwhenoutofrange = lua_toboolean(L, 4);
+    sound->fadeInRate = (int32_t)luaL_checkinteger(L, 5);
+    sound->fadeOutRate = (int32_t)luaL_checkinteger(L, 6);
+    sound->soundIndex = gi.SoundIndex(fileName);
+    G_JassSoundRuntimeInit(sound);
+    return 1;
+}
+
+static int LuaCreateSoundFilenameWithLabel(lua_State *L) {
+    gsound_t *sound = lua_newuserdata(L, sizeof(*sound));
+    cstring_t fileName = luaL_checkstring(L, 1);
+    float volume = 1.0f;
+    memset(sound, 0, sizeof(*sound));
+    strlcpy(sound->fileName, fileName, sizeof(sound->fileName));
+    sound->looping = lua_toboolean(L, 2);
+    sound->is3D = lua_toboolean(L, 3);
+    sound->stopwhenoutofrange = lua_toboolean(L, 4);
+    sound->fadeInRate = (int32_t)luaL_checkinteger(L, 5);
+    sound->fadeOutRate = (int32_t)luaL_checkinteger(L, 6);
+    sound->soundIndex = gi.SoundIndex(fileName);
+    G_JassSoundRuntimeInit(sound);
+    if (G_SoundLabelDescriptor(luaL_checkstring(L, 7), NULL, 0, NULL, &volume))
+        G_JassSoundSetVolume(sound, volume);
+    return 1;
+}
+
+static int LuaSetSoundParamsFromLabel(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    float volume = 1.0f;
+
+    /* Authored volume only; pitch/channel/distance remain mixer gaps. */
+    if (sound && G_SoundLabelDescriptor(luaL_checkstring(L, 2), NULL, 0, NULL, &volume))
+        G_JassSoundSetVolume(sound, volume);
+    return 0;
+}
+
+static int LuaSetSoundVolume(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    int32_t volume = (int32_t)luaL_checkinteger(L, 2);
+    if (sound) G_JassSoundSetVolume(sound, (float)MAX(0, MIN(volume, 127)) / 127.0f);
+    return 0;
+}
+
+static int LuaSetSoundDuration(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    if (sound) sound->duration = (uint32_t)MAX(0, (int32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+/* Pitch/channel are accepted but not transported: the entity sound path has no
+ * pitch/channel field yet, matching the JASS SetSoundPitch/SetSoundChannel gap. */
+static int LuaSetSoundPitch(lua_State *L) {
+    (void)luaL_checknumber(L, 2);
+    return 0;
+}
+
+static int LuaSetSoundChannel(lua_State *L) {
+    (void)luaL_checkinteger(L, 2);
+    return 0;
+}
+
+static int LuaGetSoundDuration(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    lua_pushinteger(L, sound ? (lua_Integer)sound->duration : 0);
+    return 1;
+}
+
+static int LuaGetSoundFileDuration(lua_State *L) {
+    lua_pushinteger(L, G_SoundFileDuration(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+static int LuaSetSoundPosition(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2);
+    float y = (float)luaL_checknumber(L, 3);
+    float z = (float)luaL_checknumber(L, 4);
+    if (sound) G_JassSoundSetPosition(sound, &MAKE(vec3_t, x, y, z));
+    return 0;
+}
+
+static int LuaAttachSoundToUnit(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    if (sound) G_JassSoundAttach(sound, unit);
+    return 0;
+}
+
+static int LuaStartSound(lua_State *L) {
+    gsound_t *sound = lua_touserdata(L, 1);
+    jassSoundPlayback_t playback;
+    float attenuation;
+
+    if (!sound || !sound->soundIndex) return 0;
+    G_JassSoundPlayback(sound, &playback);
+    attenuation = sound->is3D ? 1.0f : 0.0f;
+
+    if (currentplayer) {
+        edict_t *recipient = PLAYER_ENT(currentplayer);
+        if (!recipient || !recipient->client || !recipient->client->connected) return 0;
+        if (playback.positioned)
+            G_PlaySound(&playback.origin, recipient, CHAN_OWNER | CHAN_RELIABLE, sound->soundIndex,
+                        playback.volume, attenuation, 0.0f);
+        else
+            G_PlaySound(NULL, recipient, CHAN_OWNER | CHAN_RELIABLE, sound->soundIndex,
+                        playback.volume, attenuation, 0.0f);
+        return 0;
+    }
+
+    if (playback.positioned)
+        G_PlaySound(&playback.origin, playback.emitter, CHAN_RELIABLE, sound->soundIndex,
+                    playback.volume, attenuation, 0.0f);
+    else
+        G_PlaySound(NULL, NULL, CHAN_RELIABLE, sound->soundIndex, playback.volume, attenuation, 0.0f);
+    return 0;
+}
+
+static int LuaPlayMusic(lua_State *L) {
+    G_MusicPlay(luaL_checkstring(L, 1), 0, 0);
+    return 0;
+}
+
+static int LuaPlayMusicEx(lua_State *L) {
+    cstring_t musicName = luaL_checkstring(L, 1);
+    int32_t frommsecs = (int32_t)luaL_checkinteger(L, 2);
+    int32_t fadeinmsecs = (int32_t)luaL_checkinteger(L, 3);
+    G_MusicPlay(musicName, MAX(0, frommsecs), MAX(0, fadeinmsecs));
+    return 0;
+}
+
+static int LuaClearMapMusic(lua_State *L) {
+    (void)L;
+    G_MusicClearMap();
+    return 0;
+}
+
+static int LuaPlayThematicMusic(lua_State *L) {
+    G_MusicPlayThematic(luaL_checkstring(L, 1), 0);
+    return 0;
+}
+
+static int LuaPlayThematicMusicEx(lua_State *L) {
+    cstring_t musicFileName = luaL_checkstring(L, 1);
+    int32_t frommsecs = (int32_t)luaL_checkinteger(L, 2);
+    G_MusicPlayThematic(musicFileName, MAX(0, frommsecs));
+    return 0;
+}
+
+static int LuaEndThematicMusic(lua_State *L) {
+    (void)L;
+    G_MusicEndThematic();
+    return 0;
+}
+
+static int LuaStopMusic(lua_State *L) {
+    G_MusicStop(lua_toboolean(L, 1));
+    return 0;
+}
+
+static int LuaResumeMusic(lua_State *L) {
+    (void)L;
+    G_MusicResume();
+    return 0;
+}
+
+static int LuaSetMusicVolume(lua_State *L) {
+    G_MusicSetVolume((int32_t)luaL_checkinteger(L, 1));
+    return 0;
+}
+
+static int LuaSetMusicPlayPosition(lua_State *L) {
+    G_MusicSetPosition((int32_t)luaL_checkinteger(L, 1));
+    return 0;
+}
+
+static int LuaSetThematicMusicVolume(lua_State *L) {
+    G_MusicSetThematicVolume((int32_t)luaL_checkinteger(L, 1));
+    return 0;
+}
+
+static int LuaSetThematicMusicPlayPosition(lua_State *L) {
+    G_MusicSetThematicPosition((int32_t)luaL_checkinteger(L, 1));
+    return 0;
 }
 
 static int LuaSetCameraBounds(lua_State *L) {
@@ -903,6 +1117,9 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzGroupUnitAt", LuaBlzGroupUnitAt);
     WC3_LuaRegisterNative(L, "Rect", LuaRect);
     WC3_LuaRegisterNative(L, "Location", LuaLocation);
+    WC3_LuaRegisterNative(L, "AddWeatherEffect", LuaAddWeatherEffect);
+    WC3_LuaRegisterNative(L, "RemoveWeatherEffect", LuaRemoveWeatherEffect);
+    WC3_LuaRegisterNative(L, "EnableWeatherEffect", LuaEnableWeatherEffect);
     WC3_LuaRegisterNative(L, "Player", LuaPlayer);
     WC3_LuaRegisterNative(L, "SetPlayerStartLocation", LuaSetPlayerStartLocation);
     WC3_LuaRegisterNative(L, "ForcePlayerStartLocation", LuaForcePlayerStartLocation);
@@ -918,7 +1135,31 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetPlayerController", LuaSetPlayerController);
     WC3_LuaRegisterNative(L, "GetPlayerController", LuaGetPlayerController);
     WC3_LuaRegisterNative(L, "GetPlayerSlotState", LuaGetPlayerSlotState);
+    WC3_LuaRegisterNative(L, "CreateSound", LuaCreateSound);
+    WC3_LuaRegisterNative(L, "CreateSoundFilenameWithLabel", LuaCreateSoundFilenameWithLabel);
     WC3_LuaRegisterNative(L, "CreateSoundFromLabel", LuaCreateSoundFromLabel);
+    WC3_LuaRegisterNative(L, "SetSoundParamsFromLabel", LuaSetSoundParamsFromLabel);
+    WC3_LuaRegisterNative(L, "SetSoundVolume", LuaSetSoundVolume);
+    WC3_LuaRegisterNative(L, "SetSoundPitch", LuaSetSoundPitch);
+    WC3_LuaRegisterNative(L, "SetSoundChannel", LuaSetSoundChannel);
+    WC3_LuaRegisterNative(L, "SetSoundDuration", LuaSetSoundDuration);
+    WC3_LuaRegisterNative(L, "GetSoundDuration", LuaGetSoundDuration);
+    WC3_LuaRegisterNative(L, "GetSoundFileDuration", LuaGetSoundFileDuration);
+    WC3_LuaRegisterNative(L, "SetSoundPosition", LuaSetSoundPosition);
+    WC3_LuaRegisterNative(L, "AttachSoundToUnit", LuaAttachSoundToUnit);
+    WC3_LuaRegisterNative(L, "StartSound", LuaStartSound);
+    WC3_LuaRegisterNative(L, "PlayMusic", LuaPlayMusic);
+    WC3_LuaRegisterNative(L, "PlayMusicEx", LuaPlayMusicEx);
+    WC3_LuaRegisterNative(L, "ClearMapMusic", LuaClearMapMusic);
+    WC3_LuaRegisterNative(L, "PlayThematicMusic", LuaPlayThematicMusic);
+    WC3_LuaRegisterNative(L, "PlayThematicMusicEx", LuaPlayThematicMusicEx);
+    WC3_LuaRegisterNative(L, "EndThematicMusic", LuaEndThematicMusic);
+    WC3_LuaRegisterNative(L, "StopMusic", LuaStopMusic);
+    WC3_LuaRegisterNative(L, "ResumeMusic", LuaResumeMusic);
+    WC3_LuaRegisterNative(L, "SetMusicVolume", LuaSetMusicVolume);
+    WC3_LuaRegisterNative(L, "SetMusicPlayPosition", LuaSetMusicPlayPosition);
+    WC3_LuaRegisterNative(L, "SetThematicMusicVolume", LuaSetThematicMusicVolume);
+    WC3_LuaRegisterNative(L, "SetThematicMusicPlayPosition", LuaSetThematicMusicPlayPosition);
     WC3_LuaRegisterNative(L, "SetCameraBounds", LuaSetCameraBounds);
     WC3_LuaRegisterNative(L, "GetCameraBoundMinX", LuaGetCameraBoundMinX);
     WC3_LuaRegisterNative(L, "GetCameraBoundMinY", LuaGetCameraBoundMinY);

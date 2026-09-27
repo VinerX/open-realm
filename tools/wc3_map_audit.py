@@ -32,6 +32,7 @@ BROAD_RE = re.compile(
 FAMILY_MEANINGS = {
     "SIGSEGV": "Process exited on signal 11; an optional serial rerun confirms reproducibility.",
     "PROCESS_EXIT": "Process returned a nonzero exit code other than signal 11.",
+    "SCRIPT_STARTUP": "Script load/config/main did not complete; the map never reached steady runtime.",
     "SLK_MISSING": "A required SLK failed to load.",
     "CREEP_SLEEP_ART": "ACsp TargetArt is absent; engine used canonical art.",
     "CREEP_SLEEP_SPAWN": "Creep-sleep overlay creation failed.",
@@ -44,6 +45,35 @@ FAMILY_MEANINGS = {
     "DEFAULT_ZFOG": "DefaultZFog.Style is missing for version 1.",
     "PARSER_ERROR": "Runtime emitted an otherwise unqualified parser error.",
 }
+
+# A process can exit 0 after the frame budget even when its script never started
+# running. These are the engine's own startup-failure signatures (Lua and JASS
+# paths); reaching the frame limit only counts as health when none of them fired.
+SCRIPT_STARTUP_FAILURE_PATTERN = (
+    r"G_StartScripts: .* failed for |"
+    r"G_SpawnEntities: (?:Lua load|Lua runtime prelude|Lua config|Lua dependency) failed for |"
+    r"G_SpawnEntities: missing selected map script |"
+    r"CM_ReadMapScript: map declares Lua but war3map\.lua is missing |"
+    r"CM_ReadMapScript: missing war3map\.j"
+)
+SCRIPT_STARTUP_FAILURE_RE = re.compile(rf"^(?:{SCRIPT_STARTUP_FAILURE_PATTERN})", re.MULTILINE)
+
+
+def classify_run_status(exit_code: int | None, output: str) -> str:
+    """Map one bounded run to its honest outcome.
+
+    A zero exit code only means the frame budget elapsed; it is not proof the
+    map script ran. Any engine-reported script startup failure downgrades the
+    result to ``script_error`` so the report cannot claim completion for a map
+    whose ``load``/``config``/``main`` died.
+    """
+    if exit_code is None:
+        return "timeout"
+    if exit_code != 0:
+        return "crashed"
+    if SCRIPT_STARTUP_FAILURE_RE.search(output):
+        return "script_error"
+    return "completed"
 
 
 def run_mpqtool(mpqtool: Path, archive: Path, command: str, member: str) -> bytes:
@@ -217,6 +247,9 @@ def compact_diagnostics(output: str, status: str, exit_code: int | None,
     if rows:
         errors.append(f"TECH_CAPACITY ×{sum(count for _, count in rows)}")
         families.add("TECH_CAPACITY")
+    for line, count in sorted(take(rf"^(?:{SCRIPT_STARTUP_FAILURE_PATTERN})")):
+        errors.append(f"SCRIPT_STARTUP `{line}` ×{count}")
+        families.add("SCRIPT_STARTUP")
     for line, count in take(r"^JASS runtime error: unimplemented native:"):
         native = line.rsplit(":", 1)[-1].strip()
         errors.append(f"JASS `{native}` ×{count}")
@@ -271,13 +304,12 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
                 text=True, errors="replace", timeout=args.timeout)
             output = proc.stdout + proc.stderr
             exit_code = proc.returncode
-            status = "completed" if exit_code == 0 else "crashed"
-            if status == "completed" and re.search(r"^G_StartScripts: .* failed for ", output, re.MULTILINE):
-                status = "script_error"
+            status = classify_run_status(exit_code, output)
         except subprocess.TimeoutExpired as error:
             stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
             stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
-            output, exit_code, status = stdout + stderr, None, "timeout"
+            output, exit_code = stdout + stderr, None
+            status = classify_run_status(exit_code, output)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text(output, encoding="utf-8")
     return {

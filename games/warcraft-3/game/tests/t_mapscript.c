@@ -533,6 +533,101 @@ TEST(wc3_mapscript, lua_player_unit_event_registration_uses_shared_event_registr
     WC3_LuaClose(lua);
 }
 
+static int mapscript_captured_sound_index;
+static int mapscript_capture_sound_index(cstring_t path) {
+    (void)path;
+    return 77;
+}
+
+static void mapscript_capture_sound_index_play(edict_t *ent, int channel, int sound,
+                                               float volume, float attenuation, float timeofs) {
+    (void)ent; (void)channel; (void)volume; (void)attenuation; (void)timeofs;
+    mapscript_captured_sound_index = sound;
+}
+
+static void mapscript_capture_positioned_sound(vec3_t const *origin, edict_t *ent, int channel, int sound,
+                                               float volume, float attenuation, float timeofs) {
+    (void)origin;
+    mapscript_capture_sound_index_play(ent, channel, sound, volume, attenuation, timeofs);
+}
+
+TEST(wc3_mapscript, lua_create_sound_round_trips_duration_and_volume) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunCreateSoundTest()\n"
+        "local s = CreateSound(\"Sound\\\\Custom\\\\voice.wav\", false, true, false, 0, 0, \"DefaultEAXON\")\n"
+        "assert(GetSoundDuration(s) == 0)\n"
+        "SetSoundDuration(s, 2275)\n"
+        "assert(GetSoundDuration(s) == 2275)\n"
+        "SetSoundVolume(s, 127)\n"
+        "end\n",
+        "lua-create-sound-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunCreateSoundTest"));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_start_sound_transports_through_shared_sound_path) {
+    int (*old_soundindex)(cstring_t) = gi.SoundIndex;
+    void (*old_sound)(edict_t *, int, int, float, float, float) = gi.Sound;
+    void (*old_positioned)(vec3_t const *, edict_t *, int, int, float, float, float) = gi.PositionedSound;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    mapscript_captured_sound_index = 0;
+    gi.SoundIndex = mapscript_capture_sound_index;
+    gi.Sound = mapscript_capture_sound_index_play;
+    gi.PositionedSound = mapscript_capture_positioned_sound;
+
+    T_NOT_NULL(lua);
+    if (!lua) {
+        gi.SoundIndex = old_soundindex; gi.Sound = old_sound; gi.PositionedSound = old_positioned;
+        return;
+    }
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunStartSoundTest()\n"
+        "local s = CreateSound(\"Sound\\\\Custom\\\\voice.wav\", false, true, false, 0, 0, \"\")\n"
+        "StartSound(s)\n"
+        "end\n",
+        "lua-start-sound-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunStartSoundTest"));
+    T_EQ(mapscript_captured_sound_index, 77);
+    gi.SoundIndex = old_soundindex; gi.Sound = old_sound; gi.PositionedSound = old_positioned;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_add_weather_effect_uses_shared_weather_state) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t snow = MAKEFOURCC('S', 'N', 'l', 's');
+    uint32_t slot = MAX_WEATHER_EFFECTS;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    FOR_LOOP(i, MAX_WEATHER_EFFECTS) {
+        if (!level.weather_effects[i].inuse) { slot = i; break; }
+    }
+    T_ASSERT(slot < MAX_WEATHER_EFFECTS);
+    if (slot >= MAX_WEATHER_EFFECTS) { WC3_LuaClose(lua); return; }
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunWeatherTest()\n"
+        "local r = Rect(-8192.0, 24960.0, 10304.0, 30464.0)\n"
+        "local we = AddWeatherEffect(r, weather_id)\n"
+        "assert(we ~= nil)\n"
+        "EnableWeatherEffect(we, true)\n"
+        "end\n",
+        "lua-weather-test.lua"));
+    WC3_LuaRegisterInteger(lua, "weather_id", snow);
+    T_ASSERT(WC3_LuaCall(lua, "RunWeatherTest"));
+    T_ASSERT(level.weather_effects[slot].inuse);
+    T_EQ(level.weather_effects[slot].effect_id, snow);
+    T_ASSERT(level.weather_effects[slot].enabled);
+    T_FEQ(level.weather_effects[slot].bounds.min.x, -8192.0f, 0.001f);
+    T_FEQ(level.weather_effects[slot].bounds.max.y, 30464.0f, 0.001f);
+    G_WeatherRemove(&level.weather_effects[slot]);
+    WC3_LuaClose(lua);
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 

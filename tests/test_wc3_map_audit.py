@@ -70,6 +70,47 @@ JASS runtime error: unimplemented native: EnumItemsInRect
         self.assertEqual(families, {"PROCESS_EXIT"})
 
 
+class RunStatusTest(unittest.TestCase):
+    def test_zero_exit_without_script_failure_is_completed(self):
+        self.assertEqual(AUDIT.classify_run_status(0, "Game initialized.\nframe limit reached\n"), "completed")
+
+    def test_timeout_is_reported_as_timeout(self):
+        self.assertEqual(AUDIT.classify_run_status(None, ""), "timeout")
+
+    def test_nonzero_exit_is_crashed(self):
+        self.assertEqual(AUDIT.classify_run_status(-11, ""), "crashed")
+
+    def test_lua_main_failure_downgrades_completed_run(self):
+        output = (
+            "Game initialized.\n"
+            "G_StartScripts: Lua main failed for 23-Race-Legion.w3x: "
+            "[string \"war3map.lua\"]:1: attempt to call a nil value\n"
+            "frame limit reached\n"
+        )
+        self.assertEqual(AUDIT.classify_run_status(0, output), "script_error")
+
+    def test_lua_config_failure_downgrades_completed_run(self):
+        output = "G_SpawnEntities: Lua config failed for map.w3x: boom\n"
+        self.assertEqual(AUDIT.classify_run_status(0, output), "script_error")
+
+    def test_lua_load_and_dependency_failures_downgrade(self):
+        for line in (
+            "G_SpawnEntities: Lua load failed for map.w3x: boom",
+            "G_SpawnEntities: Lua runtime prelude failed for map.w3x",
+            "G_SpawnEntities: Lua dependency failed for Scripts\\Blizzard.j: boom",
+            "G_SpawnEntities: missing selected map script in map.w3x",
+            "CM_ReadMapScript: map declares Lua but war3map.lua is missing in (unknown)",
+            "CM_ReadMapScript: missing war3map.j / scripts\\war3map.j in (unknown)",
+        ):
+            self.assertEqual(AUDIT.classify_run_status(0, line + "\n"), "script_error", line)
+
+    def test_startup_failure_is_its_own_family(self):
+        output = "G_StartScripts: Lua main failed for map.w3x: boom\n"
+        errors, families = AUDIT.compact_diagnostics(output, "script_error", 0, False)
+        self.assertIn("SCRIPT_STARTUP", families)
+        self.assertTrue(any("SCRIPT_STARTUP" in error for error in errors))
+
+
 class ReportTest(unittest.TestCase):
     def test_report_names_file_and_does_not_claim_completion(self):
         report = {
