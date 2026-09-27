@@ -120,6 +120,10 @@ TEST(wc3_mapscript, jass_to_lua_preserves_globals_and_functions) {
         "assert(bj_slots[2] == 3 and bj_label == 'start!' and bj_rawcode == FourCC('hfoo'))\n"
         "assert(GetEndMinusOne(7) == 6)\n",
         "verify-transpiled-globals.lua"));
+    WC3_LuaRegisterInteger(lua, "expected_rawcode", MAKEFOURCC('h','f','o','o'));
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "assert(bj_rawcode == expected_rawcode)\n",
+        "verify-transpiled-fourcc-byte-order.lua"));
 
 cleanup:
     free(lua_source);
@@ -1064,6 +1068,32 @@ TEST(wc3_mapscript, lua_create_unit_and_ability_helpers_use_shared_engine) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_issue_immediate_order_matches_jass_engine_path) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) { reset_entities(); return; }
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunImmediateOrderTest()\n"
+        "local unit = CreateUnit(Player(0), unit_id, 32.0, 32.0, 0.0)\n"
+        "assert(unit ~= nil)\n"
+        "assert(IssueImmediateOrder(unit, 'stop'))\n"
+        "assert(GetUnitCurrentOrder(unit) == OrderId('stop'))\n"
+        "RemoveUnit(unit)\n"
+        "end\n",
+        "lua-immediate-order-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunImmediateOrderTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_condition_returns_callable_and_drives_trigger) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua = WC3_LuaNewState();
@@ -1295,6 +1325,144 @@ TEST(wc3_mapscript, lua_rect_edges_and_create_unit_at_loc_match_jass) {
     T_FEQ((float)result, 11.0f, 0.001f);
     level.lua_vm = previous_lua;
     WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_order_id_matches_jass_engine_lookup) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunOrderIdTest() return OrderId('attack') end\n",
+        "lua-order-id-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunOrderIdTest", &value));
+    T_EQ((uint32_t)value, G_OrderId("attack"));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_get_attacker_uses_shared_trigger_unit_context) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    wc3LuaTriggerContext_t previous_context, context = { 0 };
+    edict_t *attacker;
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    attacker = G_Spawn();
+    T_NOT_NULL(attacker);
+    if (!attacker) goto cleanup;
+    context.unit = attacker;
+    previous_context = WC3_LuaGetTriggerContext(lua);
+    WC3_LuaSetTriggerContext(lua, &context);
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunAttackerTest() return GetAttacker() ~= nil and 1 or 0 end\n",
+        "lua-get-attacker-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunAttackerTest", &value));
+    T_EQ(value, 1.0);
+    WC3_LuaSetTriggerContext(lua, &previous_context);
+cleanup:
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_get_event_damage_source_reads_shared_context) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    wc3LuaTriggerContext_t previous_context, context = { 0 };
+    edict_t *source;
+    double value = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    source = G_Spawn();
+    T_NOT_NULL(source);
+    if (!source) goto cleanup;
+    context.source = source;
+    previous_context = WC3_LuaGetTriggerContext(lua);
+    WC3_LuaSetTriggerContext(lua, &context);
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunDamageSourceTest() return GetEventDamageSource() ~= nil and 1 or 0 end\n",
+        "lua-event-damage-source-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunDamageSourceTest", &value));
+    T_EQ(value, 1.0);
+    WC3_LuaSetTriggerContext(lua, &previous_context);
+cleanup:
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_unit_item_in_slot_matches_inventory_state) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) { reset_entities(); return; }
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunItemSlotTest()\n"
+        "local unit = CreateUnit(Player(0), unit_id, 32.0, 32.0, 0.0)\n"
+        "assert(unit ~= nil)\n"
+        "assert(UnitItemInSlot(unit, 0) == nil)\n"
+        "end\n",
+        "lua-unit-item-in-slot-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunItemSlotTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_set_player_tech_researched_updates_engine_state) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint32_t tech = MAKEFOURCC('R', 't', 's', 't');
+    player_t *player;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    player = G_GetPlayerByNumber(0);
+    T_NOT_NULL(player);
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunSetTechTest() SetPlayerTechResearched(Player(0), tech_id, 2) end\n",
+        "lua-set-player-tech-test.lua"));
+    WC3_LuaRegisterInteger(lua, "tech_id", tech);
+    T_ASSERT(WC3_LuaCall(lua, "RunSetTechTest"));
+    T_EQ(G_GetPlayerTechResearchedLevel(PLAYER_CLIENT(player), tech), 2);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, event_registry_exceeds_legacy_1024_slot_limit) {
+    event_t *event = NULL;
+    uint32_t allocated = 0;
+
+    reset_entities();
+    setup_test_world();
+    while (allocated < 1025) {
+        event = G_MakeEvent(EVENT_PLAYER_CHAT);
+        if (!event) break;
+        allocated++;
+    }
+    T_NOT_NULL(event);
+    T_EQ(allocated, 1025);
     reset_entities();
 }
 

@@ -154,4 +154,41 @@ TEST(wc3_fs, casc_storage_reopens_after_reset) {
     }
     FS_Shutdown();
 }
+
+/* Reforged keeps localized-only files such as GlobalStrings.fdf out of the
+ * base module: they exist solely under war3.w3mod:_locales\<loc>.w3mod:.  A bare
+ * request must fall through to that module or UI loading cannot resolve its
+ * string tables.  Base-only data (unitdata.slk) must still resolve, so the
+ * fallback cannot simply prefer the locale module. */
+TEST(wc3_fs, casc_bare_request_resolves_localized_and_base_modules) {
+    cstring_t root = fs_test_casc_root();
+    handle_t file;
+    char sample[2] = {0};
+    uint32_t bytes_read = 0;
+    uint64_t size = 0;
+
+    if (!root) return;
+    T_NOT_NULL(root);
+    FS_Shutdown();
+    T_ASSERT(FS_AddDataDirectory(root));
+
+    file = FS_OpenFile("UI\\FrameDef\\GlobalStrings.fdf");
+    T_NOT_NULL(file);
+    if (file) {
+        T_ASSERT(FS_GetFileSize(file, &size));
+        T_ASSERT(size > 0);
+        FS_CloseFile(file);
+    }
+
+    file = FS_OpenFile("Units\\UnitData.slk");
+    T_NOT_NULL(file);
+    if (file) {
+        T_ASSERT(FS_GetFileSize(file, &size));
+        T_ASSERT(size > 0);
+        T_ASSERT(FS_ReadFileHandle(file, sample, 1, &bytes_read));
+        T_EQ(bytes_read, 1);
+        FS_CloseFile(file);
+    }
+    FS_Shutdown();
+}
 #endif

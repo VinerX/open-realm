@@ -761,9 +761,16 @@ model_t *R_LoadModel(cstring_t modelFilename) {
         return NULL;
     }
     if (*(uint32_t *)buffer == ID_MDLX) {
-        model = ri.MemAlloc(sizeof(model_t));
-        model->mdx = R_LoadModelMDLX(buffer, fileSize);
-        model->modeltype = ID_MDLX;
+        /* R_LoadModelMDLX returns NULL for an unsupported or corrupt block and
+         * has already torn down its partial model.  Do not allocate an
+         * ID_MDLX handle around a NULL mdx: R_ReleaseModel would dereference it.
+         * The parser logs the failing block itself. */
+        mdxModel_t *mdx = R_LoadModelMDLX(buffer, fileSize);
+        if (mdx) {
+            model = ri.MemAlloc(sizeof(model_t));
+            model->mdx = mdx;
+            model->modeltype = ID_MDLX;
+        }
     } else if (R_W3PathHasExtension(modelFilename, ".mdl")) {
         /* Same case-insensitive issue: use stem length, not strstr. */
         PATHSTR tempFileName = { 0 };

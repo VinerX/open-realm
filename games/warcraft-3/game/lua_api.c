@@ -822,6 +822,18 @@ static int LuaGetUnitCurrentOrder(lua_State *L) {
     return 1;
 }
 
+static int LuaIssueImmediateOrder(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    lua_pushboolean(L, unit_issueimmediateorder(unit, order));
+    return 1;
+}
+
+static int LuaOrderId(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)G_OrderId(luaL_checkstring(L, 1)));
+    return 1;
+}
+
 static int LuaGetSpellAbilityId(lua_State *L) {
     lua_pushinteger(L, WC3_LuaGetTriggerContext(level.lua_vm).event_value);
     return 1;
@@ -980,6 +992,38 @@ static int LuaGetTriggerUnit(lua_State *L) {
     return 1;
 }
 
+static int LuaGetAttacker(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+/* Damage events publish the damaged unit as the context unit, the attacker as
+ * the context source, and the damage as the event value, matching the JASS
+ * GetEventDamage/GetEventDamageSource pair in api_misc.h. */
+static int LuaGetEventDamage(lua_State *L) {
+    lua_pushnumber(L, (lua_Number)WC3_LuaGetTriggerContext(level.lua_vm).event_value);
+    return 1;
+}
+
+static int LuaGetEventDamageSource(lua_State *L) {
+    void *source = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (source) lua_pushlightuserdata(L, source); else lua_pushnil(L);
+    return 1;
+}
+
+/* Reforged aliases: the damaged unit is the context unit and the attacker is
+ * the context source, so both reuse the same values as the classic pair. */
+static int LuaBlzGetEventDamageTarget(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaBlzGetEventDamageSource(lua_State *L) {
+    return LuaGetEventDamageSource(L);
+}
+
 static int LuaGetTriggeringTrigger(lua_State *L) {
     void *trigger = WC3_LuaGetTriggerContext(level.lua_vm).trigger;
     if (trigger) lua_pushlightuserdata(L, trigger); else lua_pushnil(L);
@@ -1085,6 +1129,13 @@ static int LuaLocation(lua_State *L) {
     vec2_t *location = lua_newuserdata(L, sizeof(*location));
     location->x = (float)luaL_checknumber(L, 1);
     location->y = (float)luaL_checknumber(L, 2);
+    return 1;
+}
+
+static int LuaGetUnitLoc(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    vec2_t *location = lua_newuserdata(L, sizeof(*location));
+    *location = unit ? unit->s.origin2 : MAKE(vec2_t, 0.0f, 0.0f);
     return 1;
 }
 
@@ -1899,6 +1950,14 @@ static int LuaGetPlayerTechResearched(lua_State *L) {
     return 1;
 }
 
+static int LuaSetPlayerTechResearched(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    uint32_t tech = (uint32_t)luaL_checkinteger(L, 2);
+    int32_t level_value = (int32_t)luaL_checkinteger(L, 3);
+    if (player) G_SetPlayerTechResearched(PLAYER_CLIENT(player), tech, level_value);
+    return 0;
+}
+
 static int LuaSetPlayerTechMaxAllowed(lua_State *L) {
     player_t *player = lua_touserdata(L, 1);
     uint32_t tech = (uint32_t)luaL_checkinteger(L, 2);
@@ -2287,6 +2346,22 @@ static int LuaRemoveItem(lua_State *L) {
     return 0;
 }
 
+/* Mirrors api_unit.h UnitItemInSlot: out-of-range or empty slots yield nil, and
+ * an occupied slot returns the item edict directly. */
+static int LuaUnitItemInSlot(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    int32_t slot = (int32_t)luaL_checkinteger(L, 2);
+    edict_t *item;
+
+    if (!unit || slot < 0 || (uint32_t)slot >= G_InventoryCapacity(unit)) {
+        lua_pushnil(L);
+        return 1;
+    }
+    item = unit->inventory[slot];
+    if (item) lua_pushlightuserdata(L, item); else lua_pushnil(L);
+    return 1;
+}
+
 static int LuaAddSpecialEffect(lua_State *L) {
     cstring_t model = luaL_checkstring(L, 1);
     vec2_t where = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
@@ -2660,6 +2735,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
     WC3_LuaRegisterNative(L, "GetUnitState", LuaGetUnitState);
     WC3_LuaRegisterNative(L, "GetUnitCurrentOrder", LuaGetUnitCurrentOrder);
+    WC3_LuaRegisterNative(L, "IssueImmediateOrder", LuaIssueImmediateOrder);
+    WC3_LuaRegisterNative(L, "OrderId", LuaOrderId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityId", LuaGetSpellAbilityId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityUnit", LuaGetSpellAbilityUnit);
     WC3_LuaRegisterNative(L, "GetSpellTargetUnit", LuaGetSpellTargetUnit);
@@ -2697,6 +2774,11 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
     WC3_LuaRegisterNative(L, "TriggerSleepAction", LuaTriggerSleepAction);
     WC3_LuaRegisterNative(L, "GetTriggerUnit", LuaGetTriggerUnit);
+    WC3_LuaRegisterNative(L, "GetAttacker", LuaGetAttacker);
+    WC3_LuaRegisterNative(L, "GetEventDamage", LuaGetEventDamage);
+    WC3_LuaRegisterNative(L, "GetEventDamageSource", LuaGetEventDamageSource);
+    WC3_LuaRegisterNative(L, "BlzGetEventDamageTarget", LuaBlzGetEventDamageTarget);
+    WC3_LuaRegisterNative(L, "BlzGetEventDamageSource", LuaBlzGetEventDamageSource);
     WC3_LuaRegisterNative(L, "GetTriggeringTrigger", LuaGetTriggeringTrigger);
     WC3_LuaRegisterNative(L, "GetExpiredTimer", LuaGetExpiredTimer);
     WC3_LuaRegisterNative(L, "GroupEnumUnitsOfPlayer", LuaGroupEnumUnitsOfPlayer);
@@ -2704,6 +2786,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzGroupUnitAt", LuaBlzGroupUnitAt);
     WC3_LuaRegisterNative(L, "Rect", LuaRect);
     WC3_LuaRegisterNative(L, "Location", LuaLocation);
+    WC3_LuaRegisterNative(L, "GetUnitLoc", LuaGetUnitLoc);
     WC3_LuaRegisterNative(L, "AddWeatherEffect", LuaAddWeatherEffect);
     WC3_LuaRegisterNative(L, "RemoveWeatherEffect", LuaRemoveWeatherEffect);
     WC3_LuaRegisterNative(L, "EnableWeatherEffect", LuaEnableWeatherEffect);
@@ -2823,6 +2906,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetPlayerAlliance", LuaSetPlayerAlliance);
     WC3_LuaRegisterNative(L, "SetPlayerState", LuaSetPlayerState);
     WC3_LuaRegisterNative(L, "GetPlayerTechResearched", LuaGetPlayerTechResearched);
+    WC3_LuaRegisterNative(L, "SetPlayerTechResearched", LuaSetPlayerTechResearched);
     WC3_LuaRegisterNative(L, "SetPlayerTechMaxAllowed", LuaSetPlayerTechMaxAllowed);
     WC3_LuaRegisterNative(L, "GetPlayerTechMaxAllowed", LuaGetPlayerTechMaxAllowed);
     WC3_LuaRegisterNative(L, "SetAllItemTypeSlots", LuaSetAllItemTypeSlots);
@@ -2863,6 +2947,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetMapFlag", LuaSetMapFlag);
     WC3_LuaRegisterNative(L, "CreateItem", LuaCreateItem);
     WC3_LuaRegisterNative(L, "RemoveItem", LuaRemoveItem);
+    WC3_LuaRegisterNative(L, "UnitItemInSlot", LuaUnitItemInSlot);
     WC3_LuaRegisterNative(L, "AddSpecialEffect", LuaAddSpecialEffect);
     WC3_LuaRegisterNative(L, "AddSpecialEffectTarget", LuaAddSpecialEffectTarget);
     WC3_LuaRegisterNative(L, "DestroyEffect", LuaDestroyEffect);
@@ -2885,8 +2970,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
         "BlzFrameSetLevel", "BlzFrameSetTexture", "BlzFrameSetTooltip", "BlzFrameSetTextAlignment",
         "BlzFrameClearAllPoints", "BlzFrameClick", "BlzFrameGetChild",
         "BlzGetTriggerPlayerMouseButton", "BlzGetTriggerPlayerMousePosition",
-        "BlzEnableSelections", "BlzGetEventAttackType", "BlzGetEventDamageSource",
-        "BlzGetEventDamageTarget", "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
+        "BlzEnableSelections", "BlzGetEventAttackType",
+        "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitAbilityCooldownRemaining", "BlzGetUnitArmor", "BlzGetUnitBaseDamage",
         "BlzGetUnitBooleanField", "BlzGetUnitMaxHP", "BlzGetUnitMaxMana", "BlzGetUnitRealField",
         "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",

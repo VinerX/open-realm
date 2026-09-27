@@ -230,6 +230,19 @@ static void test_drawarrays_inst(GLenum mode, GLint first, GLsizei count, GLsize
 #undef glVertexAttribDivisor
 #undef glDrawArrays
 #undef glDrawArraysInstanced
+#ifdef _WIN32
+/* Epoxy redefines the GL entry points as macros; the #undef block above drops
+ * them so the mock wrappers can be swapped out.  Restore the epoxy names for
+ * the translation units included further down. */
+#define glGenVertexArrays epoxy_glGenVertexArrays
+#define glBindVertexArray epoxy_glBindVertexArray
+#define glBindBuffer epoxy_glBindBuffer
+#define glEnableVertexAttribArray epoxy_glEnableVertexAttribArray
+#define glVertexAttribPointer epoxy_glVertexAttribPointer
+#define glVertexAttribDivisor epoxy_glVertexAttribDivisor
+#define glDrawArrays epoxy_glDrawArrays
+#define glDrawArraysInstanced epoxy_glDrawArraysInstanced
+#endif
 
 static handle_t test_alloc(long size) { alloc_count++; return calloc(1, (size_t)size); }
 static void test_free(handle_t memory) { free_count++; free(memory); }
@@ -1019,6 +1032,56 @@ TEST(renderer_model, unknown_model_release_is_immediate) {
     model_t *model;
     reset_registry(); model = test_alloc(sizeof(*model));
     R_ReleaseRegisteredModel(model); T_EQ(release_count, 1);
+}
+
+/* The production path must not tag a handle as ID_MDLX when the parser rejects
+ * the file, or R_ReleaseModel dereferences a NULL mdx. */
+model_t *R_TestProductionLoadModel(cstring_t modelFilename);
+void R_TestProductionReleaseModel(model_t *model);
+
+static void *test_model_blob;
+static int test_model_blob_size;
+static int test_model_fs_read(cstring_t path, void **buffer) { (void)path; *buffer = test_model_blob; return test_model_blob_size; }
+static void test_model_fs_free(void *buffer) { (void)buffer; }
+
+TEST(renderer_model, production_load_rejects_unsupported_mdx_version) {
+    uint8_t blob[64] = { 0 };
+    uint8_t *p = blob;
+    int (*read_file)(cstring_t, void **) = ri.FS_ReadFile;
+    void (*free_file)(void *) = ri.FS_FreeFile;
+
+    /* Reforged MDX v1800: the parser logs and returns NULL. */
+    mdx_put_fourcc(&p, "MDLX");
+    mdx_put_fourcc(&p, "VERS"); mdx_put_u32(&p, 4); mdx_put_u32(&p, 1800);
+
+    reset_registry();
+    ri.FS_ReadFile = test_model_fs_read; ri.FS_FreeFile = test_model_fs_free;
+    test_model_blob = blob; test_model_blob_size = (int)(p - blob);
+    T_NULL(R_TestProductionLoadModel("Unsupported.mdx"));
+    ri.FS_ReadFile = read_file; ri.FS_FreeFile = free_file;
+    test_model_blob = NULL; test_model_blob_size = 0;
+}
+
+TEST(renderer_model, production_load_tags_supported_mdx_and_releases) {
+    uint8_t blob[64] = { 0 };
+    uint8_t *p = blob;
+    model_t *model;
+    int (*read_file)(cstring_t, void **) = ri.FS_ReadFile;
+    void (*free_file)(void *) = ri.FS_FreeFile;
+
+    mdx_put_fourcc(&p, "MDLX");
+    mdx_put_fourcc(&p, "VERS"); mdx_put_u32(&p, 4); mdx_put_u32(&p, 800);
+
+    reset_registry();
+    ri.FS_ReadFile = test_model_fs_read; ri.FS_FreeFile = test_model_fs_free;
+    test_model_blob = blob; test_model_blob_size = (int)(p - blob);
+    model = R_TestProductionLoadModel("Supported.mdx");
+    T_NOT_NULL(model);
+    T_EQ(model->modeltype, ID_MDLX);
+    T_NOT_NULL(model->mdx);
+    R_TestProductionReleaseModel(model);
+    ri.FS_ReadFile = read_file; ri.FS_FreeFile = free_file;
+    test_model_blob = NULL; test_model_blob_size = 0;
 }
 
 TEST(renderer_texture, cached_registration_preserves_newer_texture_indices) {
