@@ -32,6 +32,14 @@ The first scenario is in place: `scenarios/23-race-legion-smoke.lua` advances
 bounded CASC audit reports `WC3_SCENARIO name="legion-smoke" status=PASS steps=201`
 alongside `WC3_SCRIPT phase=selection kind=lua` and `load/config/main ok`.
 
+The second scenario is `scenarios/23-race-legion-init-integrity.lua`. It waits
+for the map's own deferred init queue (`OnInit._run()`) to drain and then reads
+the map's `InitErrors`/`InitFatal` globals, so a boot that merely reaches game
+start can no longer hide a failed init step. It then asserts the deferred
+triggers (`gg_trg_*`) and globals the rest of the map depends on exist. Against
+`23-Race-Legion.w3x` the queue went from 205 failed steps to 2; both remaining
+failures are one map-side defect (see below), not a missing native.
+
 ## Implemented and verified
 
 - The parser-based translator handles the library syntax encountered so far,
@@ -64,6 +72,25 @@ alongside `WC3_SCRIPT phase=selection kind=lua` and `load/config/main ok`.
   `TriggerRegisterUnitEvent`, `SetUnitColor`, `SetUnitState`, `WaygateActivate`,
   `WaygateSetDestination`, and `GetRectCenterX/Y` are now implemented, and map
   startup completes.
+- Map-script native gaps closed for the frozen map's deferred init queue
+  (mirroring the JASS `api/*.h` twins): `R2S`; quest setters
+  `QuestSetTitle/Description/IconPath/Required/Discovered/Enabled/Completed/`
+  `Failed`; timer dialogs `CreateTimerDialog`/`DestroyTimerDialog`/
+  `TimerDialogSetTitle`/`TimerDialogDisplay`; rect edges
+  `GetRectMinX/MinY/MaxX/MaxY`; `CreateUnitAtLoc`. Each has a focused
+  `wc3_mapscript` regression. `TriggerSleepAction` is registered as a reporting
+  no-op because the Lua trigger path runs an action to completion on the shared
+  state and has no coroutine scheduler to resume; a real yield is deferred.
+
+## Known map-side defect
+
+`war3map.lua:17085` calls `Condition(Trig_StolicaAttacked_Conditions)`, but the
+function definition was dropped when the converted script was split into
+`_lua/monolith_split/` sections (it exists in the pre-split `stolica.lua`).
+Because Lua resolves the global at call time, the missing function raises
+`bad argument #1 to 'Condition' (function expected, got nil)`, which fails
+init step 14 (`InitCustomTriggers`) and cascades into step 15
+(`RunInitializationTriggers`). This is a map-source fix, not engine work.
 
 Note on the 18 failing `wc3_api.*` assertions in this environment: they also
 fail on the pre-change base commit `dc683593` and are platform issues (`/tmp`
