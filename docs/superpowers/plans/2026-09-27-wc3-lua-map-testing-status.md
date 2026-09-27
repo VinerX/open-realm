@@ -49,33 +49,41 @@ many more). The undefined-call census for the map is about 1096 global names.
   `cheats.j`, `initcheats.j` — no Lua prelude. A full per-letter CASC
   enumeration finds no `*.lua` under `scripts\`; `common.lua`,
   `blizzard.lua`, `luahelper.lua` all fail to open.
-- `Warcraft III.exe` and `World Editor.exe` embed a JASS-to-Lua converter
-  (strings `jass2lua`, `Unable to convert jass to lua`, `--scriptonly`) plus an
-  embedded `luahelper` prelude (`__jarray`, overridden `math.random`,
-  `FourCC`). So Reforged builds the Lua Blizzard/common library at runtime by
-  converting the `.j` sources; it is not shipped as a Lua file, and the compiled
-  BJ bodies are not present as plain strings in the executable.
+- `Warcraft III.exe` and `World Editor.exe` contain `jass2lua` converter strings
+  and an embedded `luahelper` prelude (`__jarray`, overridden `math.random`,
+  `FourCC`). A Blizzard developer's explanation reproduced on Hive says that in
+  Lua mode all JASS sources needed by the map are converted to Lua and executed
+  by the Lua VM; Lua uses the same natives after conversion. Thus the runtime
+  path is `common.j` → `Blizzard.j` → `war3map.lua`, all owned by the Lua VM.
+  This matches the generated map's `InitBlizzard()` call. Sources: [Blizzard's
+  hidden jass2lua transpiler](https://www.hiveworkshop.com/threads/blizzards-hidden-jass2lua-transpiler.337281/)
+  and [Blizzard forum explanation of JASS-to-Lua map generation](https://us.forums.blizzard.com/en/warcraft3/t/world-editor-opening-old-custom-maps-possible-trigger-conversion-feature/5132).
 - The map archives carry only `war3map.lua` (no bundled library).
 - The map project's `_lua/monolith_split/` sources and all local `.lua` files
   define no BJ functions.
 
-### Options (design decision still open)
+### Design ruling
 
-1. Convert `common.j` and `Blizzard.j` to Lua once, in our tooling, and preload
-   the result into `level.lua_vm` before `war3map.lua` — mirrors the JASS
-   `jass_dofile("Scripts\\common.j")` then `Blizzard.j` order in
-   `games/warcraft-3/game/g_spawn.c`. The converter already exists in
-   `tools/export_wc3_jass.py`, so the cleanest base is the same JASS sources the JASS
-   path already loads.
-2. Bridge the needed BJ/common subset to the already-running JASS VM instead of porting
-   it, so Lua BJ calls invoke JASS bodies (they are both WC3 natives; the user
-   reminded us the natives are shared).
-3. Implement only the subset the map calls as natives — too large here (hundreds of
-   BJ wrappers), so not viable as the primary route.
+1. Add or integrate a JASS-to-Lua translator, read `common.j` and `Blizzard.j`
+   from the installed WC3 CASC, translate both, then load them into
+   `level.lua_vm` before `war3map.lua`. This matches retail load order and keeps
+   all native calls inside the Lua runtime's WC3 bridge. `tools/export_wc3_jass.py`
+   only exports JASS source from archives; it does not translate JASS to Lua.
+Cross-VM BJ bridging would need value/handle/callback marshalling and differ from
+retail's single Lua execution path. Implementing a map-specific subset would miss
+the broad Blizzard library surface (the undefined-name census is about 1096
+names). Neither is the chosen design.
 
-Option 1 is the only path that is exact, offline, and covers the whole library at
-once; option 2 is a fallback if conversion fidelity is not workable. Both need a
-test-first regression for the prelude mechanism before production wiring.
+The first option is the retail-compatible design. Candidate translator:
+`War3Net.CodeAnalysis.Transpilers` exposes a JASS-to-Lua transpiler, but it is a
+.NET NuGet dependency and .NET is not installed in the current environment. The
+user authorized asking before downloading additional dependencies; do not install
+it or another toolchain without asking first. Before that, inspect existing C
+parser/VM infrastructure and determine whether a small in-tree converter can
+handle `common.j` and `Blizzard.j` without weakening diagnostics. Any translator
+must fail on unsupported syntax instead of dropping declarations or code.
+
+Add a test-first regression for prelude loading before production wiring.
 
 ## Remaining tasks
 
