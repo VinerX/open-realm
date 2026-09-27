@@ -217,6 +217,24 @@ class ScenarioTest(unittest.TestCase):
         self.assertEqual(
             AUDIT.classify_run_status(0, output, expect_scenario=True), "scenario_incomplete")
 
+    def test_crash_without_marker_is_crashed_not_incomplete(self):
+        output = "WC3_SCRIPT phase=selection kind=lua\nGAME CRASHED\n"
+        self.assertEqual(
+            AUDIT.classify_run_status(-11, output, expect_scenario=True), "crashed")
+
+    def test_nonzero_exit_without_marker_is_crashed(self):
+        output = "WC3_SCRIPT phase=selection kind=lua\n"
+        self.assertEqual(
+            AUDIT.classify_run_status(2, output, expect_scenario=True), "crashed")
+
+    def test_scenario_incomplete_detail_distinguishes_zero_and_duplicate(self):
+        none_errors, none_families = AUDIT.compact_diagnostics("", "scenario_incomplete", 0, False)
+        self.assertIn("SCENARIO_INCOMPLETE", none_families)
+        self.assertTrue(any("no terminal scenario marker" in e for e in none_errors))
+        dup = "WC3_SCENARIO name=\"a\" status=PASS steps=1 detail=\"\"\n"
+        dup_errors, _ = AUDIT.compact_diagnostics(dup * 2, "scenario_incomplete", 0, False)
+        self.assertTrue(any("2 terminal scenario markers" in e for e in dup_errors))
+
     def test_scenario_name_with_spaces_is_parsed(self):
         output = "WC3_SCENARIO name=\"legion smoke\" status=FAIL steps=4 detail=\"unit missing\"\n"
         scenarios = AUDIT.parse_scenarios(output)

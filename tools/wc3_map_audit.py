@@ -141,10 +141,13 @@ def classify_run_status(exit_code: int | None, output: str, expect_scenario: boo
             or any(phases[phase] not in (None, "ok") for phase in SCRIPT_PHASES)
             or any(scenario["status"] == "FAIL" for scenario in scenarios)):
         return "script_error"
-    if expect_scenario and len(scenarios) != 1:
-        return "scenario_incomplete"
+    # A crash must outrank a missing scenario marker: the process died before it
+    # could report, so "crashed" is the true diagnosis and masking it as an
+    # incomplete scenario would hide the most important failure class.
     if exit_code != 0:
         return "crashed"
+    if expect_scenario and len(scenarios) != 1:
+        return "scenario_incomplete"
     return "completed"
 
 
@@ -361,7 +364,9 @@ def compact_diagnostics(output: str, status: str, exit_code: int | None,
             errors.insert(0, f"PROCESS_EXIT (code {exit_code})")
             families.add("PROCESS_EXIT")
     if status == "scenario_incomplete":
-        errors.insert(0, "SCENARIO_INCOMPLETE (no terminal scenario marker)")
+        count = len(parse_scenarios(output))
+        detail = "no terminal scenario marker" if count == 0 else f"{count} terminal scenario markers"
+        errors.insert(0, f"SCENARIO_INCOMPLETE ({detail})")
         families.add("SCENARIO_INCOMPLETE")
     return errors, families
 
