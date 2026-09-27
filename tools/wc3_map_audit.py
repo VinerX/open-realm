@@ -33,6 +33,7 @@ FAMILY_MEANINGS = {
     "SIGSEGV": "Process exited on signal 11; an optional serial rerun confirms reproducibility.",
     "PROCESS_EXIT": "Process returned a nonzero exit code other than signal 11.",
     "SCRIPT_STARTUP": "Script load/config/main did not complete; the map never reached steady runtime.",
+    "SCENARIO_INCOMPLETE": "A scenario was requested but the run ended without exactly one PASS/FAIL marker.",
     "SLK_MISSING": "A required SLK failed to load.",
     "CREEP_SLEEP_ART": "ACsp TargetArt is absent; engine used canonical art.",
     "CREEP_SLEEP_SPAWN": "Creep-sleep overlay creation failed.",
@@ -68,10 +69,13 @@ SCRIPT_PHASE_RE = re.compile(
     re.MULTILINE,
 )
 SCRIPT_PHASES = ("selection", "load", "config", "main")
-UNSUPPORTED_NATIVE_RE = re.compile(r"^WC3 Lua: (?P<name>\w+)", re.MULTILINE)
+UNSUPPORTED_NATIVE_RE = re.compile(r"^WC3_UNSUPPORTED_NATIVE\s+name=(?P<name>\S+)", re.MULTILINE)
+# The scenario name is quoted so it may contain spaces (an unset --scenario-name
+# falls back to the file path, which contains spaces).  status/steps/detail
+# share the quoted grammar.
 SCENARIO_RE = re.compile(
-    r"^WC3_SCENARIO\s+name=(?P<name>\S+)\s+status=(?P<status>PASS|FAIL)"
-    r"(?:\s+steps=(?P<steps>\d+))?(?:\s+detail=\"(?P<detail>[^\"]*)\")?",
+    r'^WC3_SCENARIO\s+name="(?P<name>[^"]*)"\s+status=(?P<status>PASS|FAIL)'
+    r'(?:\s+steps=(?P<steps>\d+))?(?:\s+detail="(?P<detail>[^"]*)")?',
     re.MULTILINE,
 )
 
@@ -111,25 +115,34 @@ def parse_scenarios(output: str) -> list[dict[str, Any]]:
     return scenarios
 
 
-def classify_run_status(exit_code: int | None, output: str) -> str:
+def classify_run_status(exit_code: int | None, output: str, expect_scenario: bool = False) -> str:
     """Map one bounded run to its honest outcome.
 
     A zero exit code only means the frame budget elapsed; it is not proof the
     map script ran. Any engine-reported script startup failure downgrades the
-    result to ``script_error`` so the report cannot claim completion for a map
-    whose ``load``/``config``/``main`` died.
+    result to script_error so the report cannot claim completion for a map
+    whose load/config/main died.
+
+    When expect_scenario is set the run must emit exactly one terminal
+    WC3_SCENARIO marker.  A missing marker means the scenario never reached its
+    assertion (for example the frame budget ended first); a duplicate marker
+    means the protocol was violated.  Either is scenario_incomplete, never a
+    silent pass.
     """
     if exit_code is None:
         return "timeout"
     phases = parse_script_phases(output)
+    scenarios = parse_scenarios(output)
     # A script-level failure is the more precise diagnosis than the raw exit
     # code: an explicit failed phase, a FAIL scenario marker, or a startup
     # signature all mean config()/main()/the scenario did not complete, even
     # though the driver may return nonzero on purpose.
     if (SCRIPT_STARTUP_FAILURE_RE.search(output)
             or any(phases[phase] not in (None, "ok") for phase in SCRIPT_PHASES)
-            or any(scenario["status"] == "FAIL" for scenario in parse_scenarios(output))):
+            or any(scenario["status"] == "FAIL" for scenario in scenarios)):
         return "script_error"
+    if expect_scenario and len(scenarios) != 1:
+        return "scenario_incomplete"
     if exit_code != 0:
         return "crashed"
     return "completed"
@@ -347,6 +360,9 @@ def compact_diagnostics(output: str, status: str, exit_code: int | None,
         else:
             errors.insert(0, f"PROCESS_EXIT (code {exit_code})")
             families.add("PROCESS_EXIT")
+    if status == "scenario_incomplete":
+        errors.insert(0, "SCENARIO_INCOMPLETE (no terminal scenario marker)")
+        families.add("SCENARIO_INCOMPLETE")
     return errors, families
 
 
@@ -373,12 +389,12 @@ def run_map(item: dict[str, str], index: int, args: argparse.Namespace, log_path
                 text=True, errors="replace", timeout=args.timeout)
             output = proc.stdout + proc.stderr
             exit_code = proc.returncode
-            status = classify_run_status(exit_code, output)
+            status = classify_run_status(exit_code, output, bool(args.scenario))
         except subprocess.TimeoutExpired as error:
             stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else error.stdout or ""
             stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr or ""
             output, exit_code = stdout + stderr, None
-            status = classify_run_status(exit_code, output)
+            status = classify_run_status(exit_code, output, bool(args.scenario))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text(output, encoding="utf-8")
     return {
@@ -408,7 +424,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"an isolated writable home, a unique UDP port, and a {report['timeout_seconds']}s wall timeout. "
         f"The {report['jobs']}-worker sweep finished in {report['wall_seconds']:.1f}s.", "",
         f"Result: **{status['completed']} reached the frame limit, {status['script_error']} had script startup errors, "
-        f"{status['crashed']} crashed, {status['timeout']} timed out**. {reproduced} crashes reproduced serially.", "",
+        f"{status['scenario_incomplete']} ended without a scenario result, {status['crashed']} crashed, "
+        f"{status['timeout']} timed out**. {reproduced} crashes reproduced serially.", "",
         "> Reaching the frame limit is a startup/runtime smoke result. It does not prove objectives, combat, "
         "cinematics, mission completion, or visual correctness.", "", "### Error-family reach", "",
         "| Family | Maps | Meaning |", "| --- | ---: | --- |",

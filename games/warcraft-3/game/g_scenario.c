@@ -33,7 +33,6 @@ static struct {
     bool armed, started, finished, passed;
     bool missing_vm;
     uint32_t frames, timeout;
-    PATHSTR map_path;
     char name[SCENARIO_NAME_MAX];
     char detail[SCENARIO_DETAIL_MAX];
 } scenario;
@@ -65,7 +64,12 @@ void G_LogScriptPhase(cstring_t phase, cstring_t kind, cstring_t status, cstring
 }
 
 static void scenario_finish(cstring_t status, cstring_t detail) {
-    fprintf(stderr, "WC3_SCENARIO name=%s status=%s steps=%u detail=\"%s\"\n",
+    /* Exactly one terminal marker per run: the frame hook returns early once
+     * finished, and this guard keeps that true even if a future caller adds a
+     * second finish path.  The audit requires one marker for a requested
+     * scenario. */
+    if (scenario.finished) return;
+    fprintf(stderr, "WC3_SCENARIO name=\"%s\" status=%s steps=%u detail=\"%s\"\n",
             scenario.name, status, scenario.frames, detail ? detail : "");
     scenario.finished = true;
     scenario.passed = !strcmp(status, "PASS");
@@ -82,7 +86,6 @@ static void scenario_load(void) {
     string_t source;
     uint32_t size = 0;
 
-    strlcpy(scenario.map_path, level.map_path, sizeof(scenario.map_path));
     scenario.armed = path && *path;
     if (!scenario.armed) return;
     if (!level.lua_vm) {
@@ -140,9 +143,6 @@ void G_ScenarioFrame(void) {
     char result[SCENARIO_DETAIL_MAX] = "";
 
     if (!level.started || !level.map_path[0]) return;
-    /* A reloaded map gets a fresh Lua VM and world, so restart the scenario
-     * rather than leaving a previous run's terminal status in place. */
-    if (scenario.armed && strcmp(scenario.map_path, level.map_path)) G_ScenarioReset();
     if (!scenario.armed) scenario_load();
     if (!scenario.armed || scenario.finished) return;
     if (scenario.missing_vm) {

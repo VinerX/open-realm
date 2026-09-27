@@ -158,21 +158,32 @@ class ScriptPhaseTest(unittest.TestCase):
 
     def test_unsupported_natives_are_listed_by_exact_name(self):
         output = (
-            "WC3 Lua: SetWaterBaseColor presentation is not implemented\n"
-            "WC3 Lua: SetWaterBaseColor presentation is not implemented\n"
-            "WC3 Lua: NewSoundEnvironment('Default') audio environment is not implemented\n"
+            "WC3_UNSUPPORTED_NATIVE name=SetWaterBaseColor\n"
+            "WC3_UNSUPPORTED_NATIVE name=SetWaterBaseColor\n"
+            "WC3_UNSUPPORTED_NATIVE name=NewSoundEnvironment\n"
         )
         names = AUDIT.parse_unsupported_natives(output)
         self.assertIn("SetWaterBaseColor", names)
         self.assertIn("NewSoundEnvironment", names)
         self.assertEqual(names.count("SetWaterBaseColor"), 1)
 
+    def test_unrelated_lua_diagnostics_are_not_unsupported_natives(self):
+        output = (
+            "WC3 Lua: timer callback failed: boom\n"
+            "WC3 Lua: SomeOtherThing blew up\n"
+        )
+        self.assertEqual(AUDIT.parse_unsupported_natives(output), [])
+
+    def test_explicit_unsupported_native_marker_is_parsed(self):
+        output = "WC3_UNSUPPORTED_NATIVE name=SetWaterBaseColor\nWC3_UNSUPPORTED_NATIVE name=SetWaterBaseColor\n"
+        self.assertEqual(AUDIT.parse_unsupported_natives(output), ["SetWaterBaseColor"])
+
 
 class ScenarioTest(unittest.TestCase):
     def test_pass_and_fail_scenarios_are_parsed(self):
         output = (
-            "WC3_SCENARIO name=legion-spawn status=PASS steps=12\n"
-            "WC3_SCENARIO name=legion-order status=FAIL detail=\"unit missing at step 4\"\n"
+            "WC3_SCENARIO name=\"legion-spawn\" status=PASS steps=12\n"
+            "WC3_SCENARIO name=\"legion-order\" status=FAIL detail=\"unit missing at step 4\"\n"
         )
         scenarios = AUDIT.parse_scenarios(output)
         self.assertEqual(scenarios[0]["name"], "legion-spawn")
@@ -181,12 +192,38 @@ class ScenarioTest(unittest.TestCase):
         self.assertIn("unit missing", scenarios[1]["detail"])
 
     def test_scenario_failure_downgrades_completed_run(self):
-        output = "WC3_SCENARIO name=legion-spawn status=FAIL detail=\"boom\"\nframe limit reached\n"
+        output = "WC3_SCENARIO name=\"legion-spawn\" status=FAIL detail=\"boom\"\nframe limit reached\n"
         self.assertEqual(AUDIT.classify_run_status(0, output), "script_error")
 
     def test_scenario_pass_keeps_completed_run(self):
-        output = "WC3_SCENARIO name=legion-spawn status=PASS steps=8\nframe limit reached\n"
+        output = "WC3_SCENARIO name=\"legion-spawn\" status=PASS steps=8\nframe limit reached\n"
         self.assertEqual(AUDIT.classify_run_status(0, output), "completed")
+
+    def test_requested_scenario_without_marker_is_incomplete(self):
+        output = "WC3_SCRIPT phase=selection kind=lua\nframe limit reached\n"
+        self.assertEqual(
+            AUDIT.classify_run_status(0, output, expect_scenario=True), "scenario_incomplete")
+
+    def test_requested_scenario_with_pass_is_completed(self):
+        output = "WC3_SCENARIO name=\"legion smoke\" status=PASS steps=201 detail=\"\"\n"
+        self.assertEqual(
+            AUDIT.classify_run_status(0, output, expect_scenario=True), "completed")
+
+    def test_two_terminal_markers_are_incomplete(self):
+        output = (
+            "WC3_SCENARIO name=\"a\" status=PASS steps=1 detail=\"\"\n"
+            "WC3_SCENARIO name=\"a\" status=PASS steps=2 detail=\"\"\n"
+        )
+        self.assertEqual(
+            AUDIT.classify_run_status(0, output, expect_scenario=True), "scenario_incomplete")
+
+    def test_scenario_name_with_spaces_is_parsed(self):
+        output = "WC3_SCENARIO name=\"legion smoke\" status=FAIL steps=4 detail=\"unit missing\"\n"
+        scenarios = AUDIT.parse_scenarios(output)
+        self.assertEqual(len(scenarios), 1)
+        self.assertEqual(scenarios[0]["name"], "legion smoke")
+        self.assertEqual(scenarios[0]["status"], "FAIL")
+        self.assertEqual(scenarios[0]["detail"], "unit missing")
 
     def test_parse_args_accepts_scenario(self):
         args = AUDIT.parse_args([

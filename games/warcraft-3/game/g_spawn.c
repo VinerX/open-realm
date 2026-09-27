@@ -701,6 +701,10 @@ void G_SpawnEntities(void) {
     level.time = gi.GetTime();
 
     level.mapinfo = mapinfo;
+    /* One scenario run per loaded map.  Reset at the map lifecycle boundary,
+     * not by comparing the file name: a restart of the same map must not
+     * inherit the previous run's terminal status or step count. */
+    G_ScenarioReset();
     G_BlightInit();
     G_EnvironmentFogInitMap();
     G_InitPlayerAlliances(mapinfo);

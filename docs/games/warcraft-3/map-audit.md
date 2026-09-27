@@ -92,7 +92,7 @@ WC3_SCRIPT phase=selection kind=lua
 WC3_SCRIPT phase=load status=ok
 WC3_SCRIPT phase=config status=ok
 WC3_SCRIPT phase=main status=ok
-WC3_SCENARIO name=legion-smoke status=PASS steps=201 detail=""
+WC3_SCENARIO name="legion-smoke" status=PASS steps=201 detail=""
 ```
 
 Pass `--scenario PATH` to run a Lua scenario file in the map's own VM after

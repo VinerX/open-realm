@@ -185,5 +185,79 @@ TEST(wc3_scenario, no_lua_vm_fails_without_crashing) {
     strlcpy(level.map_path, previous_path, sizeof(level.map_path));
 }
 
-#endif /* BZ_TESTS */
+TEST(wc3_scenario, reset_restarts_a_finished_run) {
+    wc3Lua_t *lua;
+    cstring_t (*old_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    handle_t (*old_read)(cstring_t, uint32_t *) = gi.ReadFile;
+    wc3Lua_t *previous_lua = level.lua_vm;
+    bool previous_started = level.started;
+    PATHSTR previous_path;
 
+    strlcpy(previous_path, level.map_path, sizeof(previous_path));
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    level.started = true;
+    strlcpy(level.map_path, "scenario-unit.w3x", sizeof(level.map_path));
+    gi.CvarString = scenario_cvar;
+    gi.ReadFile = scenario_readfile;
+    scenario_begin("function scenario_step(frame) return 'PASS' end\n");
+
+    G_ScenarioFrame();
+    T_EQ(G_ScenarioStatus(), SCENARIO_PASSED);
+    /* A map lifecycle boundary resets the driver; the same map must be able
+     * to run the scenario again rather than staying terminal. */
+    G_ScenarioReset();
+    T_EQ(G_ScenarioStatus(), SCENARIO_IDLE);
+    G_ScenarioFrame();
+    T_EQ(G_ScenarioStatus(), SCENARIO_PASSED);
+
+    gi.CvarString = old_cvar;
+    gi.ReadFile = old_read;
+    level.lua_vm = previous_lua;
+    level.started = previous_started;
+    strlcpy(level.map_path, previous_path, sizeof(level.map_path));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_scenario, finished_run_does_not_repeat_the_marker) {
+    wc3Lua_t *lua;
+    cstring_t (*old_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    handle_t (*old_read)(cstring_t, uint32_t *) = gi.ReadFile;
+    wc3Lua_t *previous_lua = level.lua_vm;
+    bool previous_started = level.started;
+    PATHSTR previous_path;
+
+    strlcpy(previous_path, level.map_path, sizeof(previous_path));
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    level.started = true;
+    strlcpy(level.map_path, "scenario-unit.w3x", sizeof(level.map_path));
+    gi.CvarString = scenario_cvar;
+    gi.ReadFile = scenario_readfile;
+    scenario_begin("function scenario_step(frame) return 'PASS' end\n");
+
+    G_ScenarioFrame();
+    T_EQ(G_ScenarioStatus(), SCENARIO_PASSED);
+    /* Repeated frames after the terminal step must not change the outcome;
+     * the audit relies on exactly one terminal marker per requested run. */
+    G_ScenarioFrame();
+    G_ScenarioFrame();
+    T_EQ(G_ScenarioStatus(), SCENARIO_PASSED);
+
+    gi.CvarString = old_cvar;
+    gi.ReadFile = old_read;
+    level.lua_vm = previous_lua;
+    level.started = previous_started;
+    strlcpy(level.map_path, previous_path, sizeof(level.map_path));
+    WC3_LuaClose(lua);
+}
+
+#endif /* BZ_TESTS */

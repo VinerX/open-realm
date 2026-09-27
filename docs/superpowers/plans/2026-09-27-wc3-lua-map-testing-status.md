@@ -29,7 +29,7 @@ not priorities unless a scenario needs them.
 
 The first scenario is in place: `scenarios/23-race-legion-smoke.lua` advances
 201 frames, then asserts the 24-slot setup and a live playing player slot. The
-bounded CASC audit reports `WC3_SCENARIO name=legion-smoke status=PASS steps=201`
+bounded CASC audit reports `WC3_SCENARIO name="legion-smoke" status=PASS steps=201`
 alongside `WC3_SCRIPT phase=selection kind=lua` and `load/config/main ok`.
 
 ## Implemented and verified

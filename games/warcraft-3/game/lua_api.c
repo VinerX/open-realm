@@ -910,24 +910,28 @@ static int LuaSetWaterBaseColor(lua_State *L) {
     (void)luaL_checkinteger(L, 3);
     (void)luaL_checkinteger(L, 4);
     fprintf(stderr, "WC3 Lua: SetWaterBaseColor presentation is not implemented\n");
+    fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=SetWaterBaseColor\n");
     return 0;
 }
 
 static int LuaNewSoundEnvironment(lua_State *L) {
     cstring_t name = luaL_checkstring(L, 1);
     fprintf(stderr, "WC3 Lua: NewSoundEnvironment('%s') audio environment is not implemented\n", name);
+    fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=NewSoundEnvironment\n");
     return 0;
 }
 
 static int LuaSetAmbientDaySound(lua_State *L) {
     cstring_t name = luaL_checkstring(L, 1);
     fprintf(stderr, "WC3 Lua: SetAmbientDaySound('%s') audio ambience is not implemented\n", name);
+    fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=SetAmbientDaySound\n");
     return 0;
 }
 
 static int LuaSetAmbientNightSound(lua_State *L) {
     cstring_t name = luaL_checkstring(L, 1);
     fprintf(stderr, "WC3 Lua: SetAmbientNightSound('%s') audio ambience is not implemented\n", name);
+    fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=SetAmbientNightSound\n");
     return 0;
 }
 
