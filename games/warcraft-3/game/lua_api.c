@@ -816,6 +816,19 @@ static int LuaGetUnitState(lua_State *L) {
     return 1;
 }
 
+static int LuaGetUnitUserData(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushinteger(L, unit ? unit->user_data : 0);
+    return 1;
+}
+
+static int LuaSetUnitUserData(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    int32_t value = (int32_t)luaL_checkinteger(L, 2);
+    if (unit) unit->user_data = value;
+    return 0;
+}
+
 static int LuaGetUnitCurrentOrder(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     lua_pushinteger(L, unit ? (lua_Integer)G_GetIssuedOrderId(unit) : 0);
@@ -826,6 +839,14 @@ static int LuaIssueImmediateOrder(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     cstring_t order = luaL_checkstring(L, 2);
     lua_pushboolean(L, unit_issueimmediateorder(unit, order));
+    return 1;
+}
+
+static int LuaIssuePointOrder(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    vec2_t point = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
+    lua_pushboolean(L, unit_issueorder(unit, order, &point));
     return 1;
 }
 
@@ -2734,8 +2755,11 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetUnitTypeId", LuaGetUnitTypeId);
     WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
     WC3_LuaRegisterNative(L, "GetUnitState", LuaGetUnitState);
+    WC3_LuaRegisterNative(L, "GetUnitUserData", LuaGetUnitUserData);
+    WC3_LuaRegisterNative(L, "SetUnitUserData", LuaSetUnitUserData);
     WC3_LuaRegisterNative(L, "GetUnitCurrentOrder", LuaGetUnitCurrentOrder);
     WC3_LuaRegisterNative(L, "IssueImmediateOrder", LuaIssueImmediateOrder);
+    WC3_LuaRegisterNative(L, "IssuePointOrder", LuaIssuePointOrder);
     WC3_LuaRegisterNative(L, "OrderId", LuaOrderId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityId", LuaGetSpellAbilityId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityUnit", LuaGetSpellAbilityUnit);

@@ -81,6 +81,17 @@ failures are one map-side defect (see below), not a missing native.
   `wc3_mapscript` regression. `TriggerSleepAction` is registered as a reporting
   no-op because the Lua trigger path runs an action to completion on the shared
   state and has no coroutine scheduler to resume; a real yield is deferred.
+- Lua IssuePointOrder now routes through the same unit_issueorder path as JASS.
+  Its focused Lua regression passes in Classic and TFT, and the Legion
+  legion-point-order scenario passes at step 202 after asserting the accepted
+  move order is the unit's current order. This confirms order dispatch and
+  order state only; movement distance is not yet verified because sampled map
+  units currently report a zero move speed.
+- Lua GetUnitUserData/SetUnitUserData now read and write the existing
+  edict.user_data field, matching the JASS implementation. The focused
+  regression passes in Classic and TFT, including negative values and null
+  handles. This advances Legion's UnitIndexer initialization past the former
+  missing-native error.
 
 ## Known map-side defect
 
@@ -98,8 +109,8 @@ save/load paths, `dup2` redirect), not Lua regressions.
 
 ## Remaining work
 
-The bootstrap phase is complete; the remaining work is scenario testing, not
-more native coverage for its own sake.
+The bootstrap phase is complete; the remaining work is scenario testing and
+map-side diagnosis, not more native coverage for its own sake.
 
 1. Grow the deterministic scenario suite from real map-behavior checks: unit
    spawn, ownership, orders, casts, ability/state outcomes, trigger fire counts,
@@ -113,6 +124,12 @@ more native coverage for its own sake.
 4. Before a checkpoint, run focused tests, `git diff --check`, and a production
    build. Stage only task files; leave the unrelated
    `renderer/conchars_sysfont.h` modification untouched.
+5. The latest legion-init-integrity run still reports 2 failed steps. The
+   UnitIndexer failure advanced from missing SetUnitUserData to a nil table
+   index in IndexUnit; the checked map source references udg_UDexNext0 without
+   declaring or initializing it. The separate known
+   Trig_StolicaAttacked_Conditions nil failure remains. Both are map-source
+   issues; do not add engine fallbacks for them.
 
 Earlier findings and sources for the retail load model are recorded in the
 design spec and the previous version of this status note; see the linked

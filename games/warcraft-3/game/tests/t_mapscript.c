@@ -1094,6 +1094,63 @@ TEST(wc3_mapscript, lua_issue_immediate_order_matches_jass_engine_path) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_issue_point_order_matches_jass_engine_path) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) { reset_entities(); return; }
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunPointOrderTest()\n"
+        "local unit = CreateUnit(Player(0), unit_id, 32.0, 32.0, 0.0)\n"
+        "assert(unit ~= nil)\n"
+        "assert(IssuePointOrder(unit, 'move', 128.0, 96.0))\n"
+        "assert(GetUnitCurrentOrder(unit) == OrderId('move'))\n"
+        "RemoveUnit(unit)\n"
+        "end\n",
+        "lua-point-order-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunPointOrderTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_unit_user_data_matches_jass_semantics) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) { reset_entities(); return; }
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunUnitUserDataTest()\n"
+        "local unit = CreateUnit(Player(0), unit_id, 32.0, 32.0, 0.0)\n"
+        "assert(unit ~= nil)\n"
+        "assert(GetUnitUserData(unit) == 0)\n"
+        "SetUnitUserData(unit, 42)\n"
+        "assert(GetUnitUserData(unit) == 42)\n"
+        "SetUnitUserData(unit, -7)\n"
+        "assert(GetUnitUserData(unit) == -7)\n"
+        "assert(GetUnitUserData(nil) == 0)\n"
+        "SetUnitUserData(nil, 99)\n"
+        "RemoveUnit(unit)\n"
+        "end\n",
+        "lua-unit-user-data-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunUnitUserDataTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_condition_returns_callable_and_drives_trigger) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua = WC3_LuaNewState();
