@@ -4,6 +4,9 @@ Launches a Warcraft III map in a visible OpenWarcraft3 window.
 
 .EXAMPLE
 .\tools\run_wc3_map.ps1 -Map 'C:\Maps\Test.w3x' -WarcraftData 'E:\Games\Warcraft III'
+
+.EXAMPLE
+.\tools\run_wc3_map.ps1 -Map 'C:\Maps\Test.w3x' -WarcraftData 'E:\Games\Warcraft III' -Set @('r_fogofwar', '0')
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -15,7 +18,9 @@ param(
     [ValidateSet('TFT', 'RoC')]
     [string]$Edition = 'TFT',
 
-    [string]$RuntimeDirectory = ''
+    [string]$RuntimeDirectory = '',
+
+    [string[]]$Set = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -120,9 +125,18 @@ $arguments += @(
     '+set', 'vid_hidden', '0',
     '+set', 'vid_fullscreen', '0',
     '+set', 'vid_native', '0',
-    '+set', 'vid_mode', '4',
-    '+map', [System.IO.Path]::GetFileName($mapPath)
+    '+set', 'vid_mode', '4'
 )
+if (($Set.Count % 2) -ne 0) {
+    throw "-Set expects key/value pairs, for example -Set @('r_fogofwar', '0')."
+}
+for ($index = 0; $index -lt $Set.Count; $index += 2) {
+    if ([string]::IsNullOrWhiteSpace($Set[$index])) {
+        throw '-Set variable names must not be empty.'
+    }
+    $arguments += @('+set', $Set[$index], $Set[$index + 1])
+}
+$arguments += @('+map', [System.IO.Path]::GetFileName($mapPath))
 $start.Arguments = (($arguments | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' ')
 
 $process = [System.Diagnostics.Process]::Start($start)

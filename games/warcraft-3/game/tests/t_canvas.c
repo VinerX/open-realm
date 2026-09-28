@@ -11,6 +11,8 @@ bool run_test_jass(cstring_t src);
 typedef struct {
     PATHSTR images[MAX_IMAGES];
     uint32_t tiles, wide_tiles, console_layouts, unicasts;
+    int16_t minimap_y_offset;
+    bool minimap_written;
     int32_t layer;
     bool layer_pending, in_console;
     stbIniCache_t saved_theme;
@@ -51,6 +53,11 @@ static void canvas_write(pfWriteType_t type, void const *value) {
     }
     if (type != PF_UIFRAME || !cap.in_console) return;
     uiFrame_t const *frame = value;
+    if (frame->flags.type == FT_MINIMAP) {
+        cap.minimap_y_offset = frame->points.y[FPP_MIN].offset;
+        cap.minimap_written = true;
+        return;
+    }
     if (frame->flags.type != FT_TEXTURE || !frame->tex.index || frame->tex.index >= MAX_IMAGES) return;
     cstring_t name = cap.images[frame->tex.index];
     if (!strstr(name, "-tile0")) return;
@@ -61,6 +68,8 @@ static void canvas_unicast(edict_t *ent) { (void)ent; cap.unicasts++; cap.in_con
 
 static void canvas_reset_counts(void) {
     cap.tiles = cap.wide_tiles = cap.console_layouts = cap.unicasts = 0;
+    cap.minimap_y_offset = 0;
+    cap.minimap_written = false;
     cap.in_console = false;
 }
 
@@ -140,6 +149,20 @@ TEST(wc3_canvas, console_write_authors_extension_tiles_for_wide_clients_only) {
     write_console(ent);
     T_EQ(cap.tiles, 9); T_EQ(cap.wide_tiles, 0);
     T_ASSERT(canvas_registered("orc-tile05"));
+    canvas_teardown();
+}
+
+TEST(wc3_canvas, minimap_is_anchored_in_bottom_console_band) {
+    edict_t *ent = &g_edicts[0];
+    gameClient_t *client = ent->client;
+    canvas_setup();
+    client->connected = true;
+    client->canvas = UI_CANVAS_WIDE;
+
+    write_console(ent);
+
+    T_ASSERT(cap.minimap_written);
+    T_EQ(cap.minimap_y_offset, (int16_t)(-0.4525f * UI_FRAMEPOINT_SCALE));
     canvas_teardown();
 }
 
