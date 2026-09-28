@@ -48,6 +48,15 @@ cstring_t config_files[] = {
     NULL
 };
 
+/* Reforged relocated the UnitUI art/model columns (file=, modelScale=, ...)
+ * into the unit skin INI.  Listed as an overlay so UnitUI.slk stays the
+ * row-ID source and classic/TFT data (where the columns live in the SLK)
+ * is unaffected: an absent overlay is a no-op. */
+cstring_t unit_ui_overlay_files[] = {
+    "Units\\UnitSkin.txt",
+    NULL
+};
+
 cstring_t profile_files[] = {
     "Units\\CampaignUnitFunc.txt",
     "Units\\CampaignUnitStrings.txt",
@@ -912,13 +921,18 @@ typedef struct {
     uint32_t *count;
     slkIndex_t *idx;
     bool optional; /* legitimately absent in some data sets; zero rows stay silent, typed reads use the static zero */
+    cstring_t const *ini_overlay; /* newer data moved columns here (Reforged UnitUI art/model -> UnitSkin.txt) */
 } slkStore_t;
 
 static slkStore_t slk_stores[] = {
     { "UnitBalance", "Units\\UnitBalance.slk", balance_schema, sizeof(*g_UnitBalance), (void **)&g_UnitBalance, &g_UnitBalanceCount, &balance_idx },
     { "UpgradeData", "Units\\UpgradeData.slk", upgrade_schema, sizeof(*g_UpgradeData), (void **)&g_UpgradeData, &g_UpgradeDataCount, &upgrade_idx },
     { "UnitData", "Units\\UnitData.slk", data_schema, sizeof(*g_UnitData), (void **)&g_UnitData, &g_UnitDataCount, &data_idx },
-    { "UnitUI", "Units\\UnitUI.slk", ui_schema, sizeof(*g_UnitUI), (void **)&g_UnitUI, &g_UnitUICount, &ui_idx },
+    /* Reforged relocated UnitUI's model/art columns into Units\\UnitSkin.txt; the
+     * overlay supplies them while UnitUI.slk keeps the row IDs and the columns it
+     * still authors.  Classic/TFT data carries the columns in the SLK directly. */
+    { "UnitUI", "Units\\UnitUI.slk", ui_schema, sizeof(*g_UnitUI), (void **)&g_UnitUI, &g_UnitUICount, &ui_idx,
+      false, unit_ui_overlay_files },
     { "UnitWeapons", "Units\\UnitWeapons.slk", weapons_schema, sizeof(*g_UnitWeapons), (void **)&g_UnitWeapons, &g_UnitWeaponsCount, &weapons_idx },
     { "UnitAbilities", "Units\\UnitAbilities.slk", abil_schema, sizeof(*g_UnitAbilities), (void **)&g_UnitAbilities, &g_UnitAbilitiesCount, &abil_idx },
     { "AbilityData", "Units\\AbilityData.slk", ability_schema, sizeof(*g_AbilityData), (void **)&g_AbilityData, &g_AbilityDataCount, &ability_idx },
@@ -2166,7 +2180,13 @@ void InitUnitData(void) {
 
     FOR_LOOP(i, sizeof(slk_stores) / sizeof(*slk_stores)) {
         slkStore_t *store = slk_stores + i;
-        *store->count = Stb_SlkLoad(store->path, store->schema, store->rows, store->row_size);
+        stbIniCache_t overlay = { 0 };
+        if (store->ini_overlay && Stb_IniCacheLoadFiles(&overlay, store->ini_overlay))
+            *store->count = Stb_SlkLoadWithIniOverlay(store->path, &overlay,
+                                                     store->schema, store->rows, store->row_size);
+        else
+            *store->count = Stb_SlkLoad(store->path, store->schema, store->rows, store->row_size);
+        Stb_IniCacheFree(&overlay);
         if (!*store->count && !store->optional) fprintf(stderr, "SLK: failed to load '%s'\n", store->path);
         if (!strcmp(store->name, "UnitWeapons"))
             NormalizeWeaponTargetMasks(g_UnitWeapons, g_UnitWeaponsCount);

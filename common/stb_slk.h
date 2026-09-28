@@ -48,6 +48,13 @@ typedef struct { void *source; } stbIniCache_t;
 uint32_t Stb_SlkLoad(cstring_t filename, slkField_t const *schema, void **dest, uint32_t row_stride);
 /* Load SLK from in-memory buffer → allocate *dest, return count (0 on failure). */
 uint32_t Stb_SlkLoadBuffer(cstring_t buffer, slkField_t const *schema, void **dest, uint32_t row_stride);
+/* Decode an SLK whose newer Reforged data moved some columns into an INI table.
+ * Rows still come solely from the SLK, so the overlay cannot add spurious rows;
+ * the SLK keeps authority over columns it still authors while the overlay
+ * supplies columns the newer SLK dropped (for example UnitUI art/model columns
+ * that Reforged relocated to UnitSkin.txt).  A NULL overlay is a no-op. */
+uint32_t Stb_SlkLoadWithIniOverlay(cstring_t slk_filename, stbIniCache_t const *overlay,
+                                   slkField_t const *schema, void **dest, uint32_t row_stride);
 bool Stb_IniCacheLoad(stbIniCache_t *cache, cstring_t filename);
 bool Stb_IniCacheLoadBuffer(stbIniCache_t *cache, cstring_t buffer);
 bool Stb_IniCacheLoadFiles(stbIniCache_t *cache, cstring_t const *filenames);

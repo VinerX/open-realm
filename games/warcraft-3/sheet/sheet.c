@@ -392,7 +392,12 @@ static void SheetSetTypedField(uint8_t *dst, bzFieldType_t type, cstring_t value
     }
 }
 
-static void *FS_LoadSheetTyped(sheetTable_t const *sheet, slkField_t const *schema, size_t row_size, uint32_t *count_out)
+/* Decode one table chain into typed rows.  Rows come solely from the primary
+ * table, so an overlay chain cannot add spurious rows; it only supplies column
+ * values the primary table omits (Reforged moved UnitUI art/model columns to the
+ * UnitSkin.txt INI while keeping the row IDs in UnitUI.slk). */
+static void *FS_LoadSheetTyped(sheetTable_t const *sheet, sheetTable_t const *overlay,
+                               slkField_t const *schema, size_t row_size, uint32_t *count_out)
 {
     uint32_t capacity = 0, out_count = 0;
     cstring_t *seen_names;
@@ -445,6 +450,7 @@ static void *FS_LoadSheetTyped(sheetTable_t const *sheet, slkField_t const *sche
                     continue;
                 }
                 value = FS_FindSheetCell(sheet, row->name, field->column);
+                if (!value && overlay) value = FS_FindSheetCell(overlay, row->name, field->column);
                 if (!value) value = field->default_value;
                 if (!value)
                     continue;
@@ -486,7 +492,7 @@ uint32_t Stb_SlkLoad(cstring_t filename, slkField_t const *schema, void **dest, 
     uint32_t count = 0;
     sheetTable_t *sheet = FS_ParseSLK(filename);
     if (sheet && dest && schema && row_stride)
-        *dest = FS_LoadSheetTyped(sheet, schema, row_stride, &count);
+        *dest = FS_LoadSheetTyped(sheet, NULL, schema, row_stride, &count);
     SHEET_POOL_RESTORE();
     return count;
 }
@@ -496,7 +502,20 @@ uint32_t Stb_SlkLoadBuffer(cstring_t buffer, slkField_t const *schema, void **de
     uint32_t count = 0;
     sheetTable_t *sheet = FS_ParseSLK_Buffer(buffer);
     if (sheet && dest && schema && row_stride)
-        *dest = FS_LoadSheetTyped(sheet, schema, row_stride, &count);
+        *dest = FS_LoadSheetTyped(sheet, NULL, schema, row_stride, &count);
+    SHEET_POOL_RESTORE();
+    return count;
+}
+
+uint32_t Stb_SlkLoadWithIniOverlay(cstring_t slk_filename, stbIniCache_t const *overlay,
+                                   slkField_t const *schema, void **dest, uint32_t row_stride) {
+    SHEET_POOL_SAVE();
+    uint32_t count = 0;
+    /* Rows still come solely from the SLK; the INI table is consulted only for
+     * column values the newer SLK dropped. */
+    sheetTable_t *sheet = FS_ParseSLK(slk_filename);
+    if (sheet && dest && schema && row_stride)
+        *dest = FS_LoadSheetTyped(sheet, overlay ? overlay->source : NULL, schema, row_stride, &count);
     SHEET_POOL_RESTORE();
     return count;
 }
@@ -527,7 +546,7 @@ bool Stb_IniCacheLoadFiles(stbIniCache_t *cache, cstring_t const *filenames) {
 uint32_t Stb_IniDecode(stbIniCache_t const *ini, slkField_t const *schema, void **dest, uint32_t row_stride) {
     uint32_t count = 0;
     if (!ini || !ini->source || !dest || !schema || !row_stride) return 0;
-    *dest = FS_LoadSheetTyped(ini->source, schema, row_stride, &count);
+    *dest = FS_LoadSheetTyped(ini->source, NULL, schema, row_stride, &count);
     return count;
 }
 

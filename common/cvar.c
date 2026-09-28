@@ -540,6 +540,8 @@ void Cvar_Init(void) {
 #ifdef WC3
     Cvar_GetD("wc3_load_units_from_map_data", "0", 0,
               "load preplaced units/items from war3mapUnits.doo instead of generated map-script creation");
+    Cvar_GetD("wc3_map_test_reveal", "0", 0,
+              "map testing: send entities to clients without requiring explored fog cells");
     Cvar_GetD("wc3_cheat_starting_resources", "0", 0,
               "cheat: add 5000 gold and 5000 lumber to each human player's map-authored starting resources");
 #endif

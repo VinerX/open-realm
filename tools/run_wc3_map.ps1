@@ -7,6 +7,9 @@ Launches a Warcraft III map in a visible OpenWarcraft3 window.
 
 .EXAMPLE
 .\tools\run_wc3_map.ps1 -Map 'C:\Maps\Test.w3x' -WarcraftData 'E:\Games\Warcraft III' -Set @('r_fogofwar', '0')
+
+.EXAMPLE
+.\tools\run_wc3_map.ps1 -Map 'C:\Maps\Test.w3x' -WarcraftData 'E:\Games\Warcraft III' -RevealMap
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -17,6 +20,10 @@ param(
 
     [ValidateSet('TFT', 'RoC')]
     [string]$Edition = 'TFT',
+
+    [switch]$RevealMap,
+
+    [string]$BuildDirectory = '',
 
     [string]$RuntimeDirectory = '',
 
@@ -57,7 +64,11 @@ function ConvertTo-CommandLineArgument([string]$Value) {
 }
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$buildDir = Join-Path $repoRoot 'build'
+$buildDir = if ($BuildDirectory) {
+    [System.IO.Path]::GetFullPath($BuildDirectory)
+} else {
+    Join-Path $repoRoot 'build'
+}
 $binary = Join-Path $buildDir 'bin\openwarcraft3.exe'
 $mapPath = [System.IO.Path]::GetFullPath($Map)
 $dataPath = [System.IO.Path]::GetFullPath($WarcraftData)
@@ -127,6 +138,9 @@ $arguments += @(
     '+set', 'vid_native', '0',
     '+set', 'vid_mode', '4'
 )
+if ($RevealMap) {
+    $arguments += @('+set', 'wc3_map_test_reveal', '1', '+set', 'r_fogofwar', '0')
+}
 if (($Set.Count % 2) -ne 0) {
     throw "-Set expects key/value pairs, for example -Set @('r_fogofwar', '0')."
 }

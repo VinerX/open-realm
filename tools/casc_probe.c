@@ -91,6 +91,41 @@ int main(int argc, char **argv) {
         CascCloseStorage(storage);
         return 0;
     }
+    if (!strcmp(argv[3], "--cat")) {
+        HANDLE file = NULL;
+        ULONGLONG size = 0;
+        char *buffer;
+        DWORD bytes_read = 0;
+        if (argc != 5) {
+            fprintf(stderr, "casc_probe: --cat requires one file name\n");
+            CascCloseStorage(storage);
+            return 2;
+        }
+        if (!CascOpenFile(storage, argv[4], CASC_LOCALE_NONE, CASC_OPEN_BY_NAME, &file)) {
+            PrintCascError("open file", argv[4]);
+            CascCloseStorage(storage);
+            return 1;
+        }
+        if (!CascGetFileSize64(file, &size)) {
+            PrintCascError("read file size", argv[4]);
+            CascCloseFile(file);
+            CascCloseStorage(storage);
+            return 1;
+        }
+        buffer = malloc((size_t)size + 1);
+        if (!buffer || !CascReadFile(file, buffer, (DWORD)size, &bytes_read) || bytes_read != (DWORD)size) {
+            PrintCascError("read file", argv[4]);
+            free(buffer);
+            CascCloseFile(file);
+            CascCloseStorage(storage);
+            return 1;
+        }
+        fwrite(buffer, 1, bytes_read, stdout);
+        free(buffer);
+        CascCloseFile(file);
+        CascCloseStorage(storage);
+        return 0;
+    }
     if (strcmp(product.szCodeName, argv[2])) {
         fprintf(stderr, "casc_probe: opened product '%s', expected '%s'\n",
                 product.szCodeName, argv[2]);

@@ -133,6 +133,14 @@ if ($PSCmdlet.ParameterSetName -eq 'Process') {
     $candidates = @([WindowCaptureNative]::GetProcessWindows($target.Id) | ForEach-Object {
         [pscustomobject]@{ Handle = $_; Title = [WindowCaptureNative]::GetTitle($_); Area = [WindowCaptureNative]::GetArea($_) }
     })
+    if ($candidates.Count -eq 0 -and $target.MainWindowHandle -ne [IntPtr]::Zero) {
+        $handle = [IntPtr]$target.MainWindowHandle
+        $candidates = @([pscustomobject]@{
+            Handle = $handle
+            Title = [WindowCaptureNative]::GetTitle($handle)
+            Area = [WindowCaptureNative]::GetArea($handle)
+        })
+    }
 } else {
     $candidates = @(Get-Process | ForEach-Object {
         $process = $_

@@ -774,6 +774,45 @@ TEST(wc3_slk, unit_model_filename_adds_mdx_to_base_slk_stem) {
     T_STREQ(path, "Units\\Human\\Footman\\Footman.mdx");
 }
 
+/* Reforged's UnitUI.slk dropped the art/model columns (file, modelScale, ...)
+ * and moved them to the unit skin INI, keyed by the same section ID.  The
+ * overlay must fill those columns while leaving the SLK's own columns and every
+ * other row untouched. */
+TEST(wc3_slk, reforged_unit_ui_art_columns_come_from_ini_overlay) {
+    slkField_t schema[] = {
+        { "",           offsetof(UnitUI_t, id),         STB_SLK_FOURCC },
+        { "file",       offsetof(UnitUI_t, modelFile),  STB_SLK_STR    },
+        { "modelScale", offsetof(UnitUI_t, modelScale), STB_SLK_FLOAT  },
+        { "occH",       offsetof(UnitUI_t, occluderHeight), STB_SLK_FLOAT },
+        { "name",       offsetof(UnitUI_t, name),       STB_SLK_STR    },
+        { NULL, 0, 0, 0, 0 }
+    };
+    stbIniCache_t overlay = { 0 };
+    UnitUI_t *rows = NULL;
+    uint32_t count;
+
+    T_ASSERT(Stb_IniCacheLoad(&overlay, "TestData\\ReforgedUnitSkin.txt"));
+    count = Stb_SlkLoadWithIniOverlay("TestData\\ReforgedUnitUI.slk", &overlay, schema,
+                                      (void **)&rows, sizeof(*rows));
+    T_EQ(count, 2);
+
+    /* footman: SLK has name+occH, overlay supplies file+modelScale. */
+    T_EQ(rows[0].id, MAKEFOURCC('h','f','o','o'));
+    T_STREQ(rows[0].name, "footman");
+    T_STREQ(rows[0].modelFile, "units\\human\\Footman\\Footman");
+    T_FEQ(rows[0].modelScale, 1.1f, 0.001f);
+    T_FEQ(rows[0].occluderHeight, 60.0f, 0.001f);
+
+    /* town hall: overlay supplies only the model; the SLK column stays. */
+    T_EQ(rows[1].id, MAKEFOURCC('h','t','o','w'));
+    T_STREQ(rows[1].name, "townhall");
+    T_STREQ(rows[1].modelFile, "buildings\\human\\TownHall\\TownHall");
+    T_FEQ(rows[1].occluderHeight, 180.0f, 0.001f);
+
+    FS_SLKFreeRows(schema, rows, count, sizeof(*rows));
+    Stb_IniCacheFree(&overlay);
+}
+
 TEST(wc3_slk, map_unit_balance_overrides_stock_fields_and_custom_inheritance) {
     uint32_t const base_id = MAKEFOURCC('n','m','e','r');
     uint32_t const custom_id = MAKEFOURCC('x','m','e','r');

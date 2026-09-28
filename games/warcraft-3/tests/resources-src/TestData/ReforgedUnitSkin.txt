@@ -1,0 +1,11 @@
+[hfoo]
+
+file=units\human\Footman\Footman
+
+modelScale=1.1
+
+occH=60
+
+[htow]
+
+file=buildings\human\TownHall\TownHall

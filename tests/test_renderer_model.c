@@ -1084,6 +1084,73 @@ TEST(renderer_model, production_load_accepts_definitive_edition_mdx_version) {
     test_model_blob = NULL; test_model_blob_size = 0;
 }
 
+int MDLX_ReadGEOS(sizeBuf_t *buffer, mdxModel_t *model);
+int MDLX_ReadMTLS(sizeBuf_t *buffer, mdxModel_t *model);
+
+TEST(renderer_model, reforged_mdx_reads_v1800_material_and_geoset_extensions) {
+    uint8_t geos_data[1024] = {0}, material_data[256] = {0};
+    uint8_t *p = geos_data, *record_size, *record_start;
+    sizeBuf_t geos_block, material_block;
+    mdxModel_t model = {.version = 1800};
+    mdxGeoset_t *geoset;
+    mdxMaterial_t *material;
+
+    ri.MemAlloc = test_alloc; ri.MemFree = test_free;
+    record_size = p; mdx_put_u32(&p, 0); record_start = p;
+    mdx_put_fourcc(&p, "VRTX"); mdx_put_u32(&p, 3);
+    mdx_put_f32(&p, 0); mdx_put_f32(&p, 0); mdx_put_f32(&p, 0);
+    mdx_put_f32(&p, 1); mdx_put_f32(&p, 0); mdx_put_f32(&p, 0);
+    mdx_put_f32(&p, 0); mdx_put_f32(&p, 1); mdx_put_f32(&p, 0);
+    mdx_put_fourcc(&p, "NRMS"); mdx_put_u32(&p, 3);
+    for (int i = 0; i < 3; i++) { mdx_put_f32(&p, 0); mdx_put_f32(&p, 0); mdx_put_f32(&p, 1); }
+    mdx_put_fourcc(&p, "PTYP"); mdx_put_u32(&p, 1); mdx_put_u32(&p, 4);
+    mdx_put_fourcc(&p, "PCNT"); mdx_put_u32(&p, 1); mdx_put_u32(&p, 3);
+    mdx_put_fourcc(&p, "PVTX"); mdx_put_u32(&p, 3);
+    for (uint16_t i = 0; i < 3; i++) { memcpy(p, &i, sizeof(i)); p += sizeof(i); }
+    mdx_put_fourcc(&p, "GNDX"); mdx_put_u32(&p, 3); memset(p, 0, 3); p += 3;
+    mdx_put_fourcc(&p, "MTGC"); mdx_put_u32(&p, 1); mdx_put_u32(&p, 1);
+    mdx_put_fourcc(&p, "MATS"); mdx_put_u32(&p, 1); mdx_put_u32(&p, 0);
+    mdx_put_u32(&p, 7); mdx_put_u32(&p, 8); mdx_put_u32(&p, 9);
+    mdx_put_u32(&p, 10); memset(p, 0, sizeof(mdxObjectName_t)); memcpy(p, "models\\preview.mdx", 18); p += sizeof(mdxObjectName_t);
+    memset(p, 0, sizeof(mdxBounds_t)); p += sizeof(mdxBounds_t); mdx_put_u32(&p, 0);
+    mdx_put_fourcc(&p, "TANG"); mdx_put_u32(&p, 3); memset(p, 0, 3 * 16); p += 3 * 16;
+    mdx_put_fourcc(&p, "SKIN"); mdx_put_u32(&p, 8); memset(p, 0, 8); p += 8;
+    mdx_put_fourcc(&p, "UVAS"); mdx_put_u32(&p, 1);
+    mdx_put_fourcc(&p, "UVBS"); mdx_put_u32(&p, 3);
+    mdx_put_f32(&p, 0); mdx_put_f32(&p, 0); mdx_put_f32(&p, 1); mdx_put_f32(&p, 0); mdx_put_f32(&p, 0); mdx_put_f32(&p, 1);
+    uint32_t size = (uint32_t)(p - record_start + sizeof(uint32_t)); memcpy(record_size, &size, sizeof(size));
+    geos_block = (sizeBuf_t){.data = geos_data, .cursize = (uint32_t)(p - geos_data)};
+    T_EQ(MDLX_ReadGEOS(&geos_block, &model), 0);
+    T_EQ(geos_block.readcount, geos_block.cursize);
+    geoset = model.geosets;
+    T_NOT_NULL(geoset);
+    T_EQ(geoset->num_vertices, 3); T_EQ(geoset->num_normals, 3); T_EQ(geoset->num_texcoord, 3);
+    T_EQ(geoset->num_triangles, 3); T_EQ(geoset->materialID, 7); T_EQ(geoset->group, 8); T_EQ(geoset->selectable, 9);
+    T_FEQ(geoset->texcoord[2].y, 1.0f, 0.001f);
+
+    p = material_data; record_size = p; mdx_put_u32(&p, 0); record_start = p;
+    mdx_put_u32(&p, 3); mdx_put_u32(&p, 4); memset(p, 0, sizeof(mdxObjectName_t)); p += sizeof(mdxObjectName_t);
+    mdx_put_fourcc(&p, "LAYS"); mdx_put_u32(&p, 1);
+    uint8_t *layer_size = p; mdx_put_u32(&p, 0); uint8_t *layer_start = p;
+    mdx_put_u32(&p, 0); mdx_put_u32(&p, 0); mdx_put_u32(&p, 11); mdx_put_u32(&p, 12); mdx_put_u32(&p, 0);
+    mdx_put_f32(&p, 0.625f); mdx_put_f32(&p, 2.0f);
+    size = (uint32_t)(p - layer_start + sizeof(uint32_t)); memcpy(layer_size, &size, sizeof(size));
+    size = (uint32_t)(p - record_start + sizeof(uint32_t)); memcpy(record_size, &size, sizeof(size));
+    material_block = (sizeBuf_t){.data = material_data, .cursize = (uint32_t)(p - material_data)};
+    T_EQ(MDLX_ReadMTLS(&material_block, &model), 0);
+    T_EQ(material_block.readcount, material_block.cursize);
+    material = model.materials;
+    T_NOT_NULL(material);
+    T_EQ(material->priority, 3); T_EQ(material->flags, 4); T_EQ(material->num_layers, 1);
+    T_EQ(material->layers[0].textureId, 11); T_EQ(material->layers[0].transformId, 12);
+    T_FEQ(material->layers[0].staticAlpha, 0.625f, 0.001f);
+
+    test_free(geoset->vertices); test_free(geoset->normals); test_free(geoset->texcoord);
+    test_free(geoset->primitiveTypes); test_free(geoset->primitiveCounts); test_free(geoset->triangles);
+    test_free(geoset->vertexGroups); test_free(geoset->matrixGroupSizes); test_free(geoset->matrices); test_free(geoset);
+    test_free(material->layers); test_free(material);
+}
+
 TEST(renderer_model, production_load_tags_supported_mdx_and_releases) {
     uint8_t blob[64] = { 0 };
     uint8_t *p = blob;

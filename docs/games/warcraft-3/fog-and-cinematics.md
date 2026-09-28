@@ -18,6 +18,10 @@ OpenRealm represents Warcraft's three fog states with the existing per-player `e
 `G_FowClearVisible()` clears current visibility without clearing exploration. A temporary visible reveal therefore naturally becomes
 fogged after the modifier stops when no normal sight source still covers the area.
 
+`wc3_map_test_reveal` is an opt-in visual-test mode. It applies the existing `FogEnable(false)` entity-visibility policy to the local
+map session without changing the `visible` or `explored` planes. `tools/run_wc3_map.ps1 -RevealMap` enables it and hides the client fog
+overlay; normal gameplay keeps the cvar off.
+
 ## Direct Trigger Reveals
 
 `SetFogStateRect`, `SetFogStateRadius`, and `SetFogStateRadiusLoc` write directly into the authoritative player fog grid through

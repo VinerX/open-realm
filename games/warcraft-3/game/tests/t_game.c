@@ -2973,6 +2973,32 @@ TEST(wc3_game, fow_static_scenery_persists_after_unit_vision_leaves) {
     G_FowShutdown();
 }
 
+static cstring_t fow_map_test_reveal_cvar(cstring_t name, cstring_t fallback) {
+    return strcmp(name, "wc3_map_test_reveal") == 0 ? "1" : fallback;
+}
+
+TEST(wc3_game, map_test_reveal_exposes_unexplored_scenery_and_units) {
+    cstring_t (*old_cvar)(cstring_t, cstring_t);
+    edict_t *tree, *unit;
+
+    reset_entities();
+    G_FowInit();
+    G_FowConnectPlayer(0);
+    tree = alloc_test_unit(MAKEFOURCC('L','T','l','t'), 1024.0f, 1024.0f);
+    unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 1024.0f, 1024.0f);
+    tree->s.player = unit->s.player = WC3_MAX_PLAYER_SLOTS;
+    tree->svflags |= SVF_STATIC_SCENERY;
+
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, tree));
+    T_ASSERT(!G_FowPlayerCanSeeEntity(0, unit));
+    old_cvar = gi.CvarString;
+    gi.CvarString = fow_map_test_reveal_cvar;
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, tree));
+    T_ASSERT(G_FowPlayerCanSeeEntity(0, unit));
+    gi.CvarString = old_cvar;
+    G_FowShutdown();
+}
+
 TEST(wc3_game, acquisition_range_uses_spawn_cache) {
     edict_t *ent = make_test_unit();
     ent->class_id = MAKEFOURCC('n', 'o', 'n', 'e');

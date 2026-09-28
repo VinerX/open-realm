@@ -1061,7 +1061,8 @@ void G_FowUpdate(void) {
    without its actors. */
 static bool G_FowPlayerFogDisabled(uint32_t player) {
     gameClient_t *client = G_GetPlayerClientByNumber(player);
-    return client && (client->ps.rdflags & RDF_NOFOG);
+    return (client && (client->ps.rdflags & RDF_NOFOG)) ||
+           (gi.CvarString && atoi(gi.CvarString("wc3_map_test_reveal", "0")) != 0);
 }
 
 /* Hover information is interactive gameplay state, so unlike explored
