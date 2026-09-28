@@ -493,6 +493,7 @@ jassModule_t jass_funcs[] = {
     { "IsItemInvulnerable", IsItemInvulnerable },
     { "GetEnumItem", GetEnumItem },
     { "EnumItemsInRect", EnumItemsInRect },
+    { "BlzCreateUnitWithSkin", BlzCreateUnitWithSkin },
     { "CreateUnit", CreateUnit },
     { "CreateUnitByName", CreateUnitByName },
     { "CreateUnitAtLoc", CreateUnitAtLoc },

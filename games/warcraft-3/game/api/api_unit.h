@@ -1253,6 +1253,19 @@ uint32_t CreateUnit(jass_t *j) {
     edict_t *unit = unit_create(PLAYER_NUM(player), unitid, &location, facing);
     return jass_pushlighthandle(j, unit, "unit");
 }
+uint32_t BlzCreateUnitWithSkin(jass_t *j) {
+    static bool logged_alternate_skin;
+    uint32_t unitid = jass_checkinteger(j, 2);
+    uint32_t skin_id = jass_checkinteger(j, 6);
+
+    if (skin_id && skin_id != unitid && !logged_alternate_skin) {
+        logged_alternate_skin = true;
+        fprintf(stderr, "WC3 JASS: BlzCreateUnitWithSkin alternate skin %c%c%c%c for unit %c%c%c%c is not implemented\n",
+                skin_id & 255, (skin_id >> 8) & 255, (skin_id >> 16) & 255, (skin_id >> 24) & 255,
+                unitid & 255, (unitid >> 8) & 255, (unitid >> 16) & 255, (unitid >> 24) & 255);
+    }
+    return CreateUnit(j);
+}
 uint32_t CreateUnitByName(jass_t *j) {
     //handle_t whichPlayer = jass_checkhandle(j, 1, "player");
     //cstring_t unitname = jass_checkstring(j, 2);

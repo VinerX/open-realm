@@ -363,7 +363,7 @@ void UI_WriteMinimapFrame(void) {
     frame.color = COLOR32_WHITE;
     frame.tex.coord[1] = 0xff;
     frame.tex.coord[3] = 0xff;
-    UI_SetFrameRect(&frame, 0.0070f, 0.4525f, 0.1395f, 0.1395f);
+    UI_SetFrameRect(&frame, 0.0070f, 0.0070f, 0.1395f, 0.1395f);
     UI_WriteProxyFrame(&frame, NULL, 0);
 }
 
