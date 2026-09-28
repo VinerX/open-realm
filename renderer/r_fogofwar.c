@@ -424,25 +424,19 @@ void R_ShutdownFogOfWar(void) {
 }
 
 uint32_t R_GetFogOfWarTexture(void) {
-    if (fow_resources.network &&
-        !(tr.viewDef.rdflags & (RDF_NOFOG | RDF_NOWORLDMODEL))) {
-        return fow_resources.network->texid;
-    }
-    if (fow_resources.rt[FOW_RT_RESULT] &&
-        !(tr.viewDef.rdflags & (RDF_NOFOG | RDF_NOWORLDMODEL))) {
-        return fow_resources.rt[FOW_RT_RESULT]->texture;
-    }
-    return tr.texture[TEX_WHITE]->texid;
+    bool enabled = R_CvarEnabled("r_fogofwar", "1") &&
+                   !(tr.viewDef.rdflags & (RDF_NOFOG | RDF_NOWORLDMODEL));
+    return R_SelectFogOfWarTexture(enabled,
+        fow_resources.network ? fow_resources.network->texid : 0,
+        fow_resources.rt[FOW_RT_RESULT] ? fow_resources.rt[FOW_RT_RESULT]->texture : 0,
+        tr.texture[TEX_WHITE]->texid);
 }
 
 uint32_t R_GetMinimapFogOfWarTexture(void) {
-    if (fow_resources.network) {
-        return fow_resources.network->texid;
-    }
-    if (fow_resources.rt[FOW_RT_RESULT]) {
-        return fow_resources.rt[FOW_RT_RESULT]->texture;
-    }
-    return tr.texture[TEX_WHITE]->texid;
+    return R_SelectFogOfWarTexture(R_CvarEnabled("r_fogofwar", "1"),
+        fow_resources.network ? fow_resources.network->texid : 0,
+        fow_resources.rt[FOW_RT_RESULT] ? fow_resources.rt[FOW_RT_RESULT]->texture : 0,
+        tr.texture[TEX_WHITE]->texid);
 }
 
 void R_UpdateFogOfWarData(void) {

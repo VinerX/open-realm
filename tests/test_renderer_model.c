@@ -1593,7 +1593,14 @@ TEST(renderer_stats, triangles_include_instanced_amplification) {
     T_EQ(R_PrimitiveTriangles(GL_LINES, 12, 100), (uint64_t)0);
 }
 
-/* File lookup probes the exact reference first and only substitutes the supported BLP representation. */
+TEST(renderer_fow, disabled_mask_uses_white_texture) {
+    T_EQ(R_SelectFogOfWarTexture(false, 11, 22, 33), 33u);
+    T_EQ(R_SelectFogOfWarTexture(true, 11, 22, 33), 11u);
+    T_EQ(R_SelectFogOfWarTexture(true, 0, 22, 33), 22u);
+    T_EQ(R_SelectFogOfWarTexture(true, 0, 0, 33), 33u);
+}
+
+/* File lookup probes the exact reference before trying supported sibling formats. */
 static cstring_t texture_file;
 static uint32_t texture_reads;
 static int test_texture_read(cstring_t name, void **buffer) {
@@ -1609,11 +1616,13 @@ TEST(renderer_texture, authored_extensions_resolve_without_losing_real_files) {
         { "Cliff0.tga", "Cliff0.tga", 1, true },
         { "Tree", "Tree.blp", 2, true },
         { "Tree.blp", "Tree.blp", 1, true },
-        { "Missing.tga", "", 2, false },
-        { "Missing.blp", "", 1, false },
+        { "Terrain.blp", "Terrain.dds", 2, true },
+        { "Terrain", "Terrain.dds", 3, true },
+        { "Missing.tga", "", 3, false },
+        { "Missing.blp", "", 2, false },
         { "Missing.dds", "", 1, false },
         { "Missing.pcx", "", 1, false },
-        { "Missing", "", 2, false },
+        { "Missing", "", 3, false },
     };
     int (*read_file)(cstring_t, void **) = ri.FS_ReadFile;
     ri.FS_ReadFile = test_texture_read;

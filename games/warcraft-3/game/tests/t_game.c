@@ -2290,6 +2290,43 @@ static frameDef_t *quest_test_frame(FRAMETYPE type, frameDef_t *parent, cstring_
     return frame;
 }
 
+static cstring_t simple_info_panel_3_0_fixture =
+    "Frame \"SIMPLEFRAME\" \"SimpleInfoPanelUnitDetail\" {\n"
+    "    Frame \"SIMPLESTATUSBAR\" \"SimpleBuildTimeIndicator\" { }\n"
+    "    String \"SimpleBuildingActionLabel\" { }\n"
+    "}\n"
+    "Frame \"SIMPLEFRAME\" \"SimpleInfoPanelBuildingDetail\" {\n"
+    "    Frame \"SIMPLESTATUSBAR\" \"SimpleBuildTimeIndicator\" { }\n"
+    "    String \"SimpleBuildingActionLabel\" { }\n"
+    "    Frame \"SIMPLEFRAME\" \"SimpleBuildQueueBackdropFrame\" {\n"
+    "        Texture \"SimpleBuildQueueBackdrop\" { }\n"
+    "    }\n"
+    "}\n";
+
+static handle_t simple_info_panel_read_file(cstring_t path, uint32_t *size) {
+    if (strcmp(path, "UI\\FrameDef\\UI\\SimpleInfoPanel.fdf")) return NULL;
+    *size = (uint32_t)strlen(simple_info_panel_3_0_fixture);
+    return strdup(simple_info_panel_3_0_fixture);
+}
+
+TEST(wc3_game, simple_info_panel_3_0_build_queue_backdrop_is_nested_under_building_detail) {
+    __typeof__(gi.ReadFile) old_read_file = gi.ReadFile;
+    SimpleInfoPanel_t panel = { 0 };
+
+    setup_test_world();
+    UI_ClearTemplates();
+    gi.ReadFile = simple_info_panel_read_file;
+    SimpleInfoPanel_Load(&panel);
+
+    T_NOT_NULL(panel.SimpleBuildTimeIndicator_2);
+    T_NOT_NULL(panel.SimpleBuildingActionLabel_2);
+    T_ASSERT(panel.SimpleBuildTimeIndicator != panel.SimpleBuildTimeIndicator_2);
+    T_NOT_NULL(panel.SimpleBuildQueueBackdrop);
+
+    gi.ReadFile = old_read_file;
+    UI_ClearTemplates();
+}
+
 TEST(wc3_game, hud_quest_button_opens_placeholder_journal_before_discovery) {
     __typeof__(gi.Write) old_write = gi.Write;
     __typeof__(gi.unicast) old_unicast = gi.unicast;

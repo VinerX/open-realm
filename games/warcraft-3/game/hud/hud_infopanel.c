@@ -149,10 +149,10 @@ void UI_LoadHudInfoPanel(void) {
         UI_SetTexture2(hud.simple.SimpleProgressIndicator, "SimpleProgressBarBorder", false);
         hud.simple.SimpleProgressIndicator->Color = MAKE(color32_t, 65, 130, 210, 255);
         UI_SetHidden(hud.simple.SimpleProgressIndicator, true);
-        UI_SetSize(hud.simple.SimpleBuildTimeIndicator, 0.10538f, 0.0103f);
-        UI_SetTexture(hud.simple.SimpleBuildTimeIndicator,
+        UI_SetSize(hud.simple.SimpleBuildTimeIndicator_2, 0.10538f, 0.0103f);
+        UI_SetTexture(hud.simple.SimpleBuildTimeIndicator_2,
                       "SimpleBuildTimeIndicator", false);
-        UI_SetTexture2(hud.simple.SimpleBuildTimeIndicator,
+        UI_SetTexture2(hud.simple.SimpleBuildTimeIndicator_2,
                        "SimpleBuildTimeIndicatorBorder", false);
         UI_SetSize(hud.simple.SimpleBuildQueueBackdrop, 0.180f, 0.090f);
 
@@ -807,19 +807,19 @@ uint32_t UI_WriteBuildingQueueShell(edict_t *ent, cstring_t action_key, bool sho
     cstring_t name;
 
     if (!ent) return 0;
-    if (!hud.simple.SimpleInfoPanelUnitDetail) return 0;
+    if (!hud.simple.SimpleInfoPanelBuildingDetail) return 0;
 
     name = G_UnitName(ent->class_id);
     UI_SetText(hud.simple.SimpleBuildingNameValue, "%s", name);
     UI_SetText(hud.simple.SimpleBuildingDescriptionValue, "%s", "");
     UI_SetHidden(hud.simple.SimpleBuildingDescriptionValue, true);
-    UI_SetText(hud.simple.SimpleBuildingActionLabel, "%s", UI_GetString(action_key ? action_key : "TRAINING"));
-    UI_SetHidden(hud.simple.SimpleBuildTimeIndicator, false);
+    UI_SetText(hud.simple.SimpleBuildingActionLabel_2, "%s", UI_GetString(action_key ? action_key : "TRAINING"));
+    UI_SetHidden(hud.simple.SimpleBuildTimeIndicator_2, false);
     UI_SetHidden(hud.simple.SimpleBuildQueueBackdrop, !show_queue_slots);
 
     UI_WriteFrame(&hud.bottom);
     UI_WriteFrameWithChildren(hud.simple.SimpleInfoPanelBuildingDetail, &hud.bottom);
-    return UI_GetWrittenFrameNumber(hud.simple.SimpleBuildTimeIndicator);
+    return UI_GetWrittenFrameNumber(hud.simple.SimpleBuildTimeIndicator_2);
 }
 
 void UI_WriteSingleInfo(edict_t *ent, gameClient_t *viewer) {

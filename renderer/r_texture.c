@@ -5,14 +5,21 @@
 int R_ReadTextureFile(cstring_t name, string_t path, void **buffer) {
     static cstring_t const exact[] = { ".blp", ".dds", ".pcx" };
     cstring_t ext = strrchr(name, '.');
+    int len;
+    int size;
     snprintf(path, sizeof(PATHSTR), "%s", name);
-    int size = ri.FS_ReadFile(path, buffer);
+    size = ri.FS_ReadFile(path, buffer);
     if (size >= 0 && *buffer) return size;
     FOR_LOOP(i, sizeof(exact) / sizeof(exact[0]))
-        if (ext && !strcasecmp(ext, exact[i])) return size;
+        if (ext && !strcasecmp(ext, exact[i]) && strcasecmp(ext, ".blp")) return size;
     /* Previously only extensionless names found BLPs, leaving authored .tga references unresolved. */
-    int len = ext && !strcasecmp(ext, ".tga") ? (int)(ext - name) : (int)strlen(name);
-    snprintf(path, sizeof(PATHSTR), "%.*s.blp", len, name);
+    len = ext && (!strcasecmp(ext, ".tga") || !strcasecmp(ext, ".blp")) ? (int)(ext - name) : (int)strlen(name);
+    if (!ext || strcasecmp(ext, ".blp")) {
+        snprintf(path, sizeof(PATHSTR), "%.*s.blp", len, name);
+        size = ri.FS_ReadFile(path, buffer);
+        if (size >= 0 && *buffer) return size;
+    }
+    snprintf(path, sizeof(PATHSTR), "%.*s.dds", len, name);
     return ri.FS_ReadFile(path, buffer);
 }
 

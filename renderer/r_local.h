@@ -479,6 +479,11 @@ void R_RenderFogOfWar(void);
 void R_UpdateFogOfWarData(void);
 uint32_t R_GetFogOfWarTexture(void);
 uint32_t R_GetMinimapFogOfWarTexture(void);
+static inline uint32_t R_SelectFogOfWarTexture(bool enabled, uint32_t network,
+                                               uint32_t generated, uint32_t white) {
+    if (!enabled) return white;
+    return network ? network : (generated ? generated : white);
+}
 
 // r_particles.c
 typedef struct {
