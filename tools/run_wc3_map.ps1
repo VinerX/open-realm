@@ -20,6 +20,37 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function ConvertTo-CommandLineArgument([string]$Value) {
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.Append([char]34)
+    $backslashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq [char]92) {
+            $backslashes++
+            continue
+        }
+        if ($character -eq [char]34) {
+            if ($backslashes -gt 0) {
+                [void]$builder.Append(([string][char]92) * (2 * $backslashes + 1))
+            } else {
+                [void]$builder.Append([char]92)
+            }
+            [void]$builder.Append([char]34)
+        } else {
+            if ($backslashes -gt 0) {
+                [void]$builder.Append(([string][char]92) * $backslashes)
+            }
+            [void]$builder.Append($character)
+        }
+        $backslashes = 0
+    }
+    if ($backslashes -gt 0) {
+        [void]$builder.Append(([string][char]92) * (2 * $backslashes))
+    }
+    [void]$builder.Append([char]34)
+    return $builder.ToString()
+}
+
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $buildDir = Join-Path $repoRoot 'build'
 $binary = Join-Path $buildDir 'bin\openwarcraft3.exe'
@@ -76,33 +107,23 @@ $start.WorkingDirectory = Join-Path $buildDir 'bin'
 $start.UseShellExecute = $false
 $start.CreateNoWindow = $false
 $start.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
-$start.Environment['PATH'] = $childPath
+$start.EnvironmentVariables['PATH'] = $childPath
 
-foreach ($argument in @('-data', $dataPath)) {
-    $start.ArgumentList.Add($argument)
-}
+$arguments = @('-data', $dataPath)
 if ($Edition -eq 'TFT') {
-    $start.ArgumentList.Add('-tft')
+    $arguments += '-tft'
 } else {
-    $start.ArgumentList.Add('-roc')
+    $arguments += '-roc'
 }
-$start.ArgumentList.Add('+set')
-$start.ArgumentList.Add('extra_data')
-$start.ArgumentList.Add([System.IO.Path]::GetDirectoryName($mapPath))
-$start.ArgumentList.Add('+set')
-$start.ArgumentList.Add('vid_hidden')
-$start.ArgumentList.Add('0')
-$start.ArgumentList.Add('+set')
-$start.ArgumentList.Add('vid_fullscreen')
-$start.ArgumentList.Add('0')
-$start.ArgumentList.Add('+set')
-$start.ArgumentList.Add('vid_native')
-$start.ArgumentList.Add('0')
-$start.ArgumentList.Add('+set')
-$start.ArgumentList.Add('vid_mode')
-$start.ArgumentList.Add('4')
-$start.ArgumentList.Add('+map')
-$start.ArgumentList.Add([System.IO.Path]::GetFileName($mapPath))
+$arguments += @(
+    '+set', 'extra_data', [System.IO.Path]::GetDirectoryName($mapPath),
+    '+set', 'vid_hidden', '0',
+    '+set', 'vid_fullscreen', '0',
+    '+set', 'vid_native', '0',
+    '+set', 'vid_mode', '4',
+    '+map', [System.IO.Path]::GetFileName($mapPath)
+)
+$start.Arguments = (($arguments | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' ')
 
 $process = [System.Diagnostics.Process]::Start($start)
 Start-Sleep -Seconds 2
