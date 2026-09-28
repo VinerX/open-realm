@@ -22,11 +22,11 @@ static handle_t cm_w3_map_archive;
 static handle_t cm_w3_map_data;
 
 static cmW3Read_t const cm_w3_readers[] = {
+    CM_ReadInfo,
     CM_ReadPathMap,
     CM_ReadDoodads,
     CM_ReadUnitDoodads,
     CM_ReadHeightmap,
-    CM_ReadInfo,
     CM_ReadWeather,
     CM_ReadUnits,
     CM_ReadItems,

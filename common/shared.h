@@ -1282,6 +1282,7 @@ struct Doodad {
     vec3_t position;
     float angle;
     vec3_t scale;
+    uint32_t skinID;
     uint8_t flags;
     uint32_t player;
     uint8_t treeLife; // integer stored in %, 100% is 0x64, 170% is 0xAA for example

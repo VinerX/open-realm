@@ -309,6 +309,8 @@ void CM_FreeMapInfo(mapInfo_t *mapInfo) {
 #define CM_PLACEMENT_ROC_VERSION 7
 #define CM_PLACEMENT_TFT_VERSION 8
 #define CM_DOO_MAGIC MAKEFOURCC('W', '3', 'd', 'o')
+#define CM_WC3_REFORGED_MAJOR 1
+#define CM_WC3_REFORGED_MINOR 32
 #define CM_DROPPABLE_ITEM_DISK_SIZE 8
 #define CM_INVENTORY_ITEM_DISK_SIZE 8
 #define CM_MODIFIED_ABILITY_DISK_SIZE 12
@@ -319,6 +321,12 @@ typedef struct {
     uint32_t count;
     bool tft;
 } cmPlacementHeader_t;
+
+static bool CM_MapHasReforgedPlacementSkins(void) {
+    return world.info.gameVersionMajor > CM_WC3_REFORGED_MAJOR ||
+           (world.info.gameVersionMajor == CM_WC3_REFORGED_MAJOR &&
+            world.info.gameVersionMinor >= CM_WC3_REFORGED_MINOR);
+}
 
 static bool CM_ReadPlacementHeader(handle_t file, cstring_t filename, cmPlacementHeader_t *header) {
     uint32_t magic;
@@ -483,6 +491,10 @@ static void __attribute__((unused)) CM_ReadDoodads(handle_t archive) {
         SFileReadFile(file, &doodad->position, sizeof(vec3_t), NULL, NULL);
         SFileReadFile(file, &doodad->angle, sizeof(float), NULL, NULL);
         SFileReadFile(file, &doodad->scale, sizeof(vec3_t), NULL, NULL);
+        doodad->skinID = doodad->doodID;
+        if (CM_MapHasReforgedPlacementSkins()) {
+            SFileReadFile(file, &doodad->skinID, sizeof(doodad->skinID), NULL, NULL);
+        }
         SFileReadFile(file, &doodad->flags, sizeof(uint8_t), NULL, NULL);
         SFileReadFile(file, &doodad->treeLife, sizeof(uint8_t), NULL, NULL);
         if (header.tft) {
@@ -558,6 +570,10 @@ static bool CM_ReadUnit(handle_t file, struct Doodad *unit, cmPlacementHeader_t 
     SFileReadFile(file, &unit->position, sizeof(vec3_t), NULL, NULL);
     SFileReadFile(file, &unit->angle, sizeof(float), NULL, NULL);
     SFileReadFile(file, &unit->scale, sizeof(vec3_t), NULL, NULL);
+    unit->skinID = unit->doodID;
+    if (CM_MapHasReforgedPlacementSkins()) {
+        SFileReadFile(file, &unit->skinID, sizeof(unit->skinID), NULL, NULL);
+    }
     SFileReadFile(file, &unit->flags, sizeof(uint8_t), NULL, NULL);
     SFileReadFile(file, &unit->player, sizeof(uint32_t), NULL, NULL);
     SFileReadFile(file, &unit->unknown1, sizeof(uint8_t), NULL, NULL);
