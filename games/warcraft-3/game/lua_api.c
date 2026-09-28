@@ -122,12 +122,7 @@ static int LuaCreateGroup(lua_State *L) {
     return 1;
 }
 
-/* Reforged BlzCreateUnitWithSkin always passes the unit rawcode as its skin in
- * the maps seen so far; OpenRealm has no alternate-skin registry yet, so the
- * rawcode is authoritative and a differing skin is reported once rather than
- * silently dropped. */
 static int LuaBlzCreateUnitWithSkin(lua_State *L) {
-    static bool logged_skin;
     player_t *player = lua_touserdata(L, 1);
     uint32_t unitid = (uint32_t)luaL_checkinteger(L, 2);
     vec2_t location = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
@@ -139,13 +134,8 @@ static int LuaBlzCreateUnitWithSkin(lua_State *L) {
         lua_pushnil(L);
         return 1;
     }
-    if (skinId && skinId != unitid && !logged_skin) {
-        logged_skin = true;
-        fprintf(stderr, "WC3 Lua: BlzCreateUnitWithSkin alternate skin %c%c%c%c for unit %c%c%c%c is not implemented\n",
-                skinId & 255, (skinId >> 8) & 255, (skinId >> 16) & 255, (skinId >> 24) & 255,
-                unitid & 255, (unitid >> 8) & 255, (unitid >> 16) & 255, (unitid >> 24) & 255);
-    }
     unit = unit_create(PLAYER_NUM(player), unitid, &location, facing);
+    if (unit) G_ApplyUnitSkin(unit, skinId);
     if (unit) lua_pushlightuserdata(L, unit);
     else lua_pushnil(L);
     return 1;

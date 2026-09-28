@@ -590,6 +590,30 @@ void SP_SpawnUnit(edict_t *self) {
     G_RegisterUnitSounds(self);
 }
 
+bool G_ApplyUnitSkin(edict_t *unit, uint32_t skin_id) {
+    UnitUI_t const *ui;
+    PATHSTR model_filename;
+    int model;
+
+    if (!unit || !skin_id || skin_id == unit->class_id) return true;
+    ui = G_UnitUI(skin_id);
+    if (!ui || ui->id != skin_id || !ui->modelFile || !*ui->modelFile) {
+        fprintf(stderr, "WC3: unit skin %.4s has no model row for %.4s\n",
+                (cstring_t)&skin_id, (cstring_t)&unit->class_id);
+        return false;
+    }
+    G_NormalizeModelFilename(ui->modelFile, model_filename, sizeof(model_filename));
+    model = G_RegisterModel(model_filename);
+    if (!model) {
+        fprintf(stderr, "WC3: unable to register unit skin model %s for %.4s\n",
+                model_filename, (cstring_t)&unit->class_id);
+        return false;
+    }
+    unit->s.model = model;
+    if (ui->modelScale > 0.0f) unit->s.scale = ui->modelScale;
+    return true;
+}
+
 /* Walkable destructables are sparse, so keep a level list instead of scanning every map edict per unit tick. */
 void G_RegisterGroundSurface(edict_t *ent) {
     if (!G_IsDestructable(ent) || !ent->data.DestructableData->walkable) return;

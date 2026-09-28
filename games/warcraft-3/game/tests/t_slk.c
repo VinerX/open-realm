@@ -1297,6 +1297,59 @@ static int capture_spawn_model(cstring_t name) {
     snprintf(spawn_model, sizeof(spawn_model), "%s", name); return 43;
 }
 
+TEST(wc3_slk, unit_skin_changes_model_without_changing_gameplay_rawcode) {
+    static const char slk_ui[] =
+        "C;Y1;X1;K\"unitUIID\"\n"
+        "C;Y1;X2;K\"file\"\n"
+        "C;Y1;X3;K\"modelScale\"\n"
+        "C;Y2;X1;K\"hfoo\"\n"
+        "C;Y2;X2;K\"Units\\Human\\Footman\\Footman\"\n"
+        "C;Y2;X3;K\"1.0\"\n"
+        "E\n";
+    uint32_t const base_id = MAKEFOURCC('h','f','o','o');
+    uint32_t const skin_id = MAKEFOURCC('x','f','o','o');
+    float scale = 1.75f;
+    unitModification_t mods[] = {
+        { .modID = MAKEFOURCC('u','m','d','l'), .type = mod_string,
+          .data = (handle_t)"Units\\Campaign\\Skin\\Skin" },
+        { .modID = MAKEFOURCC('u','s','c','a'), .type = mod_real, .data = &scale },
+    };
+    unitData_t skin = {
+        .originalUnitID = base_id, .newUnitID = skin_id,
+        .numbeOfModifications = 2, .modifications = mods
+    };
+    mapInfo_t mapinfo = { .num_userCreatedUnits = 1, .userCreatedUnits = &skin };
+    slkTestData_t *rows = parse_slk_string(slk_ui);
+    slkTestData_t *saved_ui;
+    slkTestData_t *replaced_ui;
+    mapInfo_t const *saved_mapinfo;
+    int (*old_index)(cstring_t) = gi.ModelIndex;
+    edict_t unit = { .class_id = base_id, .s.model = 7, .s.scale = 1.0f };
+
+    setup_test_world();
+    saved_ui = G_SetSLKRows("UnitUI", rows);
+    saved_mapinfo = level.mapinfo;
+    level.mapinfo = &mapinfo;
+    G_SetMapUnitOverrides(&mapinfo);
+    spawn_model[0] = '\0';
+    gi.ModelIndex = capture_spawn_model;
+
+    T_ASSERT(G_ApplyUnitSkin(&unit, skin_id));
+    T_EQ(unit.class_id, base_id);
+    T_EQ(unit.s.model, 43);
+    T_FEQ(unit.s.scale, 1.75f, 0.001f);
+    T_STREQ(spawn_model, "Units\\Campaign\\Skin\\Skin.mdx");
+    T_STREQ(G_UnitUI(base_id)->modelFile, "Units\\Human\\Footman\\Footman");
+
+    gi.ModelIndex = old_index;
+    G_SetMapUnitOverrides(NULL);
+    level.mapinfo = saved_mapinfo;
+    replaced_ui = G_SetSLKRows("UnitUI", saved_ui);
+    free_slk_rows(replaced_ui);
+    free_slk_rows(saved_ui);
+    free_slk_rows(rows);
+}
+
 static cstring_t doodad_model_probe_existing;
 
 static handle_t doodad_model_probe_read(cstring_t name, uint32_t *size) {

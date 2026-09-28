@@ -435,6 +435,38 @@ static void SP_DestructableModelFilename(DestructableData_t const *row,
     }
 }
 
+static void SP_ApplyPlacementSkin(edict_t *ent, uint32_t skin_id) {
+    PATHSTR model_filename;
+    if (!ent || !skin_id || skin_id == ent->class_id) return;
+    if (ent->data.Doodads->id) {
+        Doodads_t const *row = G_Doodad(skin_id);
+        if (!row || row->id != skin_id || !row->file || !*row->file) goto unresolved;
+        SP_DoodadModelFilename(row, ent->variation, model_filename, sizeof(model_filename));
+    } else if (ent->data.DestructableData->file) {
+        DestructableData_t const *row = G_DestructableData(skin_id);
+        if (!row || !row->file || !*row->file) goto unresolved;
+        SP_DestructableModelFilename(row, ent->variation, model_filename, sizeof(model_filename));
+    } else if (ent->data.UnitUI->modelFile) {
+        G_ApplyUnitSkin(ent, skin_id);
+        return;
+    } else if (ent->data.ItemData->file) {
+        ItemData_t const *row = G_ItemData(skin_id);
+        if (!row || row->id != skin_id || !row->file || !*row->file) goto unresolved;
+        G_NormalizeModelFilename(row->file, model_filename, sizeof(model_filename));
+    } else {
+        goto unresolved;
+    }
+    ent->s.model = G_RegisterModel(model_filename);
+    if (!ent->s.model)
+        fprintf(stderr, "WC3: unable to register placement skin model %s for %.4s\n",
+                model_filename, (cstring_t)&ent->class_id);
+    return;
+
+unresolved:
+    fprintf(stderr, "WC3: placement skin %.4s has no model row for %.4s\n",
+            (cstring_t)&skin_id, (cstring_t)&ent->class_id);
+}
+
 static void SP_SpawnDestructable(edict_t *edict) {
     DestructableData_t const *row = edict->data.DestructableData;
     cstring_t path_tex = row->pathingTexture;
@@ -773,6 +805,7 @@ void G_SpawnEntities(void) {
         ent->s.angle = doodad->angle;
         ent->s.scale = doodad->scale.x;
         SP_CallSpawn(ent);
+        SP_ApplyPlacementSkin(ent, doodad->skinID);
         if ((S_GoldMineIsMine(ent) || S_GoldMineIsOverlay(ent)) && doodad->goldAmount != (uint32_t)-1)
             ent->resources = doodad->goldAmount;
         if (ent->svflags & SVF_MONSTER) G_ApplyMapUnitTeamColor(ent, doodad);
