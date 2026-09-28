@@ -146,6 +146,13 @@ int MSG_Read(sizeBuf_t *buffer, void *dest, uint32_t bytes) {
     return bytes;
 }
 
+int MSG_Skip(sizeBuf_t *buffer, uint32_t bytes) {
+    if (buffer->readcount > buffer->cursize || bytes > buffer->cursize - buffer->readcount)
+        return 0;
+    buffer->readcount += bytes;
+    return 1;
+}
+
 int MSG_ReadLong(sizeBuf_t *buffer) {
     uint32_t value = 0;
     MSG_Read(buffer, &value, 4);
@@ -171,16 +178,22 @@ int FileIsAtEndOfBlock(sizeBuf_t *sb) {
     return sb->readcount >= sb->cursize;
 }
 
-void ReadGeosetMatrices(sizeBuf_t *buffer, mdxGeoset_t *geoset) {
+void ReadGeosetMatrices(sizeBuf_t *buffer, mdxGeoset_t *geoset, uint32_t version) {
     SFileReadArray2(buffer, geoset, matrices, sizeof(int));
     MSG_Read(buffer, &geoset->materialID, sizeof(int));
     MSG_Read(buffer, &geoset->group, sizeof(int));
     MSG_Read(buffer, &geoset->selectable, sizeof(int));
+    if (version >= 900) {
+        uint32_t lod;
+        char filePath[sizeof(mdxObjectName_t)];
+        MSG_Read(buffer, &lod, sizeof(lod));
+        MSG_Read(buffer, filePath, sizeof(filePath));
+    }
     MSG_Read(buffer, &geoset->default_bounds, sizeof(mdxBounds_t));
     SFileReadArray2(buffer, geoset, bounds, sizeof(mdxBounds_t));
 }
 
-void ReadGeoset(sizeBuf_t *buffer, mdxGeoset_t *geoset) {
+void ReadGeoset(sizeBuf_t *buffer, mdxGeoset_t *geoset, uint32_t version) {
     uint32_t header;
     while (MSG_Read(buffer, &header, 4)) {
         switch (header) {
@@ -193,7 +206,24 @@ void ReadGeoset(sizeBuf_t *buffer, mdxGeoset_t *geoset) {
             case ID_GNDX: SFileReadArray2(buffer, geoset, vertexGroups, sizeof(char)); break;
             case ID_MTGC: SFileReadArray2(buffer, geoset, matrixGroupSizes, sizeof(int)); break;
             case ID_UVAS: MSG_Read(buffer, &geoset->num_texcoordChannels, sizeof(int)); break;
-            case ID_MATS: ReadGeosetMatrices(buffer, geoset); break;
+            case ID_MATS: ReadGeosetMatrices(buffer, geoset, version); break;
+            case MAKEFOURCC('T','A','N','G'): {
+                uint32_t count = MSG_ReadLong(buffer);
+                if (count > (buffer->cursize - buffer->readcount) / 16 ||
+                    !MSG_Skip(buffer, count * 16)) {
+                    fprintf(stderr, "MDLX: invalid TANG count in geoset\n");
+                    buffer->readcount = buffer->cursize;
+                }
+                break;
+            }
+            case MAKEFOURCC('S','K','I','N'): {
+                uint32_t size = MSG_ReadLong(buffer);
+                if (!MSG_Skip(buffer, size)) {
+                    fprintf(stderr, "MDLX: invalid SKIN size in geoset\n");
+                    buffer->readcount = buffer->cursize;
+                }
+                break;
+            }
             default:
                 PrintTag(header);
                 break;
@@ -214,7 +244,7 @@ void ReadKeyTrack(sizeBuf_t *buffer, MODELKEYTRACKDATATYPE dataType, mdxKeyTrack
     MSG_Read(buffer, (*output)->values, dataSize);
 }
 
-void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer) {
+void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer, uint32_t version) {
     uint32_t blockHeader;
     MSG_Read(buffer, &layer->blendMode, 4);
     MSG_Read(buffer, &layer->flags, 4);
@@ -222,6 +252,8 @@ void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer) {
     MSG_Read(buffer, &layer->transformId, 4);
     MSG_Read(buffer, &layer->coordId, 4);
     MSG_Read(buffer, &layer->staticAlpha, 4);
+    if (version >= 900)
+        buffer->readcount += sizeof(float);
     while (MSG_Read(buffer, &blockHeader, 4)) {
         switch (blockHeader) {
             case ID_KMTA: ReadKeyTrack(buffer, TDATA_FLOAT1, &layer->alpha); break;
@@ -233,24 +265,28 @@ void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer) {
     }
 }
 
-void ReadMaterialLayers(sizeBuf_t *buffer, mdxMaterial_t *material) {
+void ReadMaterialLayers(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) {
     if (!(material->num_layers = MSG_ReadLong(buffer)))
         return;
     material->layers = ri.MemAlloc(sizeof(mdxMaterialLayer_t) * material->num_layers);
     FOR_LOOP(layerID, material->num_layers) {
         sizeBuf_t layer = FileReadBlock(buffer);
-        ReadMaterialLayer(&layer, &material->layers[layerID]);
+        ReadMaterialLayer(&layer, &material->layers[layerID], version);
         buffer->readcount += layer.readcount;
     }
 }
 
-void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material) {
+void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) {
     uint32_t blockHeader;
     material->priority = MSG_ReadLong(buffer);
     material->flags = MSG_ReadLong(buffer);
+    if (version >= 900) {
+        char shader[sizeof(mdxObjectName_t)];
+        MSG_Read(buffer, shader, sizeof(shader));
+    }
     while (MSG_Read(buffer, &blockHeader, 4)) {
         switch (blockHeader) {
-            case ID_LAYS: ReadMaterialLayers(buffer, material); break;
+            case ID_LAYS: ReadMaterialLayers(buffer, material, version); break;
             case ID_KMTE: ReadKeyTrack(buffer, TDATA_FLOAT1, &material->emission); break;
             case ID_KMTA: ReadKeyTrack(buffer, TDATA_FLOAT1, &material->alpha); break;
             case ID_KMTF: ReadKeyTrack(buffer, TDATA_INT1, &material->flipbook); break;
@@ -531,11 +567,14 @@ blockReadCode_t MDLX_ReadMODL(sizeBuf_t *sb, mdxModel_t *model) {
 }
 
 blockReadCode_t MDLX_ReadVERS(sizeBuf_t *sb, mdxModel_t *model) {
-    if ((model->version = MSG_ReadLong(sb)) != 800) {
-        fprintf(stderr, "Usupported MDLX version %d\n", model->version);
-        return BLOCKREAD_ERROR;
-    } else {
+    model->version = MSG_ReadLong(sb);
+    switch (model->version) {
+    case 800: case 900: case 1000: case 1100: case 1200: case 1300:
+    case 1400: case 1500: case 1600: case 1800:
         return BLOCKREAD_OK;
+    default:
+        fprintf(stderr, "Unsupported MDLX version %d\n", model->version);
+        return BLOCKREAD_ERROR;
     }
 }
 
@@ -545,12 +584,24 @@ blockReadCode_t MDLX_ReadEVTS(sizeBuf_t *sb, mdxModel_t *model) {
 }
 
 blockReadCode_t MDLX_ReadGEOS(sizeBuf_t *sb, mdxModel_t *model) {
-    MODEL_READ_LIST(sb, Geoset, geosets);
+    while (!FileIsAtEndOfBlock(sb)) {
+        sizeBuf_t inner = FileReadBlock(sb);
+        mdxGeoset_t *geoset = ri.MemAlloc(sizeof(mdxGeoset_t));
+        ReadGeoset(&inner, geoset, model->version);
+        PUSH_BACK(mdxGeoset_t, geoset, model->geosets);
+        sb->readcount += inner.readcount;
+    }
     return BLOCKREAD_OK;
 }
 
 blockReadCode_t MDLX_ReadMTLS(sizeBuf_t *sb, mdxModel_t *model) {
-    MODEL_READ_LIST(sb, Material, materials);
+    while (!FileIsAtEndOfBlock(sb)) {
+        sizeBuf_t inner = FileReadBlock(sb);
+        mdxMaterial_t *material = ri.MemAlloc(sizeof(mdxMaterial_t));
+        ReadMaterial(&inner, material, model->version);
+        PUSH_BACK(mdxMaterial_t, material, model->materials);
+        sb->readcount += inner.readcount;
+    }
     return BLOCKREAD_OK;
 }
 

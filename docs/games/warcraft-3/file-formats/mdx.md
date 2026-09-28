@@ -8,7 +8,7 @@ An MDX file is a sequence of tagged chunks. Each chunk begins with a 4-byte Four
 
 ```
 MDLX                       ← magic / version header
-VERS  <size>  <version>    ← format version (800 for WC3, 1000 / 1500 for Reforged)
+VERS  <size>  <version>    ← format version (800 classic; 900–1800 Reforged/3.0 families)
 MODL  <size>  <modelInfo>  ← global model info (name, bounds)
 SEQS  <size>  [sequence]…  ← named animation sequences
 GLBS  <size>  [globalSeq]… ← global sequence durations
@@ -28,6 +28,13 @@ LITE  <size>  [light]…     ← light nodes
 ```
 
 Not all chunks are present in every model. The Warcraft III loader (`games/warcraft-3/renderer/mdx/r_mdx_load.c`) dispatches on each FourCC tag.
+
+The loader recognizes versions 800, 900–1600 (the published version values), and
+1800. Reforged versions add fixed-size shader/path fields to materials and
+geosets, an emissive-gain value to material layers, and optional `TANG` and
+`SKIN` geoset data. The current renderer consumes those layout additions so
+the legacy geometry and materials stay aligned; it does not yet apply tangent
+or Reforged skin-weight data during rendering. Unknown versions remain errors.
 
 ## Node Hierarchy
 
