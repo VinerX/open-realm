@@ -38,7 +38,7 @@ the map's `InitErrors`/`InitFatal` globals, so a boot that merely reaches game
 start can no longer hide a failed init step. It then asserts the deferred
 triggers (`gg_trg_*`) and globals the rest of the map depends on exist. Against
 `23-Race-Legion.w3x` the queue went from 205 failed steps to 2; both remaining
-failures are one map-side defect (see below), not a missing native.
+failures are map-side defects in the tested archive, not missing natives.
 
 ## Implemented and verified
 
@@ -92,16 +92,26 @@ failures are one map-side defect (see below), not a missing native.
   regression passes in Classic and TFT, including negative values and null
   handles. This advances Legion's UnitIndexer initialization past the former
   missing-native error.
+- The `legion spawn/order` scenario passed on the published `v1.6.507` archive
+  at step 202: it created a copy of a live map unit and verified its type,
+  owner, accepted stop order, then removed it. This does not prove movement or
+  visual correctness.
 
-## Known map-side defect
+## Map source and packaged-map divergence
 
-`war3map.lua:17085` calls `Condition(Trig_StolicaAttacked_Conditions)`, but the
-function definition was dropped when the converted script was split into
-`_lua/monolith_split/` sections (it exists in the pre-split `stolica.lua`).
-Because Lua resolves the global at call time, the missing function raises
-`bad argument #1 to 'Condition' (function expected, got nil)`, which fails
-init step 14 (`InitCustomTriggers`) and cascades into step 15
-(`RunInitializationTriggers`). This is a map-source fix, not engine work.
+The current map checkout is at `3382882 fix(map): restore StolicaAttacked
+condition`; its split source and generated `map.w3x/war3map.lua` both define
+`Trig_StolicaAttacked_Conditions`, and `build_map_lua.py --check-only` confirms
+the generated file matches the sections. The untracked packaged archive
+`23_Race_Legion_v1_6_507.w3x` does not contain that function. Running
+`legion-init-integrity` against that archive still reports failures in
+`InitCustomTriggers` and `RunInitializationTriggers`, so the fix has not been
+validated in a rebuilt map package.
+
+The same scenario exposes a separate map-source defect in `IndexUnit`:
+`udg_UDexPrev[udg_UDexNext0]` uses an undeclared scalar where the adjacent
+linked-list operations use `udg_UDexNext[0]`. `InitializeUnitIndexer` therefore
+fails with a nil table index. This is map logic; do not add an engine fallback.
 
 Note on the 18 failing `wc3_api.*` assertions in this environment: they also
 fail on the pre-change base commit `dc683593` and are platform issues (`/tmp`
@@ -124,12 +134,11 @@ map-side diagnosis, not more native coverage for its own sake.
 4. Before a checkpoint, run focused tests, `git diff --check`, and a production
    build. Stage only task files; leave the unrelated
    `renderer/conchars_sysfont.h` modification untouched.
-5. The latest legion-init-integrity run still reports 2 failed steps. The
-   UnitIndexer failure advanced from missing SetUnitUserData to a nil table
-   index in IndexUnit; the checked map source references udg_UDexNext0 without
-   declaring or initializing it. The separate known
-   Trig_StolicaAttacked_Conditions nil failure remains. Both are map-source
-   issues; do not add engine fallbacks for them.
+5. Rebuild/package the map from its current checkout and rerun
+   `legion-init-integrity`; the published v1.6.507 archive predates the
+   `StolicaAttacked` source fix. The current source also needs the UnitIndexer
+   expression corrected before that scenario can pass. Keep these fixes in the
+   map checkout rather than masking them in OpenRealm.
 
 Earlier findings and sources for the retail load model are recorded in the
 design spec and the previous version of this status note; see the linked
