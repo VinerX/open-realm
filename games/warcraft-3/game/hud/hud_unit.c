@@ -168,6 +168,7 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     cstring_t ubertip;
     cstring_t hotkey;
     ability_t const *ability;
+    UnitProfile_t const *unitProfile = NULL;
     abilityitem_t item;
     abilityCall_t call;
     uint32_t ability_code = 0;
@@ -193,6 +194,11 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
         ability_code = G_AbilityCodeName(code);
         base_code = GetClassName(ability_code);
         upgrade_research = research && G_UpgradeData(ability_code)->id == ability_code;
+        if (!ability) {
+            uint32_t const unit_id = FS_SLKKey(code);
+            UnitProfile_t const *candidate = G_UnitProfile(unit_id);
+            if (candidate->id == unit_id) unitProfile = candidate;
+        }
     } else {
         base_code = code;
     }
@@ -211,6 +217,13 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
                              G_ResearchField(STR_UBERTIP, research && !upgrade_research));
     hotkey = FindConfigValue(art_code, toggle_on ? STR_UNHOTKEY :
                             G_ResearchField(STR_HOTKEY, research && !upgrade_research));
+    if (unitProfile) {
+        if ((!art || !*art) && unitProfile->art) art = unitProfile->art;
+        if ((!tip || !*tip) && unitProfile->tip) tip = unitProfile->tip;
+        if ((!ubertip || !*ubertip) && unitProfile->uberTip) ubertip = unitProfile->uberTip;
+        if ((!hotkey || !*hotkey) && unitProfile->hotkey) hotkey = unitProfile->hotkey;
+        if ((!tip || !*tip) && unitProfile->id) tip = G_UnitName(unitProfile->id);
+    }
     UI_CopyString(art_level, sizeof(art_level), research ? G_StringForLevel(art, level) : art);
     art_path = G_UIArtPath(art_level);
 
