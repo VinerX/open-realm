@@ -398,6 +398,7 @@ static void MDLX_RenderGeoset(mdxModel_t const *model,
         shader->state.layerAlpha = alpha;
         MDLX_BindLayerTextureAnimation(model, layer, frame);
         uint32_t textureId = MDLX_EvaluateLayerTextureId(model, layer, frame);
+        if (textureId >= (uint32_t)model->num_textures) continue;
         mdxTexture_t const *modeltex = &model->textures[textureId];
         texture_t const *texture = MDLX_GetTexture(model, team, textureId, modeltex->replaceableID, overrideTexture);
         R_BindTexture(texture, 0);

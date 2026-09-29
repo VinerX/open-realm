@@ -335,6 +335,43 @@ void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer, uint32_t ve
         fprintf(stderr, "MDLX: truncated Reforged layer properties\n");
         return;
     }
+    if (version >= 1100) {
+        uint32_t shader = MSG_ReadLong(buffer);
+        uint32_t textureCount = MSG_ReadLong(buffer);
+        if (buffer->overflowed || buffer->readcount > buffer->cursize ||
+            textureCount > (buffer->cursize - buffer->readcount) / 8) {
+            buffer->overflowed = true;
+            fprintf(stderr, "MDLX: invalid Reforged material texture count %u\n", textureCount);
+            return;
+        }
+        layer->textureId = UINT32_MAX;
+        uint32_t firstTextureId = UINT32_MAX;
+        for (uint32_t i = 0; i < textureCount; i++) {
+            uint32_t textureId = MSG_ReadLong(buffer);
+            uint32_t slot = MSG_ReadLong(buffer);
+            if (firstTextureId == UINT32_MAX) firstTextureId = textureId;
+            mdxKeyTrack_t *flipbook = NULL;
+            uint32_t nextTag = 0;
+            if (buffer->cursize - buffer->readcount >= sizeof(nextTag))
+                memcpy(&nextTag, buffer->data + buffer->readcount, sizeof(nextTag));
+            if (nextTag == ID_KMTF) {
+                MSG_ReadLong(buffer);
+                ReadKeyTrack(buffer, TDATA_INT1, &flipbook);
+            }
+            if (slot == 0) {
+                layer->textureId = textureId;
+                if (flipbook) layer->flipbook = flipbook;
+            } else if (flipbook) {
+                ri.MemFree(flipbook);
+            }
+        }
+        if (layer->textureId == UINT32_MAX && firstTextureId != UINT32_MAX) {
+            layer->textureId = firstTextureId;
+            fprintf(stderr, "MDLX: material shader %u has no diffuse texture slot; using slot 0 entry\n", shader);
+        }
+        if (shader != 0)
+            fprintf(stderr, "MDLX: material shader %u uses SD texture slot only\n", shader);
+    }
     while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_KMTE: ReadKeyTrack(buffer, TDATA_FLOAT1, &layer->emission); break;
@@ -901,6 +938,13 @@ mdxModel_t *R_LoadModelMDLX(void *data, uint32_t size) {
         tex->texid = R_RegisterTextureFile(tex->path);
         texture_t const *loaded = R_FindTextureByID(tex->texid);
         R_SetTextureWrap(loaded, tex->nWrapping & 0x1, tex->nWrapping & 0x2);
+    }
+    FOR_EACH_LIST(mdxMaterial_t, material, model->materials) {
+        FOR_LOOP(i, material->num_layers) {
+            if (material->layers[i].textureId >= (uint32_t)model->num_textures)
+                fprintf(stderr, "MDLX: model '%s' material layer %u has invalid texture index %u\n",
+                        model->info.name, i, material->layers[i].textureId);
+        }
     }
     FOR_EACH_LIST(mdxGeosetAnim_t, geosetAnim, model->geosetAnims) {
         mdxGeoset_t *geoset = model->geosets;
