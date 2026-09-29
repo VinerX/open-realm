@@ -136,6 +136,7 @@ The iPad must be unlocked for the launch step. `make ipad-run` does the same in 
 - [Architecture](ARCHITECTURE.md) — module boundaries and API contracts
 - [Runtime configuration](docs/architecture/runtime.md) — paths, cvars, and startup order
 - [Rendering scene workflow](docs/rendering-scene-workflow.md) — launching maps and model scenes
+- [Warcraft III map tester status](docs/games/warcraft-3/map-testing/README.md) — current Reforged 3.0 Classic map-testing gaps and screenshots
 - [UI authoring](docs/ui-authoring.md) — FDF, bindings, and UI tests
 - [WC3 gameplay documentation](docs/games/warcraft-3/gameplay-features.md)
 - [Diagnostic tools](docs/diagnostic-tools.md)

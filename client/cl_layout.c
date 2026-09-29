@@ -361,11 +361,21 @@ rect_t const *SCR_LayoutRect(uiFrame_t const *frame) {
     drawText_t drawtext = {0};
     switch (frame->flags.type) {
         case FT_FRAME:
-        case FT_SIMPLEFRAME:
+        case FT_SIMPLEFRAME: {
+            bool has_x_anchor = frame->points.x[FPP_MIN].used || frame->points.x[FPP_MID].used || frame->points.x[FPP_MAX].used;
+            bool has_y_anchor = frame->points.y[FPP_MIN].used || frame->points.y[FPP_MID].used || frame->points.y[FPP_MAX].used;
+            if (frame->flags.type == FT_SIMPLEFRAME &&
+                frame->size.width == 0 && frame->size.height == 0 &&
+                !has_x_anchor && !has_y_anchor &&
+                !(frame->flagsvalue & UIFLAG_SIZE_TO_CONTENT)) {
+                runtimes[frame->number].rect = *SCR_LayoutRect(frames + frame->parent);
+                return &runtimes[frame->number].rect;
+            }
             if ((frame->flagsvalue & UIFLAG_SIZE_TO_CONTENT) &&
                 frame->buffer.data && frame->buffer.size >= sizeof(uiNameTag_t))
                 elemsize = SCR_MeasureSizeToContent(frame, avl_space);
             break;
+        }
         case FT_STRING:
         case FT_TEXT: {
             uiLabel_t const *label = frame->buffer.data;

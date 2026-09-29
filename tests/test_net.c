@@ -1782,6 +1782,64 @@ TEST(net, layout_authored_height_with_top_bottom_anchors_keeps_bottom_edge) {
     T_FEQ(child_rect->y, parent_rect->y - 0.001125f, 0.0002f);
 }
 
+TEST(net, layout_empty_simpleframe_inherits_parent_rect_for_overlay_tiles) {
+    uint8_t buf[512];
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+    uiFrame_t empty = {0}, bottom_bar = {0}, overlay = {0}, tile = {0};
+    rect_t const *bar_rect, *overlay_rect, *tile_rect;
+
+    bottom_bar.number = 1;
+    bottom_bar.flags.type = FT_SIMPLEFRAME;
+    bottom_bar.size.width = 0.800f;
+    bottom_bar.size.height = 0.130f;
+    bottom_bar.points.x[FPP_MIN].used = 1;
+    bottom_bar.points.x[FPP_MIN].targetPos = FPP_MIN;
+    bottom_bar.points.x[FPP_MIN].relativeTo = 0;
+    bottom_bar.points.x[FPP_MIN].offset = (int16_t)(0.100f * UI_FRAMEPOINT_SCALE);
+    bottom_bar.points.y[FPP_MAX].used = 1;
+    bottom_bar.points.y[FPP_MAX].targetPos = FPP_MAX;
+    bottom_bar.points.y[FPP_MAX].relativeTo = 0;
+
+    overlay.number = 2;
+    overlay.parent = 1;
+    overlay.flags.type = FT_SIMPLEFRAME;
+
+    tile.number = 3;
+    tile.parent = 2;
+    tile.flags.type = FT_TEXTURE;
+    tile.size.width = 0.256f;
+    tile.size.height = 0.176f;
+    tile.points.x[FPP_MID].used = 1;
+    tile.points.x[FPP_MID].targetPos = FPP_MID;
+    tile.points.x[FPP_MID].relativeTo = UI_PARENT;
+    tile.points.x[FPP_MID].offset = (int16_t)(0.528f * UI_FRAMEPOINT_SCALE);
+    tile.points.y[FPP_MAX].used = 1;
+    tile.points.y[FPP_MAX].targetPos = FPP_MAX;
+    tile.points.y[FPP_MAX].relativeTo = UI_PARENT;
+
+    test_client_stubs_init();
+    MSG_WriteByte(&sb, LAYER_CONSOLE);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &bottom_bar, true); MSG_WriteByte(&sb, 0);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &overlay, true); MSG_WriteByte(&sb, 0);
+    MSG_WriteDeltaUIFrame(&sb, &empty, &tile, true); MSG_WriteByte(&sb, 0);
+    MSG_WriteLong(&sb, 0); MSG_WriteShort(&sb, 0); sb.readcount = 0;
+
+    CL_ParseLayout(&sb);
+    SCR_Clear(cl.layout[LAYER_CONSOLE]);
+    bar_rect = SCR_LayoutRect(SCR_Frame(1));
+    overlay_rect = SCR_LayoutRect(SCR_Frame(2));
+    tile_rect = SCR_LayoutRect(SCR_Frame(3));
+    T_NOT_NULL(bar_rect);
+    T_NOT_NULL(overlay_rect);
+    T_NOT_NULL(tile_rect);
+    T_FEQ(overlay_rect->x, bar_rect->x, 0.0001f);
+    T_FEQ(overlay_rect->y, bar_rect->y, 0.0001f);
+    T_FEQ(overlay_rect->w, bar_rect->w, 0.0001f);
+    T_FEQ(overlay_rect->h, bar_rect->h, 0.0001f);
+    T_FEQ(tile_rect->x, 0.900f, 0.001f);
+    T_FEQ(tile_rect->y, 0.424f, 0.001f);
+}
+
 TEST(net, layout_terminator_only_payload_clears_modal_layer) {
     uint8_t buf[256];
     sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
