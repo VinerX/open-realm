@@ -62,6 +62,11 @@ cstring_t doodad_overlay_files[] = {
     NULL
 };
 
+cstring_t destructable_overlay_files[] = {
+    "Units\\DestructableSkin.txt",
+    NULL
+};
+
 cstring_t profile_files[] = {
     "Units\\CampaignUnitFunc.txt",
     "Units\\CampaignUnitStrings.txt",
@@ -961,7 +966,9 @@ static slkStore_t slk_stores[] = {
     /* Music.slk never shipped in retail MPQs; Warsmash loads it optionally and readers fall back to the raw token. */
     { "Music",            "UI\\SoundInfo\\Music.slk",            music_schema, sizeof(*g_MusicData),        (void **)&g_MusicData,        &g_MusicDataCount,        NULL, true },
     { "ItemData", "Units\\ItemData.slk", item_schema, sizeof(*g_ItemData), (void **)&g_ItemData, &g_ItemDataCount, &item_idx },
-    { "DestructableData", "Units\\DestructableData.slk", dest_schema, sizeof(*g_DestructableData), (void **)&g_DestructableData, &g_DestructableDataCount, &dest_idx },
+    /* Reforged moved destructable art/model columns into Units\\DestructableSkin.txt. */
+    { "DestructableData", "Units\\DestructableData.slk", dest_schema, sizeof(*g_DestructableData), (void **)&g_DestructableData, &g_DestructableDataCount, &dest_idx,
+      false, destructable_overlay_files },
 };
 
 static int32_t G_NormalizeArmorType(cstring_t value, int32_t fallback);
