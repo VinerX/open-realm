@@ -770,6 +770,8 @@ model_t *R_LoadModel(cstring_t modelFilename) {
             model = ri.MemAlloc(sizeof(model_t));
             model->mdx = mdx;
             model->modeltype = ID_MDLX;
+        } else {
+            fprintf(stderr, "MDLX: failed to load model %s\n", modelFilename);
         }
     } else if (R_W3PathHasExtension(modelFilename, ".mdl")) {
         /* Same case-insensitive issue: use stem length, not strstr. */

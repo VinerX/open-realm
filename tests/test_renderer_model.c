@@ -886,6 +886,26 @@ TEST(renderer_model, mdx_ribb_loader_reads_emitter_tracks_and_nodes) {
     MDLX_Release(model);
 }
 
+TEST(renderer_model, mdx_camera_loader_rejects_keytrack_past_camera_record) {
+    uint8_t blob[256] = { 0 };
+    uint8_t *p = blob;
+    mdxModel_t *model;
+    uint32_t const camera_size = 116 + 4 + 12;
+
+    mdx_put_fourcc(&p, "MDLX");
+    mdx_put_fourcc(&p, "CAMS"); mdx_put_u32(&p, 4 + camera_size);
+    mdx_put_u32(&p, camera_size);
+    memset(p, 0, 116); p += 116;
+    mdx_put_fourcc(&p, "KCTR");
+    mdx_put_u32(&p, 1);
+    mdx_put_u32(&p, TRACK_HERMITE);
+    mdx_put_u32(&p, 0xFFFFFFFF);
+
+    ri.MemAlloc = test_alloc; ri.MemFree = test_free; ri.error = test_error;
+    model = R_LoadModelMDLX(blob, (uint32_t)(p - blob));
+    T_NULL(model);
+}
+
 TEST(renderer_model, mdx_sound_event_keys_follow_sequence_and_global_sequence_time) {
     mdxSequence_t sequences[2] = {
         { .name = "Stand", .interval = {100, 200} },

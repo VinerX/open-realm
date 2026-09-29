@@ -57,6 +57,11 @@ cstring_t unit_ui_overlay_files[] = {
     NULL
 };
 
+cstring_t doodad_overlay_files[] = {
+    "Doodads\\DoodadSkins.txt",
+    NULL
+};
+
 cstring_t profile_files[] = {
     "Units\\CampaignUnitFunc.txt",
     "Units\\CampaignUnitStrings.txt",
@@ -921,7 +926,7 @@ typedef struct {
     uint32_t *count;
     slkIndex_t *idx;
     bool optional; /* legitimately absent in some data sets; zero rows stay silent, typed reads use the static zero */
-    cstring_t const *ini_overlay; /* newer data moved columns here (Reforged UnitUI art/model -> UnitSkin.txt) */
+    cstring_t const *ini_overlay; /* newer data may move columns here while retaining SLK row identity */
 } slkStore_t;
 
 static slkStore_t slk_stores[] = {
@@ -939,7 +944,9 @@ static slkStore_t slk_stores[] = {
     { "AbilityMetaData", "Units\\AbilityMetaData.slk", ability_meta_schema, sizeof(*ability_metadata), (void **)&ability_metadata, &ability_metadata_count, &ability_meta_idx, true },
     /* AbilityBuffData.slk ships only in War3x.mpq; RoC hides expansion archives, so zero rows are legitimate. */
     { "AbilityBuffData", "Units\\AbilityBuffData.slk", ability_buff_schema, sizeof(*g_AbilityBuffData), (void **)&g_AbilityBuffData, &g_AbilityBuffDataCount, &ability_buff_idx, true },
-    { "Doodads", "Doodads\\Doodads.slk", doodad_schema, sizeof(*g_Doodads), (void **)&g_Doodads, &g_DoodadsCount, &doodad_idx },
+    /* Reforged moved doodad art/model columns into Doodads\\DoodadSkins.txt. */
+    { "Doodads", "Doodads\\Doodads.slk", doodad_schema, sizeof(*g_Doodads), (void **)&g_Doodads, &g_DoodadsCount, &doodad_idx,
+      false, doodad_overlay_files },
     { "UberSplatData", "Splats\\UberSplatData.slk", uber_schema, sizeof(*g_UberSplatData), (void **)&g_UberSplatData, &g_UberSplatDataCount, &uber_idx },
     { "UnitAckSounds",    "UI\\SoundInfo\\UnitAckSounds.slk",    sound_schema, sizeof(*g_UnitAckSounds),    (void **)&g_UnitAckSounds,    &g_UnitAckSoundsCount,    NULL },
     { "UnitCombatSounds", "UI\\SoundInfo\\UnitCombatSounds.slk", sound_schema, sizeof(*g_UnitCombatSounds), (void **)&g_UnitCombatSounds, &g_UnitCombatSoundsCount, NULL },

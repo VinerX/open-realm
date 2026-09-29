@@ -17,8 +17,10 @@ MSG_Read(buffer, object->variable, object->num_##variable * elemsize); }
 #define MODEL_READ_LIST(BLOCK, TYPE, TYPES) \
 while (!FileIsAtEndOfBlock(BLOCK)) { \
     sizeBuf_t inner = FileReadBlock(BLOCK); \
+    if (inner.overflowed) { BLOCK->overflowed = true; break; } \
     mdx##TYPE##_t *p_##TYPE = ri.MemAlloc(sizeof(mdx##TYPE##_t)); \
     Read##TYPE(&inner, p_##TYPE); \
+    if (inner.overflowed) { ri.MemFree(p_##TYPE); BLOCK->overflowed = true; break; } \
     PUSH_BACK(mdx##TYPE##_t, p_##TYPE, model->TYPES); \
     BLOCK->readcount += inner.readcount; \
 }
@@ -115,18 +117,32 @@ typedef struct {
     blockReaderFunc_t read;
 } blockReader_t;
 
+static int MSG_ReadTag(sizeBuf_t *buffer, uint32_t *tag);
+
 blockReadCode_t MSG_ReadBlock(sizeBuf_t *buffer, blockReader_t const *readers, void *data) {
     uint32_t blockHeader;
-    while (MSG_Read(buffer, &blockHeader, 4)) {
-        sizeBuf_t block;
-        memset(&block, 0, sizeof(sizeBuf_t));
-        MSG_Read(buffer, &block.cursize, 4);
+    while (buffer->readcount < buffer->cursize) {
+        sizeBuf_t block = { 0 };
+        if (!MSG_Read(buffer, &blockHeader, 4) || !MSG_Read(buffer, &block.cursize, 4)) {
+            fprintf(stderr, "MDLX: truncated chunk header at %u/%u bytes\n",
+                    buffer->readcount, buffer->cursize);
+            return BLOCKREAD_ERROR;
+        }
+        if (block.cursize > buffer->cursize - buffer->readcount) {
+            buffer->overflowed = true;
+            fprintf(stderr, "MDLX: chunk %.4s size %u exceeds remaining %u bytes\n",
+                    (char const *)&blockHeader, block.cursize,
+                    buffer->cursize - buffer->readcount);
+            return BLOCKREAD_ERROR;
+        }
         block.data = buffer->data + buffer->readcount;
         for (blockReader_t const *br = readers; br->read; br++) {
             if (*(int const *)br->block_id != blockHeader)
                 continue;
-            if (br->read(&block, data) != BLOCKREAD_OK)
+            if (br->read(&block, data) != BLOCKREAD_OK || block.overflowed) {
+                fprintf(stderr, "MDLX: failed to parse %.4s chunk\n", br->block_id);
                 return BLOCKREAD_ERROR;
+            }
             buffer->readcount += block.cursize;
             goto next_block;
         }
@@ -139,11 +155,19 @@ blockReadCode_t MSG_ReadBlock(sizeBuf_t *buffer, blockReader_t const *readers, v
 }
 
 int MSG_Read(sizeBuf_t *buffer, void *dest, uint32_t bytes) {
-    if (buffer->readcount + bytes > buffer->cursize)
+    if (buffer->readcount > buffer->cursize || bytes > buffer->cursize - buffer->readcount) {
+        buffer->overflowed = true;
         return 0;
+    }
     memcpy(dest, (char *)buffer->data + buffer->readcount, bytes);
     buffer->readcount += bytes;
     return bytes;
+}
+
+static int MSG_ReadTag(sizeBuf_t *buffer, uint32_t *tag) {
+    if (buffer->overflowed || buffer->readcount == buffer->cursize)
+        return 0;
+    return MSG_Read(buffer, tag, 4);
 }
 
 int MSG_Skip(sizeBuf_t *buffer, uint32_t bytes) {
@@ -166,11 +190,25 @@ int MSG_ReadByte(sizeBuf_t *buffer) {
 }
 
 sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
-    sizeBuf_t buf;
-    buf.data = buffer->data + buffer->readcount;
-    buf.readcount = 0;
+    sizeBuf_t buf = { 0 };
+    uint32_t const start = buffer->readcount;
+    uint32_t size;
+    if (start > buffer->cursize || buffer->cursize - start < 4) {
+        buffer->overflowed = true;
+        fprintf(stderr, "MDLX: truncated list record size at %u/%u bytes\n",
+                start, buffer->cursize);
+        return buf;
+    }
+    buf.data = buffer->data + start;
     buf.cursize = 4;
-    buf.cursize = MSG_ReadLong(&buf);
+    if (!MSG_Read(&buf, &size, 4) || size < 4 || size > buffer->cursize - start - 4) {
+        buffer->overflowed = true;
+        fprintf(stderr, "MDLX: invalid list record size %u at %u/%u bytes\n",
+                size, start, buffer->cursize);
+        return buf;
+    }
+    buf.cursize = size;
+    buffer->overflowed |= buf.overflowed;
     return buf;
 }
 
@@ -195,7 +233,7 @@ void ReadGeosetMatrices(sizeBuf_t *buffer, mdxGeoset_t *geoset, uint32_t version
 
 void ReadGeoset(sizeBuf_t *buffer, mdxGeoset_t *geoset, uint32_t version) {
     uint32_t header;
-    while (MSG_Read(buffer, &header, 4)) {
+    while (MSG_ReadTag(buffer, &header)) {
         switch (header) {
             case ID_VRTX: SFileReadArray2(buffer, geoset, vertices, sizeof(vec3_t)); break;
             case ID_NRMS: SFileReadArray2(buffer, geoset, normals, sizeof(vec3_t)); break;
@@ -235,7 +273,20 @@ void ReadKeyTrack(sizeBuf_t *buffer, MODELKEYTRACKDATATYPE dataType, mdxKeyTrack
     uint32_t keyframeCount = MSG_ReadLong(buffer);
     MODELKEYTRACKTYPE keyTrackType = MSG_ReadLong(buffer);
     uint32_t globalSeqId = MSG_ReadLong(buffer);
-    uint32_t const dataSize = GetModelKeyFrameSize(dataType, keyTrackType) * keyframeCount;
+    uint32_t const frameSize = GetModelKeyFrameSize(dataType, keyTrackType);
+    if (!frameSize || keyframeCount > (UINT32_MAX - sizeof(mdxKeyTrack_t)) / frameSize) {
+        buffer->overflowed = true;
+        fprintf(stderr, "MDLX: invalid keyframe count %u (frame size %u)\n",
+                keyframeCount, frameSize);
+        return;
+    }
+    uint32_t const dataSize = frameSize * keyframeCount;
+    if (buffer->readcount > buffer->cursize || dataSize > buffer->cursize - buffer->readcount) {
+        buffer->overflowed = true;
+        fprintf(stderr, "MDLX: key track needs %u bytes, only %u remain\n",
+                dataSize, buffer->cursize - buffer->readcount);
+        return;
+    }
     *output = ri.MemAlloc(sizeof(mdxKeyTrack_t) + dataSize);
     (*output)->keyframeCount = keyframeCount;
     (*output)->datatype = dataType;
@@ -254,7 +305,7 @@ void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer, uint32_t ve
     MSG_Read(buffer, &layer->staticAlpha, 4);
     if (version >= 900)
         buffer->readcount += sizeof(float);
-    while (MSG_Read(buffer, &blockHeader, 4)) {
+    while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_KMTA: ReadKeyTrack(buffer, TDATA_FLOAT1, &layer->alpha); break;
             case ID_KMTF: ReadKeyTrack(buffer, TDATA_INT1, &layer->flipbook); break;
@@ -284,7 +335,7 @@ void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) 
         char shader[sizeof(mdxObjectName_t)];
         MSG_Read(buffer, shader, sizeof(shader));
     }
-    while (MSG_Read(buffer, &blockHeader, 4)) {
+    while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_LAYS: ReadMaterialLayers(buffer, material, version); break;
             case ID_KMTE: ReadKeyTrack(buffer, TDATA_FLOAT1, &material->emission); break;
@@ -299,7 +350,7 @@ void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) 
 
 void ReadTextureAnim(sizeBuf_t *buffer, mdxTextureAnim_t *textureAnim) {
     uint32_t blockHeader;
-    while (MSG_Read(buffer, &blockHeader, 4)) {
+    while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_KTAT: ReadKeyTrack(buffer, TDATA_FLOAT3, &textureAnim->translation); break;
             case ID_KTAR: ReadKeyTrack(buffer, TDATA_FLOAT4, &textureAnim->rotation); break;
@@ -318,7 +369,7 @@ void ReadNode(sizeBuf_t *buffer, mdxNode_t *node, uint32_t blockSize) {
     node->parent_id = MSG_ReadLong(buffer);
     node->flags = MSG_ReadLong(buffer);
     
-    while (buffer->readcount < blockEnd) {
+    while (!buffer->overflowed && buffer->readcount < blockEnd) {
         uint32_t blockHeader;
         MSG_Read(buffer, &blockHeader, 4);
         switch (blockHeader) {
@@ -402,7 +453,7 @@ void ReadParticleEmitter(sizeBuf_t *buffer, mdxParticleEmitter_t *pe) {
     MSG_READ(buffer, pe->Squirt);
     MSG_READ(buffer, pe->PriorityPlane);
     MSG_READ(buffer, pe->ReplaceableId);
-    while (MSG_Read(buffer, &header, 4)) {
+    while (MSG_ReadTag(buffer, &header)) {
         switch (header) {
             case ID_KP2V: ReadKeyTrack(buffer, TDATA_FLOAT1, &pe->keytracks.Visibility); break;
             case ID_KP2E: ReadKeyTrack(buffer, TDATA_FLOAT1, &pe->keytracks.EmissionRate); break;
@@ -433,7 +484,7 @@ void ReadRibbonEmitter(sizeBuf_t *buffer, mdxRibbonEmitter_t *ribbon) {
     MSG_READ(buffer, ribbon->columns);
     MSG_READ(buffer, ribbon->materialId);
     MSG_READ(buffer, ribbon->gravity);
-    while (MSG_Read(buffer, &header, 4)) {
+    while (MSG_ReadTag(buffer, &header)) {
         switch (header) {
             case ID_KRVS: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.Visibility); break;
             case ID_KRHA: ReadKeyTrack(buffer, TDATA_FLOAT1, &ribbon->keytracks.HeightAbove); break;
@@ -456,7 +507,7 @@ void ReadCamera(sizeBuf_t *buffer, mdxCamera_t *camera) {
     MSG_Read(buffer, &camera->farClip, sizeof(float));
     MSG_Read(buffer, &camera->nearClip, sizeof(float));
     MSG_Read(buffer, &camera->targetPivot, sizeof(vec3_t));
-    while (MSG_Read(buffer, &blockHeader, 4)) {
+    while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_KCTR: ReadKeyTrack(buffer, TDATA_FLOAT3, &camera->translation); break;
             case ID_KTTR: ReadKeyTrack(buffer, TDATA_FLOAT3, &camera->targetTranslation); break;
@@ -487,7 +538,7 @@ void ReadAttachment(sizeBuf_t *buffer, mdxAttachment_t *attachment) {
     MSG_Read(buffer, attachment->path, MODEL_ATTACHMENT_PATH_LENGTH);
     MSG_ReadLong(buffer);
     attachment->attachmentID = MSG_ReadLong(buffer);
-    while (MSG_Read(buffer, &header, 4)) {
+    while (MSG_ReadTag(buffer, &header)) {
         switch (header) {
             case ID_KATV:
                 ReadKeyTrack(buffer, TDATA_FLOAT1, &attachment->Visibility);
@@ -509,7 +560,7 @@ void ReadLight(sizeBuf_t *buffer, mdxLight_t *light) {
     MSG_READ(buffer, light->Intensity);
     MSG_READ(buffer, light->AmbColor);
     MSG_READ(buffer, light->AmbIntensity);
-    while (MSG_Read(buffer, &header, 4)) {
+    while (MSG_ReadTag(buffer, &header)) {
         switch (header) {
             case ID_KLAV:
                 ReadKeyTrack(buffer, TDATA_FLOAT1, &light->keytracks.Visibility);
@@ -533,7 +584,7 @@ void ReadLight(sizeBuf_t *buffer, mdxLight_t *light) {
 void ReadGeosetAnim(sizeBuf_t *buffer, mdxGeosetAnim_t *geosetAnim) {
     uint32_t blockHeader;
     MSG_Read(buffer, geosetAnim, 24);
-    while (MSG_Read(buffer, &blockHeader, 4)) {
+    while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
             case ID_KGAO: ReadKeyTrack(buffer, TDATA_FLOAT1, &geosetAnim->alphas); break;
             case ID_KGAC: ReadKeyTrack(buffer, TDATA_FLOAT3, &geosetAnim->colors); break;

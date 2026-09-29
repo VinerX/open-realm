@@ -1,0 +1,11 @@
+[AOhs]
+skinType=doodad
+file=Doodads\Ashenvale\Props\AshenHollowStump\AshenHollowStump
+numVar=1
+defScale=1.000
+
+[APbs]
+skinType=doodad
+file=Doodads\Ashenvale\Plants\AshenBush0\AshenBush0
+numVar=3
+defScale=1.000

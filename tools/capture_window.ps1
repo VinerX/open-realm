@@ -43,10 +43,16 @@ public static class WindowCaptureNative {
     public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdc, uint flags);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hwnd);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern IntPtr SetActiveWindow(IntPtr hwnd);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint attach, uint attachTo, bool attachState);
+    [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(uint processId);
     public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
@@ -98,6 +104,24 @@ public static class WindowCaptureNative {
         uint processId;
         GetWindowThreadProcessId(hwnd, out processId);
         return (int)processId;
+    }
+    public static bool FocusWindow(IntPtr hwnd, int processId) {
+        uint ignored;
+        IntPtr foreground = GetForegroundWindow();
+        uint currentThread = GetCurrentThreadId();
+        uint targetThread = GetWindowThreadProcessId(hwnd, out ignored);
+        uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out ignored);
+        bool attachedTarget = targetThread != currentThread && AttachThreadInput(currentThread, targetThread, true);
+        bool attachedForeground = foregroundThread != 0 && foregroundThread != currentThread &&
+                                  foregroundThread != targetThread && AttachThreadInput(currentThread, foregroundThread, true);
+        AllowSetForegroundWindow((uint)processId);
+        ShowWindow(hwnd, 9);
+        BringWindowToTop(hwnd);
+        SetActiveWindow(hwnd);
+        bool focused = SetForegroundWindow(hwnd);
+        if (attachedForeground) AttachThreadInput(currentThread, foregroundThread, false);
+        if (attachedTarget) AttachThreadInput(currentThread, targetThread, false);
+        return focused && GetForegroundWindow() == hwnd;
     }
     public static long GetArea(IntPtr hwnd) {
         RECT rect;
@@ -225,7 +249,9 @@ try {
             $bitmap = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
             $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         }
-        [void][WindowCaptureNative]::SetForegroundWindow($hwnd)
+        if (-not [WindowCaptureNative]::FocusWindow($hwnd, $target.Id)) {
+            throw "Could not foreground PID $($target.Id); refusing to capture another window."
+        }
         Start-Sleep -Milliseconds 250
         [void][WindowCaptureNative]::GetWindowRect($hwnd, [ref]$rect)
         $newWidth = $rect.Right - $rect.Left

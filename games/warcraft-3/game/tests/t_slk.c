@@ -813,6 +813,37 @@ TEST(wc3_slk, reforged_unit_ui_art_columns_come_from_ini_overlay) {
     Stb_IniCacheFree(&overlay);
 }
 
+TEST(wc3_slk, reforged_doodad_art_columns_come_from_ini_overlay) {
+    slkField_t schema[] = {
+        { "",         offsetof(Doodads_t, id),       STB_SLK_FOURCC },
+        { "Name",     offsetof(Doodads_t, Name),     STB_SLK_STR    },
+        { "file",     offsetof(Doodads_t, file),     STB_SLK_STR    },
+        { "numVar",   offsetof(Doodads_t, numVar),   STB_SLK_INT    },
+        { "defScale", offsetof(Doodads_t, defScale), STB_SLK_FLOAT  },
+        { NULL, 0, 0, 0, 0 }
+    };
+    stbIniCache_t overlay = { 0 };
+    Doodads_t *rows = NULL;
+    uint32_t count;
+
+    T_ASSERT(Stb_IniCacheLoad(&overlay, "TestData\\ReforgedDoodadSkins.txt"));
+    count = Stb_SlkLoadWithIniOverlay("TestData\\ReforgedDoodads.slk", &overlay,
+                                      schema, (void **)&rows, sizeof(*rows));
+    T_EQ(count, 2);
+    T_EQ(rows[0].id, MAKEFOURCC('A','O','h','s'));
+    T_STREQ(rows[0].Name, "Hollow Stump");
+    T_STREQ(rows[0].file, "Doodads\\Ashenvale\\Props\\AshenHollowStump\\AshenHollowStump");
+    T_EQ(rows[0].numVar, 1);
+    T_FEQ(rows[0].defScale, 1.0f, 0.001f);
+    T_EQ(rows[1].id, MAKEFOURCC('A','P','b','s'));
+    T_STREQ(rows[1].Name, "Bush");
+    T_STREQ(rows[1].file, "Doodads\\Ashenvale\\Plants\\AshenBush0\\AshenBush0");
+    T_EQ(rows[1].numVar, 3);
+
+    FS_SLKFreeRows(schema, rows, count, sizeof(*rows));
+    Stb_IniCacheFree(&overlay);
+}
+
 TEST(wc3_slk, map_unit_balance_overrides_stock_fields_and_custom_inheritance) {
     uint32_t const base_id = MAKEFOURCC('n','m','e','r');
     uint32_t const custom_id = MAKEFOURCC('x','m','e','r');
