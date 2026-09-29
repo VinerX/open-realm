@@ -1257,6 +1257,16 @@ void G_AccumulatePlayerFood(gameClient_t *client) {
     G_RecomputePlayerUpkeep(client);
 }
 
+int32_t G_PlayerTownHallCount(uint32_t player_number) {
+    int32_t count = 0;
+
+    FILTER_EDICTS(ent, ent->inuse && ent->class_id && ent->s.player == player_number &&
+                  G_UnitClassification(ent->class_id) == WC3_UNIT_TYPE_TOWNHALL && !M_IsDead(ent)) {
+        count++;
+    }
+    return count;
+}
+
 /* Preserve valid map/save-authored modes while keeping corrupt connection state out of the network contract. */
 void G_InitClientUIState(gameClient_t *client) {
     if (client && client->ps.client_ui_state > CLIENT_UI_CINEMATIC)

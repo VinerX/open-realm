@@ -677,6 +677,7 @@ jassModule_t jass_funcs[] = {
     { "GetPlayerUnitCount", GetPlayerUnitCount },
     { "GetPlayerTypedUnitCount", GetPlayerTypedUnitCount },
     { "GetPlayerStructureCount", GetPlayerStructureCount },
+    { "BlzGetPlayerTownHallCount", BlzGetPlayerTownHallCount },
     { "GetPlayerState", GetPlayerState },
     { "GetPlayerAlliance", GetPlayerAlliance },
     { "GetPlayerHandicap", GetPlayerHandicap },

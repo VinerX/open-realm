@@ -2477,6 +2477,12 @@ static int LuaGetPlayerId(lua_State *L) {
     return 1;
 }
 
+static int LuaBlzGetPlayerTownHallCount(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    lua_pushinteger(L, player ? G_PlayerTownHallCount(PLAYER_NUM(player)) : 0);
+    return 1;
+}
+
 static int LuaGetPlayerState(lua_State *L) {
     player_t *player = lua_touserdata(L, 1);
     uint32_t *state = lua_touserdata(L, 2);
@@ -2760,6 +2766,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetTriggerPlayer", LuaGetTriggerPlayer);
     WC3_LuaRegisterNative(L, "GetLocalPlayer", LuaGetLocalPlayer);
     WC3_LuaRegisterNative(L, "GetPlayerId", LuaGetPlayerId);
+    WC3_LuaRegisterNative(L, "BlzGetPlayerTownHallCount", LuaBlzGetPlayerTownHallCount);
     WC3_LuaRegisterNative(L, "GetPlayerState", LuaGetPlayerState);
     WC3_LuaRegisterNative(L, "GetPlayerColor", LuaGetPlayerColor);
     WC3_LuaRegisterNative(L, "GetPlayerName", LuaGetPlayerName);

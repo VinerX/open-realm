@@ -346,6 +346,10 @@ uint32_t GetPlayerStructureCount(jass_t *j) {
     }
     return jass_pushinteger(j, count);
 }
+uint32_t BlzGetPlayerTownHallCount(jass_t *j) {
+    player_t *whichPlayer = jass_checkhandle(j, 1, "player");
+    return jass_pushinteger(j, whichPlayer ? G_PlayerTownHallCount(PLAYER_NUM(whichPlayer)) : 0);
+}
 uint32_t GetPlayerState(jass_t *j) {
     player_t *whichPlayer = jass_checkhandle(j, 1, "player");
     PLAYERSTATE *whichPlayerState = jass_checkhandle(j, 2, "playerstate");

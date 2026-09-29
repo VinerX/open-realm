@@ -1160,6 +1160,7 @@ typedef struct {
 #define UNIT_BALANCE_BUILDING 0x1 // bit; immutable building classification; used by hot AI/FOW paths
 #define UNIT_BALANCE_PERMANENT_INVISIBLE 0x2 // bit; cached Apiv classification for hot per-viewer FOW checks
 #define WC3_UNIT_TYPE_STRUCTURE 2 // handle value; Warcraft structure type; used by IsUnitType
+#define WC3_UNIT_TYPE_TOWNHALL 18 // Unit classification from ConvertUnitType
 #define WC3_UNIT_TYPE_POLYMORPHED 22 // handle value; Warcraft Polymorphed type; used by IsUnitType
 #define WC3_UNIT_STATE_LIFE 0 // handle value; UNIT_STATE_LIFE
 #define WC3_ORDER_ID_POLYMORPH 852074 // order ID; Warcraft Polymorph command; used by order dispatch
@@ -2649,6 +2650,7 @@ float G_UnitUpgradeEffectBonus(edict_t const *unit, uint32_t effect);
 int32_t G_GetPlayerTechInProgress(gameClient_t *client, uint32_t techid);
 void G_AddPlayerTechInProgress(gameClient_t *client, uint32_t techid, int32_t levels);
 int32_t G_GetPlayerTechCountValue(gameClient_t *client, uint32_t techid);
+int32_t G_PlayerTownHallCount(uint32_t player_number);
 void G_InvalidateCommands(gameClient_t *client);
 bool G_BuildInventoryItem(edict_t *ent, edict_t *item, uint8_t slot, gameInventoryItem_t *out);
 uint8_t G_GetInventory(edict_t *ent, gameInventoryItem_t *items, uint8_t max_items);

@@ -1006,11 +1006,12 @@ typedef enum {
 #define UI_PARENT 255
 
 typedef struct { // serialized as 4 bytes
-    uiFramePointPos_t targetPos: 7;
-    uint8_t used: 1;
-    uint8_t relativeTo: 8;
-    int16_t offset: 16;
+    uint32_t targetPos: 7;
+    uint32_t used: 1;
+    uint32_t relativeTo: 8;
+    int32_t offset: 16;
 } uiFramePoint_t;
+_Static_assert(sizeof(uiFramePoint_t) == 4, "UI frame points must match their four-byte wire fields");
 
 typedef uiFramePoint_t uiFramePoints_t[FPP_COUNT];
 
