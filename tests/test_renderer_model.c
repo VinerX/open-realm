@@ -1149,11 +1149,13 @@ TEST(renderer_model, reforged_mdx_reads_v1800_material_and_geoset_extensions) {
     T_FEQ(geoset->texcoord[2].y, 1.0f, 0.001f);
 
     p = material_data; record_size = p; mdx_put_u32(&p, 0); record_start = p;
-    mdx_put_u32(&p, 3); mdx_put_u32(&p, 4); memset(p, 0, sizeof(mdxObjectName_t)); p += sizeof(mdxObjectName_t);
+    mdx_put_u32(&p, 3); mdx_put_u32(&p, 4);
     mdx_put_fourcc(&p, "LAYS"); mdx_put_u32(&p, 1);
     uint8_t *layer_size = p; mdx_put_u32(&p, 0); uint8_t *layer_start = p;
     mdx_put_u32(&p, 0); mdx_put_u32(&p, 0); mdx_put_u32(&p, 11); mdx_put_u32(&p, 12); mdx_put_u32(&p, 0);
-    mdx_put_f32(&p, 0.625f); mdx_put_f32(&p, 2.0f);
+    mdx_put_f32(&p, 0.625f);
+    mdx_put_f32(&p, 2.0f); mdx_put_f32(&p, 0.1f); mdx_put_f32(&p, 0.2f);
+    mdx_put_f32(&p, 0.3f); mdx_put_f32(&p, 0.4f);
     size = (uint32_t)(p - layer_start + sizeof(uint32_t)); memcpy(layer_size, &size, sizeof(size));
     size = (uint32_t)(p - record_start + sizeof(uint32_t)); memcpy(record_size, &size, sizeof(size));
     material_block = (sizeBuf_t){.data = material_data, .cursize = (uint32_t)(p - material_data)};

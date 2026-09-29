@@ -229,6 +229,7 @@ typedef struct mdxMaterialLayer_s {
     uint32_t transformId;      // TXAN index or 0xFFFFFFFF for none
     int coordId;           // UAVS index or -1 for none, defines vertex buffer format coordId == -1 ? GxVBF_PN : GxVBF_PNT0
     float staticAlpha;
+    mdxKeyTrack_t *emission; // float
     mdxKeyTrack_t *alpha; // float
     mdxKeyTrack_t *flipbook; // int
 } mdxMaterialLayer_t;

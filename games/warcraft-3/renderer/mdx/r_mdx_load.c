@@ -192,7 +192,7 @@ int MSG_ReadByte(sizeBuf_t *buffer) {
 sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
     sizeBuf_t buf = { 0 };
     uint32_t const start = buffer->readcount;
-    uint32_t size;
+    uint32_t size = 0;
     if (start > buffer->cursize || buffer->cursize - start < 4) {
         buffer->overflowed = true;
         fprintf(stderr, "MDLX: truncated list record size at %u/%u bytes\n",
@@ -201,7 +201,7 @@ sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
     }
     buf.data = buffer->data + start;
     buf.cursize = 4;
-    if (!MSG_Read(&buf, &size, 4) || size < 4 || size > buffer->cursize - start - 4) {
+    if (!MSG_Read(&buf, &size, 4) || size < 4 || size > buffer->cursize - start) {
         buffer->overflowed = true;
         fprintf(stderr, "MDLX: invalid list record size %u at %u/%u bytes\n",
                 size, start, buffer->cursize);
@@ -303,10 +303,16 @@ void ReadMaterialLayer(sizeBuf_t *buffer, mdxMaterialLayer_t *layer, uint32_t ve
     MSG_Read(buffer, &layer->transformId, 4);
     MSG_Read(buffer, &layer->coordId, 4);
     MSG_Read(buffer, &layer->staticAlpha, 4);
-    if (version >= 900)
-        buffer->readcount += sizeof(float);
+    uint32_t extensionSize = version == 900 ? sizeof(float) :
+                             version >= 1000 ? 6 * sizeof(float) : 0;
+    if (extensionSize && !MSG_Skip(buffer, extensionSize)) {
+        buffer->overflowed = true;
+        fprintf(stderr, "MDLX: truncated Reforged layer properties\n");
+        return;
+    }
     while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
+            case ID_KMTE: ReadKeyTrack(buffer, TDATA_FLOAT1, &layer->emission); break;
             case ID_KMTA: ReadKeyTrack(buffer, TDATA_FLOAT1, &layer->alpha); break;
             case ID_KMTF: ReadKeyTrack(buffer, TDATA_INT1, &layer->flipbook); break;
             default:
@@ -322,9 +328,21 @@ void ReadMaterialLayers(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t ver
     material->layers = ri.MemAlloc(sizeof(mdxMaterialLayer_t) * material->num_layers);
     FOR_LOOP(layerID, material->num_layers) {
         sizeBuf_t layer = FileReadBlock(buffer);
+        if (layer.overflowed) {
+            buffer->overflowed = true;
+            return;
+        }
         ReadMaterialLayer(&layer, &material->layers[layerID], version);
+        if (layer.overflowed) {
+            buffer->overflowed = true;
+            return;
+        }
         buffer->readcount += layer.readcount;
     }
+}
+
+static bool IsMaterialTag(uint32_t tag) {
+    return tag == ID_LAYS || tag == ID_KMTE || tag == ID_KMTA || tag == ID_KMTF;
 }
 
 void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) {
@@ -332,8 +350,27 @@ void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) 
     material->priority = MSG_ReadLong(buffer);
     material->flags = MSG_ReadLong(buffer);
     if (version >= 900) {
-        char shader[sizeof(mdxObjectName_t)];
-        MSG_Read(buffer, shader, sizeof(shader));
+        uint32_t nextTag = 0;
+        if (buffer->readcount == buffer->cursize)
+            return;
+        if (buffer->readcount <= buffer->cursize &&
+            buffer->cursize - buffer->readcount >= sizeof(nextTag))
+            memcpy(&nextTag, buffer->data + buffer->readcount, sizeof(nextTag));
+        if (!IsMaterialTag(nextTag)) {
+            uint32_t shaderTag = 0;
+            if (buffer->cursize - buffer->readcount < sizeof(mdxObjectName_t) + sizeof(shaderTag)) {
+                buffer->overflowed = true;
+                fprintf(stderr, "MDLX: truncated Reforged material shader field\n");
+                return;
+            }
+            memcpy(&shaderTag, buffer->data + buffer->readcount + sizeof(mdxObjectName_t), sizeof(shaderTag));
+            if (!IsMaterialTag(shaderTag)) {
+                buffer->overflowed = true;
+                fprintf(stderr, "MDLX: unknown Reforged material layout\n");
+                return;
+            }
+            MSG_Skip(buffer, sizeof(mdxObjectName_t));
+        }
     }
     while (MSG_ReadTag(buffer, &blockHeader)) {
         switch (blockHeader) {
@@ -343,6 +380,7 @@ void ReadMaterial(sizeBuf_t *buffer, mdxMaterial_t *material, uint32_t version) 
             case ID_KMTF: ReadKeyTrack(buffer, TDATA_INT1, &material->flipbook); break;
             default:
                 PrintTag(blockHeader);
+                buffer->overflowed = true;
                 return;
         }
     };
@@ -634,11 +672,20 @@ blockReadCode_t MDLX_ReadEVTS(sizeBuf_t *sb, mdxModel_t *model) {
     return BLOCKREAD_OK;
 }
 
+void MDLX_ReleaseModelGeoset(mdxGeoset_t *geoset);
+void MDLX_ReleaseModelMaterial(mdxMaterial_t *material);
+
 blockReadCode_t MDLX_ReadGEOS(sizeBuf_t *sb, mdxModel_t *model) {
     while (!FileIsAtEndOfBlock(sb)) {
         sizeBuf_t inner = FileReadBlock(sb);
+        if (inner.overflowed) { sb->overflowed = true; return BLOCKREAD_ERROR; }
         mdxGeoset_t *geoset = ri.MemAlloc(sizeof(mdxGeoset_t));
         ReadGeoset(&inner, geoset, model->version);
+        if (inner.overflowed) {
+            MDLX_ReleaseModelGeoset(geoset);
+            sb->overflowed = true;
+            return BLOCKREAD_ERROR;
+        }
         PUSH_BACK(mdxGeoset_t, geoset, model->geosets);
         sb->readcount += inner.readcount;
     }
@@ -648,8 +695,14 @@ blockReadCode_t MDLX_ReadGEOS(sizeBuf_t *sb, mdxModel_t *model) {
 blockReadCode_t MDLX_ReadMTLS(sizeBuf_t *sb, mdxModel_t *model) {
     while (!FileIsAtEndOfBlock(sb)) {
         sizeBuf_t inner = FileReadBlock(sb);
+        if (inner.overflowed) { sb->overflowed = true; return BLOCKREAD_ERROR; }
         mdxMaterial_t *material = ri.MemAlloc(sizeof(mdxMaterial_t));
         ReadMaterial(&inner, material, model->version);
+        if (inner.overflowed) {
+            MDLX_ReleaseModelMaterial(material);
+            sb->overflowed = true;
+            return BLOCKREAD_ERROR;
+        }
         PUSH_BACK(mdxMaterial_t, material, model->materials);
         sb->readcount += inner.readcount;
     }
@@ -870,6 +923,7 @@ void MDLX_ReleaseModelMaterial(mdxMaterial_t *material) {
     if (material->layers) {
         FOR_LOOP(i, material->num_layers) {
             SAFE_DELETE(material->layers[i].alpha, ri.MemFree);
+            SAFE_DELETE(material->layers[i].emission, ri.MemFree);
             SAFE_DELETE(material->layers[i].flipbook, ri.MemFree);
         }
         ri.MemFree(material->layers);
