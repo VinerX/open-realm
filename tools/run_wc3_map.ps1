@@ -23,6 +23,9 @@ param(
 
     [switch]$RevealMap,
 
+    [ValidateRange(1, 1200)]
+    [int]$ScreenshotFrameDelay = 0,
+
     [string]$BuildDirectory = '',
 
     [string]$RuntimeDirectory = '',
@@ -138,6 +141,10 @@ $arguments += @(
     '+set', 'vid_native', '0',
     '+set', 'vid_mode', '4'
 )
+if ($ScreenshotFrameDelay -gt 0) {
+    $arguments += @('+set', 'cl_camera_edge_scroll', '0')
+    $arguments += @('+screenshot', [string]$ScreenshotFrameDelay)
+}
 if ($RevealMap) {
     $arguments += @('+set', 'wc3_map_test_reveal', '1', '+set', 'r_fogofwar', '0')
 }
