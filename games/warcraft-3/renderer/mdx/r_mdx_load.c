@@ -25,6 +25,17 @@ while (!FileIsAtEndOfBlock(BLOCK)) { \
     BLOCK->readcount += inner.readcount; \
 }
 
+#define MODEL_READ_LIST_WITH_READER(BLOCK, TYPE, TYPES, READER) \
+while (!FileIsAtEndOfBlock(BLOCK)) { \
+    sizeBuf_t inner = READER(BLOCK, model->version); \
+    if (inner.overflowed) { BLOCK->overflowed = true; break; } \
+    mdx##TYPE##_t *p_##TYPE = ri.MemAlloc(sizeof(mdx##TYPE##_t)); \
+    Read##TYPE(&inner, p_##TYPE); \
+    if (inner.overflowed) { ri.MemFree(p_##TYPE); BLOCK->overflowed = true; break; } \
+    PUSH_BACK(mdx##TYPE##_t, p_##TYPE, model->TYPES); \
+    BLOCK->readcount += inner.readcount; \
+}
+
 #define MODEL_READ_ARRAY(BLOCK, TYPE, TYPES) \
 model->TYPES = ri.MemAlloc(BLOCK->cursize); \
 model->num_##TYPES = BLOCK->cursize / sizeof(mdx##TYPE##_t); \
@@ -189,7 +200,7 @@ int MSG_ReadByte(sizeBuf_t *buffer) {
     return value;
 }
 
-sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
+static sizeBuf_t FileReadBlockWithSizeMask(sizeBuf_t *buffer, uint32_t size_mask) {
     sizeBuf_t buf = { 0 };
     uint32_t const start = buffer->readcount;
     uint32_t size = 0;
@@ -201,7 +212,12 @@ sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
     }
     buf.data = buffer->data + start;
     buf.cursize = 4;
-    if (!MSG_Read(&buf, &size, 4) || size < 4 || size > buffer->cursize - start) {
+    if (!MSG_Read(&buf, &size, 4)) {
+        buffer->overflowed = true;
+        return buf;
+    }
+    size &= size_mask;
+    if (size < 4 || size > buffer->cursize - start) {
         buffer->overflowed = true;
         fprintf(stderr, "MDLX: invalid list record size %u at %u/%u bytes\n",
                 size, start, buffer->cursize);
@@ -210,6 +226,15 @@ sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
     buf.cursize = size;
     buffer->overflowed |= buf.overflowed;
     return buf;
+}
+
+sizeBuf_t FileReadBlock(sizeBuf_t *buffer) {
+    return FileReadBlockWithSizeMask(buffer, UINT32_MAX);
+}
+
+static sizeBuf_t FileReadCameraBlock(sizeBuf_t *buffer, uint32_t version) {
+    /* MDX 1800 CAMS stores a 24-bit record size followed by a format byte. */
+    return FileReadBlockWithSizeMask(buffer, version == 1800 ? 0x00ffffffu : UINT32_MAX);
 }
 
 int FileIsAtEndOfBlock(sizeBuf_t *sb) {
@@ -735,7 +760,7 @@ blockReadCode_t MDLX_ReadCLID(sizeBuf_t *sb, mdxModel_t *model) {
 }
 
 blockReadCode_t MDLX_ReadCAMS(sizeBuf_t *sb, mdxModel_t *model) {
-    MODEL_READ_LIST(sb, Camera, cameras);
+    MODEL_READ_LIST_WITH_READER(sb, Camera, cameras, FileReadCameraBlock);
     return BLOCKREAD_OK;
 }
 

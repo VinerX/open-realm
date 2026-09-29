@@ -30,6 +30,8 @@ param(
 
     [string]$RuntimeDirectory = '',
 
+    [string]$LogFile = '',
+
     [string[]]$Set = @()
 )
 
@@ -142,7 +144,6 @@ $arguments += @(
     '+set', 'vid_mode', '4'
 )
 if ($ScreenshotFrameDelay -gt 0) {
-    $arguments += @('+set', 'cl_camera_edge_scroll', '0')
     $arguments += @('+screenshot', [string]$ScreenshotFrameDelay)
 }
 if ($RevealMap) {
@@ -160,7 +161,52 @@ for ($index = 0; $index -lt $Set.Count; $index += 2) {
 $arguments += @('+map', [System.IO.Path]::GetFileName($mapPath))
 $start.Arguments = (($arguments | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' ')
 
-$process = [System.Diagnostics.Process]::Start($start)
+if ($LogFile) {
+    $logPath = [System.IO.Path]::GetFullPath($LogFile)
+    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($logPath)) | Out-Null
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $logPumpSource = @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+
+public static class OpenRealmProcessLogPump {
+    private static readonly object Sync = new object();
+    private static StreamWriter Writer;
+
+    public static void Start(Process process, string path) {
+        Writer = new StreamWriter(path, false, new UTF8Encoding(false));
+        StartReader(process.StandardOutput);
+        StartReader(process.StandardError);
+    }
+
+    private static void StartReader(StreamReader reader) {
+        Thread thread = new Thread(() => {
+            string line;
+            while ((line = reader.ReadLine()) != null) {
+                lock (Sync) {
+                    Writer.WriteLine(line);
+                    Writer.Flush();
+                }
+            }
+        });
+        thread.Start();
+    }
+}
+'@
+    if (-not ('OpenRealmProcessLogPump' -as [type])) {
+        Add-Type -TypeDefinition $logPumpSource
+    }
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $start
+    [void]$process.Start()
+    [OpenRealmProcessLogPump]::Start($process, $logPath)
+} else {
+    $process = [System.Diagnostics.Process]::Start($start)
+}
 Start-Sleep -Seconds 2
 $process.Refresh()
 if ($process.HasExited) {
@@ -169,3 +215,6 @@ if ($process.HasExited) {
 }
 
 Write-Host "Opened visible Warcraft III $Edition map: $mapPath (PID $($process.Id))"
+if ($LogFile) {
+    Write-Host "Runtime log: $logPath"
+}
