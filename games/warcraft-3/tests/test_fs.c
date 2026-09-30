@@ -191,4 +191,26 @@ TEST(wc3_fs, casc_bare_request_resolves_localized_and_base_modules) {
     }
     FS_Shutdown();
 }
+
+/* Reforged 3.0 keeps some DDS textures only in its nested graphics modules;
+ * those are still referenced by models loaded from the base module. */
+TEST(wc3_fs, casc_bare_request_resolves_graphics_overlay_texture) {
+    cstring_t root = fs_test_casc_root();
+    handle_t file;
+    uint64_t size = 0;
+
+    if (!root) return;
+    T_NOT_NULL(root);
+    FS_Shutdown();
+    T_ASSERT(FS_AddDataDirectory(root));
+
+    file = FS_OpenFile("Doodads\\Cityscape\\Props\\City_Fountain\\CS_Props_Fountain_Fountain_Diffuse.dds");
+    T_NOT_NULL(file);
+    if (file) {
+        T_ASSERT(FS_GetFileSize(file, &size));
+        T_ASSERT(size > 0);
+        FS_CloseFile(file);
+    }
+    FS_Shutdown();
+}
 #endif

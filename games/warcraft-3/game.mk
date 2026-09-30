@@ -188,6 +188,7 @@ test-wc3-casc-vfs: $(WC3_TEST_BINARY) test-assets | $(TEST_JUNIT_DIR)
 	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.recognized_invalid_casc_root_fails'
 	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.casc_storage_reopens_after_reset'
 	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.casc_bare_request_resolves_localized_and_base_modules'
+	WC3_CASC_DATA="$(WC3_CASC_DATA)" $(WC3_TEST_BINARY) -data "$(WC3_CASC_DATA)" -tft +dedicated 1 +test 'wc3_fs.casc_bare_request_resolves_graphics_overlay_texture'
 endif
 
 .PHONY: test-client-camera

@@ -46,6 +46,10 @@ Terrain, workers, some HUD elements, and the command card are visible. This fram
 
 The current run proves only that the CASC-backed map can reach a visible client session with terrain and some units. It does not yet meet the minimum tester milestones above. The next work should trace map object placement/model resolution and the command-card input path, then address the black areas and misaligned Classic HUD independently.
 
+## CASC graphics overlays — 2026-09-30
+
+The 3.0 installation (CASC build 24268) stores some DDS textures referenced by base-module MDX models only in `war3.w3mod:_de.w3mod:` and `war3.w3mod:_hd.w3mod:`. Bare-path lookup now keeps the preferred locale and base module first, then checks `_de` and `_hd` before other locales. This preserves base/Classic model precedence while resolving overlay-only textures. The focused VFS regression passes against the installed CASC data; the full map has not yet been rerun with this change, so restored doodad appearance and load-time improvement remain to be confirmed in-game.
+
 ## External rendering references
 
 - [WarsmashModEngine](https://github.com/Retera/WarsmashModEngine) is a Warcraft III emulator with FDF, MDX, map, and CASC implementations. Its README notes that Reforged-era installs use DDS textures even in Classic graphics mode; compare its handling with our CASC and texture paths.

@@ -14,13 +14,9 @@
 #include <string.h>
 #include <ctype.h>
 
-/* Warcraft III Reforged splits its content into modules: base files live in
- * "war3.w3mod:", while localized text/sound/movies live in
- * "war3.w3mod:_locales\<locale>.w3mod:".  The locale overlay takes precedence
- * over the base module, so a bare request for a localized-only file such as
- * UI\FrameDef\GlobalStrings.fdf must fall through to the locale module.  The
- * storage's own tag table names the locales it ships; the install's
- * .build.info picks which one is active for text. */
+/* Reforged splits files across the base module, graphics overlays, and locale
+ * overlays. Keep module resolution here so every filesystem consumer sees the
+ * same preferred-locale and base-first rules. */
 #define FS_CASC_MAX_LOCALES 16
 #define FS_CASC_LOCALE_LEN  8
 
@@ -223,6 +219,24 @@ static bool FS_CascTryOpen(fsCascStorage_t *storage, char const *name, HANDLE *o
     return true;
 }
 
+static bool FS_CascTryGraphicsModule(fsCascStorage_t *storage, char const *module,
+                                     char const *path, HANDLE *out) {
+    char namespaced_path[4096];
+    int length;
+
+    if (storage->preferred_locale[0]) {
+        length = snprintf(namespaced_path, sizeof(namespaced_path),
+                          "war3.w3mod:%s.w3mod:_locales\\%s.w3mod:%s",
+                          module, storage->preferred_locale, path);
+        if (length < (int)sizeof(namespaced_path) &&
+            FS_CascTryOpen(storage, namespaced_path, out)) return true;
+    }
+    length = snprintf(namespaced_path, sizeof(namespaced_path),
+                      "war3.w3mod:%s.w3mod:%s", module, path);
+    return length < (int)sizeof(namespaced_path) &&
+           FS_CascTryOpen(storage, namespaced_path, out);
+}
+
 bool FS_CascOpenFile(fsCascStorage_t *storage, char const *path, fsCascFile_t **out) {
     char namespaced_path[4096];
     HANDLE handle = NULL;
@@ -246,6 +260,11 @@ bool FS_CascOpenFile(fsCascStorage_t *storage, char const *path, fsCascFile_t **
     if (!handle && snprintf(namespaced_path, sizeof(namespaced_path), "war3.w3mod:%s", path) <
             (int)sizeof(namespaced_path))
         FS_CascTryOpen(storage, namespaced_path, &handle);
+    /* Classic/base assets retain precedence. Warcraft III 3.0 stores some
+     * shared DDS resources only in these nested graphics modules, including
+     * textures referenced by otherwise base-module MDX models. */
+    if (!handle) FS_CascTryGraphicsModule(storage, "_de", path, &handle);
+    if (!handle) FS_CascTryGraphicsModule(storage, "_hd", path, &handle);
     for (i = 1; i < storage->num_locales && !handle; i++) {
         if (snprintf(namespaced_path, sizeof(namespaced_path),
                      "war3.w3mod:_locales\\%s.w3mod:%s", storage->locales[i], path) >=
