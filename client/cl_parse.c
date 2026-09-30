@@ -292,7 +292,7 @@ static bool CL_ParseTerrainMaskChunk(sizeBuf_t *msg) {
     payload = msg->data + msg->readcount;
     /* Validate before touching client state: a good header with a bad payload must not resize the mask.
      * RLE payload size no longer implies row_cells, so the header alone sizes the allocation. */
-    if ((uint32_t)chunk.width * chunk.height > TERRAIN_MASK_MAX_CELLS ||
+    if (!TerrainMask_GridWithinLimit(chunk.width, chunk.height) ||
         !MSG_ValidateRLE(payload, chunk.payload_bytes, row_cells)) {
         fprintf(stderr, "CL_ParseFrame: invalid terrain-mask RLE %ux%u first=%u rows=%u payload=%u\n",
             (unsigned)chunk.width, (unsigned)chunk.height, (unsigned)chunk.first_row,

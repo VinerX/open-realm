@@ -3,7 +3,8 @@
 
 #include "common/game_datagram.h"
 
-#define TERRAIN_MASK_MAX_CELLS (1024u * 1024u) // cells; rejects absurd grid headers before any allocation
+#define TERRAIN_MASK_MAX_SIDE 2048u // cells per axis; Reforged maps reach 480 tiles, i.e. 1920 32-unit cells
+#define TERRAIN_MASK_MAX_CELLS (TERRAIN_MASK_MAX_SIDE * TERRAIN_MASK_MAX_SIDE) // cells; rejects absurd grid headers before any allocation
 
 typedef struct {
     uint32_t width;
@@ -36,6 +37,11 @@ static inline bool TerrainMask_CellForPoint(vec2_t origin, float cell_size, uint
     if (fx < 0.0f || fy < 0.0f || fx >= (float)width || fy >= (float)height) return false;
     *x = MIN((uint32_t)fx, width - 1); *y = MIN((uint32_t)fy, height - 1);
     return true;
+}
+
+/* A valid grid header names a nonzero rectangle that stays inside the allocation bound. */
+static inline bool TerrainMask_GridWithinLimit(uint32_t width, uint32_t height) {
+    return width && height && width <= TERRAIN_MASK_MAX_SIDE && height <= TERRAIN_MASK_MAX_SIDE;
 }
 
 static inline uint8_t TerrainMask_CornerValue(uint8_t const *cells, uint32_t width, uint32_t height, uint32_t cells_per_tile, uint32_t cx, uint32_t cy) {

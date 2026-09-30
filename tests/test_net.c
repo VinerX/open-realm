@@ -2109,6 +2109,50 @@ TEST(net, terrain_mask_cell_lookup_agrees_at_edges) {
     T_ASSERT(!TerrainMask_CellForPoint(origin, 32.0f, 8, 8, &(vec2_t){ 0.0f, 256.0f }, &x, &y));
 }
 
+/* Reforged maps reach 480 tiles, i.e. 1920 32-unit Blight cells per axis; a 1920x1920 plane must
+ * survive the header bound while absurd grids stay rejected before any allocation. */
+TEST(net, terrain_mask_grid_bound_accepts_reforged_and_rejects_absurd) {
+    T_ASSERT(TerrainMask_GridWithinLimit(1920, 1920));
+    T_ASSERT(TerrainMask_GridWithinLimit(TERRAIN_MASK_MAX_SIDE, TERRAIN_MASK_MAX_SIDE));
+    T_ASSERT(!TerrainMask_GridWithinLimit(TERRAIN_MASK_MAX_SIDE + 1, 1));
+    T_ASSERT(!TerrainMask_GridWithinLimit(1, TERRAIN_MASK_MAX_SIDE + 1));
+    T_ASSERT(!TerrainMask_GridWithinLimit(0, 1920));
+    T_ASSERT(!TerrainMask_GridWithinLimit(1920, 0));
+}
+
+static void write_terrain_mask_frame(sizeBuf_t *sb, terrainMaskChunk_t const *chunk, uint8_t const *payload, uint32_t bytes) {
+    SZ_Clear(sb); sb->readcount = 0;
+    MSG_WriteByte(sb, svc_frame);
+    MSG_WriteLong(sb, 1); MSG_WriteLong(sb, 100); MSG_WriteLong(sb, 0);
+    MSG_WriteShort(sb, BZ_GAME_DATAGRAM_TERRAIN_MASK);
+    MSG_Write(sb, chunk, sizeof(*chunk));
+    MSG_Write(sb, payload, bytes);
+}
+
+TEST(net, terrain_mask_accepts_reforged_sized_chunk) {
+    uint8_t buf[256];
+    /* One 1920-cell row: 1919 zero cells then one Blight cell. RLE init 0, runs
+     * 7*255 + 134 = 1919 zeros, then the value toggles to 1 for the final cell. */
+    uint8_t payload[] = { 0, 255, 255, 255, 255, 255, 255, 255, 134, 1 };
+    terrainMaskChunk_t chunk = {
+        .width = 1920, .height = 1920, .first_row = 0, .row_count = 1, .payload_bytes = sizeof(payload),
+        .min_x = 0.0f, .min_y = 0.0f, .cell_size = 32.0f,
+    };
+    sizeBuf_t sb = make_msg_buf(buf, sizeof(buf));
+
+    SAFE_DELETE(cl.terrain_mask.cells, MemFree);
+    memset(&cl.terrain_mask, 0, sizeof(cl.terrain_mask));
+    write_terrain_mask_frame(&sb, &chunk, payload, sizeof(payload));
+    CL_ParseServerMessage(&sb);
+    T_EQ(cl.terrain_mask.width, 1920);
+    T_EQ(cl.terrain_mask.height, 1920);
+    T_ASSERT(cl.terrain_mask.cells);
+    T_ASSERT(cl.terrain_mask.cells[1919]);
+    T_ASSERT(!cl.terrain_mask.cells[0]);
+    SAFE_DELETE(cl.terrain_mask.cells, MemFree);
+    memset(&cl.terrain_mask, 0, sizeof(cl.terrain_mask));
+}
+
 static void write_fow_message(sizeBuf_t *sb,
                               uint32_t flags,
                               uint32_t width,
