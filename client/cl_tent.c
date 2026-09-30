@@ -238,7 +238,7 @@ void CL_AddMissile(missile_t const *missile) {
     ent.frame = 0;//cl.time % 1000;
     ent.oldframe = 0;//cl.time % 1000;
     ent.angle = missile->angle;
-    ent.model = cl.models[missile->model];
+    ent.model = CL_ModelForIndex(missile->model);
     V_AddEntity(&ent);
 }
 
@@ -276,7 +276,7 @@ static void CL_AddSpellImpacts(void) {
         ent.scale     = 1.0f;
         ent.frame     = age;
         ent.oldframe  = age;
-        ent.model     = cl.models[imp->model];
+        ent.model     = CL_ModelForIndex(imp->model);
         ent.flags     = RF_GROUND_ANCHOR | RF_NO_SHADOW | RF_NO_FOGOFWAR;
         V_AddEntity(&ent);
     }

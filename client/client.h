@@ -195,6 +195,10 @@ void V_Shutdown(void);
 void CL_PrepRefresh(void);
 void CL_RegisterConfigString(uint32_t index);
 void CL_UpdateConfigString(uint32_t index, cstring_t olds);
+model_t const *CL_ModelForIndex(uint32_t index);
+model_t const *CL_PortraitForIndex(uint32_t index);
+void CL_PumpModelLoads(void);
+void CL_ResetConfigStringResources(void);
 void CL_RestartRefresh(void);
 // cl_parse.c
 void CL_ParseServerMessage(sizeBuf_t *msg);

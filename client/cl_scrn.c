@@ -885,8 +885,8 @@ void SCR_LayoutDrawPortrait(uiFrame_t const *frame, rect_t const *screen) {
         screen->w / canvas_w,
         screen->h / UI_BASE_HEIGHT
     };
-    model_t const *port  = cl.portraits[frame->tex.index];
-    model_t const *model = cl.models[frame->tex.index];
+    model_t const *port  = CL_PortraitForIndex(frame->tex.index);
+    model_t const *model = CL_ModelForIndex(frame->tex.index);
     model_t const *draw  = port ? port : model;
 
     if (!draw) return;
@@ -928,7 +928,7 @@ void SCR_LayoutDrawLoadingBar(uiFrame_t const *frame, rect_t const *screen) {
 }
 
 void SCR_LayoutDrawSprite(uiFrame_t const *frame, rect_t const *screen) {
-    model_t const *model = cl.models[frame->tex.index];
+    model_t const *model = CL_ModelForIndex(frame->tex.index);
     cstring_t anim = (frame->text && *frame->text) ? frame->text : "Stand";
     char sequence_anim[96];
     char phased_anim[96];

@@ -110,7 +110,7 @@ static model_t const *V_ConfigLightModel(uint32_t configstring) {
     if (!value || !*value) return NULL;
     index = strtoul(value, &end, 10);
     if (end == value || !end || *end || index == 0 || index >= MAX_MODELS) return NULL;
-    return cl.models[index];
+    return CL_ModelForIndex(index);
 }
 
 static model_t const *V_ConfigSkyModel(void) {
@@ -118,7 +118,7 @@ static model_t const *V_ConfigSkyModel(void) {
     unsigned long index = strtoul(cl.configstrings[CS_SKY], &end, 10);
     if (!*cl.configstrings[CS_SKY] || end == cl.configstrings[CS_SKY] || *end || index == 0 || index >= MAX_MODELS)
         return NULL;
-    return cl.models[index];
+    return CL_ModelForIndex(index);
 }
 
 /* CS_SCENE_FOG is a generic server-authored distance-fog contract. Games may
@@ -336,8 +336,8 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.oldframe = ent->prev.frame;
     re.health = ent->current.stats[ENT_HEALTH];
     re.effect_flags = ent->current.effect_flags;
-    re.effect_model = cl.models[ent->current.effect];
-    re.model = cl.models[ent->current.model];
+    re.effect_model = CL_ModelForIndex(ent->current.effect);
+    re.model = CL_ModelForIndex(ent->current.model);
     re.skin = cl.pics[ent->current.image];
     if (ent->current.name) {
         uint32_t i = ent->current.name - 1;
@@ -392,9 +392,9 @@ static void V_AddClientEntity(centity_t const *ent) {
 #ifdef WOW
     /* model2 is a uint16_t; validate it against the negotiated model pool. */
     if (ent->current.model2 > 0 && (ent->current.renderfx & RF_ATTACH_OVERHEAD))
-        re.overhead_model = cl.models[ent->current.model2];
+        re.overhead_model = CL_ModelForIndex(ent->current.model2);
     else if (ent->current.model2 > 0)
-        re.attachment.model = cl.models[ent->current.model2];
+        re.attachment.model = CL_ModelForIndex(ent->current.model2);
 #endif
 
     CL_ApplyIndicator(&re);
@@ -408,7 +408,7 @@ static void V_AddClientEntity(centity_t const *ent) {
             return;
         }
         /* model2 is a uint16_t and MAX_MODELS bounds the configstring lookup. */
-        re.model = cl.models[ent->current.model2];
+        re.model = CL_ModelForIndex(ent->current.model2);
         re.skin = 0;
         re.frame = 0;
         re.oldframe = 0;
@@ -563,7 +563,7 @@ static void CL_AddBuilding(void) {
     }
     ent.frame = cl.cursorEntity->frame;
     ent.oldframe = cl.cursorEntity->frame;
-    ent.model = cl.models[cl.cursorEntity->model];
+    ent.model = CL_ModelForIndex(cl.cursorEntity->model);
     ent.tint = MAKE(color32_t, 255, 255, 255, 255);
 
     CL_AddBuildingPlacementGrid(&ent.origin);
@@ -649,7 +649,8 @@ void CL_PrepRefresh(void) {
                            SDL_GetTicks() - operation_started, true);
         world_loaded = true;
         S_BeginRegistration();
-        CL_RefreshStartPhase(CL_REFRESH_MODELS, CS_MODELS + 1, MAX_MODELS - 1);
+        CL_RefreshProgress(CL_REFRESH_MODELS, MAX_MODELS, "models deferred until referenced", 0, true);
+        CL_RefreshStartPhase(CL_REFRESH_IMAGES, CS_IMAGES + 1, MAX_IMAGES - 1);
     }
     CL_LoadingStage(0.40f);
 

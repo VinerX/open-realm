@@ -21,8 +21,9 @@ The initial transport order is:
 2. `svc_loading_screen` chunks: receiving the complete compressed layout decodes the frame tree, registers
    the preceding media, and repaints immediately.
 3. Full configstring pages, then baseline pages.
-4. The final `svc_mirror "precache"` permits world/model/image/sound registration; completion queues `begin`,
-   then the first usable frame activates gameplay.
+4. The final `svc_mirror "precache"` permits world, image, sound, and font registration. Model configstrings
+   remain handles until a loading-layout frame or visible entity requests one. Completion queues `begin`,
+   then the first usable frame activates gameplay. Requested models are loaded across client frames.
 
 `SV_BuildLoadingScreen` compresses the complete authored layout into map-owned `sv.loading`. The payload is the
 existing layer byte, delta-encoded UI frames (including text and type-specific buffers), and frame terminator.
@@ -65,7 +66,8 @@ and large entity-spawn loops yield periodically. The callback is never retained 
 servers remain no-ops. This follows Quake 3's `CG_LoadingString` -> `trap_UpdateScreen` cooperative loading pattern;
 do not run the full command/input event loop re-entrantly because queued session changes can invalidate the active
 load stack. `cl.precache_ready` prevents the early layout/`CS_WORLD` from starting bulk registration until the full
-configstring/baseline handshake reaches `precache`.
+configstring/baseline handshake reaches `precache`. Model registration is demand-driven so unused entries cannot
+hold the loading screen; one queued model is processed per client frame.
 
 `CS_ASSET_SCOPE` and `re.SetAssetScope` establish map-import resolution before renderer world registration.
 This matters for custom loading MDX models whose companion textures live inside the destination archive.

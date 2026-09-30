@@ -123,6 +123,7 @@ void CL_ClearState(void) {
     re.RegisterMap(NULL);
 
     memset(&cl, 0, sizeof(struct client_state));
+    CL_ResetConfigStringResources();
     CL_ControlGroupsReset();
 
     SZ_Clear (&cls.netchan.message);
@@ -1109,6 +1110,7 @@ void CL_LoadingFrame(void) {
         last_pump = now;
     }
     CL_ReadPackets();
+    CL_PumpModelLoads();
 }
 
 void CL_SendCmd(void) {
@@ -1234,6 +1236,7 @@ void CL_Frame(uint32_t msec) {
     CL_CanvasFrame(cl_realtime);
     CL_MovieUpdate();
     CL_ReadPackets();
+    CL_PumpModelLoads();
     CL_MusicUpdate();
     CL_SendSoundEvents();
     CL_CheckTimeout();
