@@ -69,6 +69,8 @@ struct client_state {
     bool refresh_prepped;
     sizeBuf_t loading;        /* compressed loading-screen chunks; released after decode or disconnect */
     float loading_progress;   /* client-owned normalized loading progress [0,1] */
+    uint32_t loading_started_msec;
+    uint32_t loading_last_report_msec;
     bool precache_ready;       /* complete media table received after the loading-only batch */
     model_t *models[MAX_MODELS];
     model_t *portraits[MAX_MODELS];

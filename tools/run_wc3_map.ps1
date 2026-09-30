@@ -176,14 +176,16 @@ using System.Threading;
 public static class OpenRealmProcessLogPump {
     private static readonly object Sync = new object();
     private static StreamWriter Writer;
+    private static Thread OutputReader;
+    private static Thread ErrorReader;
 
     public static void Start(Process process, string path) {
         Writer = new StreamWriter(path, false, new UTF8Encoding(false));
-        StartReader(process.StandardOutput);
-        StartReader(process.StandardError);
+        OutputReader = StartReader(process.StandardOutput);
+        ErrorReader = StartReader(process.StandardError);
     }
 
-    private static void StartReader(StreamReader reader) {
+    private static Thread StartReader(StreamReader reader) {
         Thread thread = new Thread(() => {
             string line;
             while ((line = reader.ReadLine()) != null) {
@@ -194,6 +196,13 @@ public static class OpenRealmProcessLogPump {
             }
         });
         thread.Start();
+        return thread;
+    }
+
+    public static void Complete() {
+        OutputReader.Join();
+        ErrorReader.Join();
+        Writer.Dispose();
     }
 }
 '@
@@ -217,4 +226,6 @@ if ($process.HasExited) {
 Write-Host "Opened visible Warcraft III $Edition map: $mapPath (PID $($process.Id))"
 if ($LogFile) {
     Write-Host "Runtime log: $logPath"
+    $process.WaitForExit()
+    [OpenRealmProcessLogPump]::Complete()
 }

@@ -16,6 +16,88 @@ static struct {
 static bool world_loaded = false;
 static bool begin_sent = false;
 
+typedef enum {
+    CL_REFRESH_MAP,
+    CL_REFRESH_MODELS,
+    CL_REFRESH_IMAGES,
+    CL_REFRESH_SOUNDS,
+    CL_REFRESH_FONTS,
+    CL_REFRESH_DONE
+} clRefreshPhase_t;
+
+static clRefreshPhase_t refresh_phase = CL_REFRESH_MAP;
+static uint32_t refresh_cursor = 1;
+static uint32_t refresh_items_total;
+static uint32_t refresh_items_done;
+
+#define CL_REFRESH_BUDGET_MSEC 8
+
+static char const *CL_RefreshPhaseName(clRefreshPhase_t phase) {
+    switch (phase) {
+    case CL_REFRESH_MAP: return "map_register";
+    case CL_REFRESH_MODELS: return "models";
+    case CL_REFRESH_IMAGES: return "images";
+    case CL_REFRESH_SOUNDS: return "sounds";
+    case CL_REFRESH_FONTS: return "fonts";
+    case CL_REFRESH_DONE: return "done";
+    }
+    return "unknown";
+}
+
+static uint32_t CL_RefreshPhaseBase(clRefreshPhase_t phase) {
+    switch (phase) {
+    case CL_REFRESH_MODELS: return MAX_MODELS;
+    case CL_REFRESH_IMAGES: return MAX_IMAGES;
+    case CL_REFRESH_SOUNDS: return MAX_SOUNDS;
+    case CL_REFRESH_FONTS: return MAX_FONTSTYLES;
+    default: return 0;
+    }
+}
+
+static void CL_RefreshProgress(clRefreshPhase_t phase, uint32_t index, cstring_t resource,
+                               uint32_t resource_msec, bool force) {
+    static int last_phase = -1;
+    static uint32_t last_phase_started, phase_started, last_report;
+    uint32_t const now = SDL_GetTicks();
+    bool const load_changed = last_phase_started != cl.loading_started_msec;
+    if (load_changed) {
+        last_phase_started = cl.loading_started_msec;
+        last_phase = -1;
+        last_report = 0;
+    }
+    bool const phase_changed = last_phase != (int)phase;
+
+    if (phase_changed) {
+        last_phase = (int)phase;
+        phase_started = now;
+    }
+    if (!force && !phase_changed && resource_msec < 250 && now - last_report < 1000)
+        return;
+    last_report = now;
+    fprintf(stderr,
+            "CL_LOAD phase=%s elapsed_ms=%u phase_ms=%u progress=%u%% item=%u/%u slot=%u/%u item_ms=%u resource=\"%s\"\n",
+            CL_RefreshPhaseName(phase),
+            cl.loading_started_msec ? now - cl.loading_started_msec : 0,
+            now - phase_started,
+            (unsigned)(cl.loading_progress * 100.0f + 0.5f),
+            (unsigned)refresh_items_done,
+            (unsigned)refresh_items_total,
+            (unsigned)index,
+            (unsigned)CL_RefreshPhaseBase(phase),
+            (unsigned)resource_msec,
+            resource ? resource : "");
+}
+
+static void CL_RefreshStartPhase(clRefreshPhase_t phase, uint32_t base, uint32_t count) {
+    refresh_phase = phase;
+    refresh_cursor = 1;
+    refresh_items_done = 0;
+    refresh_items_total = 0;
+    FOR_LOOP(i, count)
+        if (*cl.configstrings[base + i]) refresh_items_total++;
+    CL_RefreshProgress(phase, 0, "", 0, true);
+}
+
 /* Optional CS_MODELS indices become handles here. Games that do not publish
  * CS_TERRAIN_LIGHT_MODEL / CS_ENTITY_LIGHT_MODEL leave the slots empty. */
 static model_t const *V_ConfigLightModel(uint32_t configstring) {
@@ -102,6 +184,9 @@ void CL_RestartRefresh(void) {
     world_loaded = false;
     begin_sent = false;
     cl.refresh_prepped = false;
+    refresh_phase = CL_REFRESH_MAP;
+    refresh_cursor = 1;
+    refresh_items_total = refresh_items_done = 0;
 }
 
 static void CL_LoadingStage(float progress) {
@@ -535,26 +620,38 @@ static void CL_AddEntities(void) {
 }
 
 void CL_PrepRefresh(void) {
+    if (cl.refresh_prepped) return;
     if (!cl.precache_ready || !cl.layout[LAYER_LOADING]) return;
     if (!*cl.configstrings[CS_WORLD]) {
         world_loaded = false;
         begin_sent = false;
+        refresh_phase = CL_REFRESH_MAP;
+        refresh_cursor = 1;
         return;
     }
 
     CL_LoadingStage(0.10f);
 
     if (!world_loaded) {
-        if (!CM_IsMapLoaded(cl.configstrings[CS_WORLD])) {
+        bool const map_loaded = CM_IsMapLoaded(cl.configstrings[CS_WORLD]);
+        uint32_t operation_started;
+        if (!map_loaded) {
+            CL_RefreshProgress(CL_REFRESH_MAP, 0, cl.configstrings[CS_WORLD], 0, true);
+            operation_started = SDL_GetTicks();
             CM_LoadMap(cl.configstrings[CS_WORLD], CL_LoadingFrame);
+            CL_RefreshProgress(CL_REFRESH_MAP, 0, cl.configstrings[CS_WORLD],
+                               SDL_GetTicks() - operation_started, true);
         }
+        CL_RefreshProgress(CL_REFRESH_MAP, 0, "renderer.RegisterMap", 0, true);
+        operation_started = SDL_GetTicks();
         re.RegisterMap(cl.configstrings[CS_WORLD]);
+        CL_RefreshProgress(CL_REFRESH_MAP, 0, "renderer.RegisterMap",
+                           SDL_GetTicks() - operation_started, true);
         world_loaded = true;
+        S_BeginRegistration();
+        CL_RefreshStartPhase(CL_REFRESH_MODELS, CS_MODELS + 1, MAX_MODELS - 1);
     }
     CL_LoadingStage(0.40f);
-
-    bool register_sounds = !cl.refresh_prepped;
-    if (register_sounds) S_BeginRegistration();
 
 #ifdef SC2
     if (world_loaded && cls.state != ca_active) {
@@ -577,44 +674,106 @@ void CL_PrepRefresh(void) {
     }
 #endif
 
-    for (uint32_t i = 1; i < MAX_MODELS; i++) {
-        if (!*cl.configstrings[CS_MODELS + i])
+    uint32_t started = SDL_GetTicks();
+    while (refresh_phase != CL_REFRESH_DONE) {
+        uint32_t index = refresh_cursor++;
+        cstring_t resource = NULL;
+        uint32_t resource_started;
+        bool has_resource;
+        switch (refresh_phase) {
+        case CL_REFRESH_MODELS:
+            if (index >= MAX_MODELS) {
+                uint32_t const order_marker_started = SDL_GetTicks();
+                CL_RegisterConfigString(CS_ORDER_MARKER);
+                CL_LoadingStage(0.60f);
+                if (SDL_GetTicks() - order_marker_started >= 250)
+                    CL_RefreshProgress(CL_REFRESH_MODELS, MAX_MODELS, cl.configstrings[CS_ORDER_MARKER],
+                                       SDL_GetTicks() - order_marker_started, true);
+                CL_RefreshStartPhase(CL_REFRESH_IMAGES, CS_IMAGES + 1, MAX_IMAGES - 1);
+                continue;
+            }
+            resource = cl.configstrings[CS_MODELS + index];
+            resource_started = SDL_GetTicks();
+            has_resource = *resource != '\0';
+            if (has_resource)
+                CL_RegisterConfigString(CS_MODELS + index);
+            break;
+        case CL_REFRESH_IMAGES:
+            if (index >= MAX_IMAGES) {
+                CL_LoadingStage(0.75f);
+                CL_RefreshStartPhase(CL_REFRESH_SOUNDS, CS_SOUNDS + 1, MAX_SOUNDS - 1);
+                continue;
+            }
+            resource = cl.configstrings[CS_IMAGES + index];
+            resource_started = SDL_GetTicks();
+            has_resource = *resource != '\0';
+            if (has_resource)
+                CL_RegisterConfigString(CS_IMAGES + index);
+            break;
+        case CL_REFRESH_SOUNDS:
+            if (index >= MAX_SOUNDS) {
+                CL_LoadingStage(0.87f);
+                CL_RefreshStartPhase(CL_REFRESH_FONTS, CS_FONTS + 1, MAX_FONTSTYLES - 1);
+                continue;
+            }
+            resource = cl.configstrings[CS_SOUNDS + index];
+            resource_started = SDL_GetTicks();
+            has_resource = *resource != '\0';
+            if (has_resource)
+                S_RegisterSound(resource);
+            break;
+        case CL_REFRESH_FONTS:
+            if (index >= MAX_FONTSTYLES) {
+                CL_LoadingStage(0.94f);
+                refresh_phase = CL_REFRESH_DONE;
+                refresh_items_done = refresh_items_total;
+                continue;
+            }
+            resource = cl.configstrings[CS_FONTS + index];
+            resource_started = SDL_GetTicks();
+            has_resource = *resource != '\0';
+            if (has_resource)
+                CL_RegisterConfigString(CS_FONTS + index);
+            break;
+        default:
+            refresh_phase = CL_REFRESH_DONE;
             continue;
-        CL_RegisterConfigString(CS_MODELS + i);
+        }
+        uint32_t const resource_msec = SDL_GetTicks() - resource_started;
+        if (has_resource) refresh_items_done++;
+        CL_RefreshProgress(refresh_phase, index, resource, resource_msec, false);
+        if (SDL_GetTicks() - started >= CL_REFRESH_BUDGET_MSEC)
+            break;
     }
-    CL_RegisterConfigString(CS_ORDER_MARKER);
-    CL_LoadingStage(0.60f);
 
-    for (uint32_t i = 1; i < MAX_IMAGES; i++) {
-        if (!*cl.configstrings[CS_IMAGES + i])
-            continue;
-        CL_RegisterConfigString(CS_IMAGES + i);
-    }
-    CL_LoadingStage(0.75f);
-
-    if (register_sounds)
-        for (uint32_t i = 1; i < MAX_SOUNDS; i++)
-            if (*cl.configstrings[CS_SOUNDS + i]) S_RegisterSound(cl.configstrings[CS_SOUNDS + i]);
-    CL_LoadingStage(0.87f);
-
-    for (uint32_t i = 1; i < MAX_FONTSTYLES; i++) {
-        if (!*cl.configstrings[CS_FONTS + i])
-            continue;
-        CL_RegisterConfigString(CS_FONTS + i);
-    }
-    CL_LoadingStage(0.94f);
-
-    if (world_loaded && !begin_sent) {
-        CL_SendBegin();
-        begin_sent = true;
-    }
-    CL_LoadingStage(0.98f);
-
-    if (world_loaded && !cl.refresh_prepped) {
+    if (refresh_phase == CL_REFRESH_DONE) {
+        if (world_loaded && !begin_sent) {
+            CL_LoadingStage(0.98f);
+            CL_SendBegin();
+            begin_sent = true;
+        }
         S_EndRegistration();
         cl.refresh_prepped = true;
+        CL_LoadingStage(1.0f);
+        return;
     }
-    if (cl.refresh_prepped) CL_LoadingStage(1.0f);
+
+    switch (refresh_phase) {
+    case CL_REFRESH_MODELS:
+        CL_LoadingStage(0.40f + 0.20f * (float)refresh_items_done / (float)MAX(1u, refresh_items_total));
+        break;
+    case CL_REFRESH_IMAGES:
+        CL_LoadingStage(0.60f + 0.15f * (float)refresh_items_done / (float)MAX(1u, refresh_items_total));
+        break;
+    case CL_REFRESH_SOUNDS:
+        CL_LoadingStage(0.75f + 0.12f * (float)refresh_items_done / (float)MAX(1u, refresh_items_total));
+        break;
+    case CL_REFRESH_FONTS:
+        CL_LoadingStage(0.87f + 0.07f * (float)refresh_items_done / (float)MAX(1u, refresh_items_total));
+        break;
+    default:
+        break;
+    }
 }
 
 void V_RenderView(void) {

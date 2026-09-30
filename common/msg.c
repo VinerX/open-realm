@@ -194,6 +194,10 @@ void MSG_WriteShort(sizeBuf_t *buf, int value) {
     MSG_Write(buf, &val, 2);
 }
 
+void MSG_WriteUShort(sizeBuf_t *buf, uint16_t value) {
+    MSG_Write(buf, &value, sizeof(value));
+}
+
 void MSG_WriteLong(sizeBuf_t *buf, int value) {
     MSG_Write(buf, &value, 4);
 }
@@ -260,6 +264,12 @@ int MSG_ReadByte(sizeBuf_t *buf) {
 int MSG_ReadShort(sizeBuf_t *buf) {
     short value = 0;
     MSG_Read(buf, &value, 2);
+    return value;
+}
+
+uint16_t MSG_ReadUShort(sizeBuf_t *buf) {
+    uint16_t value = 0;
+    MSG_Read(buf, &value, sizeof(value));
     return value;
 }
 
@@ -541,22 +551,22 @@ void SZ_Printf(sizeBuf_t *msg, cstring_t fmt, ...) {
 
 void MSG_WriteEntityBits(sizeBuf_t *buf, uint32_t bits, uint32_t number) {
     MSG_WriteLong(buf, bits);
-    MSG_WriteShort(buf, number);
+    MSG_WriteUShort(buf, (uint16_t)number);
 }
 
 int MSG_ReadEntityBits(sizeBuf_t *buf, uint32_t *bits) {
     *bits = MSG_ReadLong(buf);
-    return MSG_ReadShort(buf);
+    return MSG_ReadUShort(buf);
 }
 
 void MSG_WritePlayerBits(sizeBuf_t *buf, uint32_t bits, uint32_t number) {
     MSG_WriteLong(buf, bits);
-    MSG_WriteShort(buf, number);
+    MSG_WriteUShort(buf, (uint16_t)number);
 }
 
 int MSG_ReadPlayerBits(sizeBuf_t *buf, uint32_t *bits) {
     *bits = MSG_ReadLong(buf);
-    return MSG_ReadShort(buf);
+    return MSG_ReadUShort(buf);
 }
 
 /* Each controller operation carries only its typed payload; no native struct padding goes on the wire. */

@@ -75,6 +75,15 @@ UDP datagrams are sent raw, matching Quake 2.  An out-of-band packet begins
 with the normal `-1` message marker in the payload; there is no extra network
 length prefix.
 
+## Packet-entity merge sentinel
+
+`SV_EmitPacketEntities` merges the sorted entity-number lists from the previous and current snapshots. Its exhausted-list
+sentinel must be greater than every number representable by the wire's unsigned 16-bit entity field. A historical `9999`
+sentinel collided with real high entity IDs: equality could dereference a missing entry, while larger IDs could leave one
+list index unchanged and spin while writing removals until the message buffer overflowed. The sentinel is
+`UINT16_MAX + 1`, outside the wire range. `make test-server-snapshot` covers boundary and high IDs across initial,
+unchanged, changed, added, and removed snapshots.
+
 ## Initialisation
 
 `NET_Init()` is called once from `main.c` and only clears loopback state. UDP

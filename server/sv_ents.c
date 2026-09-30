@@ -16,7 +16,7 @@
 
 #define VISUAL_DISTANCE 1500
 #define SNAPSHOT_NEAR_ENTITY_DISTANCE 256 // world units; nearby world presentation outranks distant contacts under saturation
-#define HIGH_NUMBER 9999
+#define HIGH_NUMBER (UINT16_MAX + 1)
 #define OWNED_ENTITY_SCORE_BIAS 1000000000.0f
 
 typedef struct {

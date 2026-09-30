@@ -83,6 +83,7 @@ void Netchan_OutOfBandPrint(NETSOURCE netsrc, netadr_t adr, cstring_t format, ..
 void MSG_Write(sizeBuf_t *buf, void const *value, uint32_t size);
 void MSG_WriteByte(sizeBuf_t *buf, int value);
 void MSG_WriteShort(sizeBuf_t *buf, int value);
+void MSG_WriteUShort(sizeBuf_t *buf, uint16_t value);
 void MSG_WriteLong(sizeBuf_t *buf, int value);
 void MSG_WriteFloat(sizeBuf_t *buf, float value);
 void MSG_WriteFloat2(sizeBuf_t *buf, float value);
@@ -102,6 +103,7 @@ void MSG_WriteAngle(sizeBuf_t *buf, float f);
 int MSG_Read(sizeBuf_t *buf, handle_t value, uint32_t size);
 int MSG_ReadByte(sizeBuf_t *buf);
 int MSG_ReadShort(sizeBuf_t *buf);
+uint16_t MSG_ReadUShort(sizeBuf_t *buf);
 int MSG_ReadLong(sizeBuf_t *buf);
 float MSG_ReadFloat(sizeBuf_t *buf);
 void MSG_ReadString(sizeBuf_t *buf, string_t value);

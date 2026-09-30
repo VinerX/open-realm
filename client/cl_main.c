@@ -493,6 +493,10 @@ void CL_SetLoadingProgress(float progress) {
     if (progress > 1.0f) progress = 1.0f;
     if (progress <= cl.loading_progress) return;
     cl.loading_progress = progress;
+    fprintf(stderr, "CL_LOAD progress=%u%% elapsed_ms=%u map=\"%s\"\n",
+            (unsigned)(progress * 100.0f + 0.5f),
+            cl.loading_started_msec ? SDL_GetTicks() - cl.loading_started_msec : 0,
+            cl.configstrings[CS_WORLD]);
     SCR_UpdateLoadingPlaque();
 }
 
@@ -509,6 +513,9 @@ void CL_BeginLoadingMap(cstring_t mapName) {
      * so PrepRefresh sends it again and CL_ParseFrame can end the plaque. */
     CL_RestartRefresh();
     cl.loading_progress = 0.0f;
+    cl.loading_started_msec = SDL_GetTicks();
+    cl.loading_last_report_msec = cl.loading_started_msec;
+    fprintf(stderr, "CL_LOAD phase=begin map=\"%s\"\n", mapName ? mapName : "");
     cl.precache_ready = false;
     cl.playerstate.client_ui_state = CLIENT_UI_LOADING;
     cls.state = ca_connected;
@@ -1089,6 +1096,14 @@ void CL_LoadingFrame(void) {
 
     if (!scr_initialized || Cvar_Integer("dedicated", 0)) return;
     now = SDL_GetTicks();
+    if (cl.playerstate.client_ui_state == CLIENT_UI_LOADING &&
+        now - cl.loading_last_report_msec >= 1000) {
+        cl.loading_last_report_msec = now;
+        fprintf(stderr, "CL_LOAD phase=server_map elapsed_ms=%u progress=%u%% map=\"%s\"\n",
+                cl.loading_started_msec ? now - cl.loading_started_msec : 0,
+                (unsigned)(cl.loading_progress * 100.0f + 0.5f),
+                cl.configstrings[CS_WORLD]);
+    }
     if (!last_pump || now - last_pump >= CL_LOADING_PUMP_MSEC) {
         SDL_PumpEvents();
         last_pump = now;

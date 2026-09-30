@@ -3032,6 +3032,17 @@ TEST(net, unchanged_entity_delta_emits_nothing) {
     T_EQ(sb.cursize, 0);
 }
 
+TEST(net, entity_index_round_trips_unsigned_16_bit_values) {
+    uint8_t bytes[16];
+    sizeBuf_t msg = make_msg_buf(bytes, sizeof(bytes));
+    uint32_t bits = 0;
+
+    MSG_WriteEntityBits(&msg, 1, 40000);
+    msg.readcount = 0;
+    T_EQ(MSG_ReadEntityBits(&msg, &bits), 40000);
+    T_EQ(bits, 1);
+}
+
 /* Headings are radians. Quarter turns must land exactly on the two-byte wire grid. */
 TEST(net, entity_delta_preserves_radian_headings) {
     float angles[] = { 0, M_PI / 2, M_PI, 3 * M_PI / 2, -M_PI / 2, 2 * M_PI,

@@ -1992,6 +1992,7 @@ static void Com_Map_f(void) {
     CL_SetGameplayBindings();
     CL_BeginLoadingMap(map);
     SV_Map(map);
+    if (SV_IsActive()) CL_SetLoadingProgress(0.05f);
 }
 
 static void Com_LoadGame_f(void) {

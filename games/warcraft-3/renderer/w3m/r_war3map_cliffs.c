@@ -125,6 +125,7 @@ static model_t const *R_LoadCliffModel(cliffData_t const *data, char const *ccfg
     cliff->model = NULL;
     if (R_MapAssetCandidate(zBuffer, scoped, sizeof(scoped))) cliff->model = R_LoadModel(scoped);
     if (!cliff->model) cliff->model = R_LoadModel(zBuffer);
+    if (!cliff->model) fprintf(stderr, "WC3: unresolved cliff model %s\n", zBuffer);
     ADD_TO_LIST(cliff, g_cliffs);
     return cliff->model;
 }
@@ -202,8 +203,9 @@ static void R_MakeCliff(war3map_t const *map, uint32_t x, uint32_t y, cliffData_
     }
     
     model_t const *pModel = R_LoadCliffModel(data, cliffcfg, is_ramp);
-    if (!pModel || pModel->modeltype != ID_MDLX || !pModel->mdx || !pModel->mdx->geosets) {
-        fprintf(stderr, "Model %.4s not found\n", (cstring_t)&cliffcfg);
+    if (!pModel) return;
+    if (pModel->modeltype != ID_MDLX || !pModel->mdx || !pModel->mdx->geosets) {
+        fprintf(stderr, "WC3: invalid cliff model %.4s\n", (cstring_t)&cliffcfg);
         return;
     }
     mdxGeoset_t *pGeoset = pModel->mdx->geosets;

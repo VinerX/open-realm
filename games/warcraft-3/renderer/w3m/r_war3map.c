@@ -5,6 +5,21 @@
 mapsegment_t *g_mapSegments = NULL;
 maplayer_t *g_groundLayers = NULL;
 static cameraHeightMap_t w3_camera_height;
+static uint32_t w3_map_load_started;
+
+static uint32_t R_W3MapStageBegin(cstring_t phase) {
+    uint32_t const now = SDL_GetTicks();
+    fprintf(stderr, "WC3_MAP_LOAD phase=%s status=begin elapsed_ms=%u\n",
+            phase, w3_map_load_started ? now - w3_map_load_started : 0);
+    return now;
+}
+
+static void R_W3MapStageEnd(cstring_t phase, uint32_t started) {
+    uint32_t const now = SDL_GetTicks();
+    fprintf(stderr, "WC3_MAP_LOAD phase=%s status=done duration_ms=%u elapsed_ms=%u\n",
+            phase, (unsigned)(now - started),
+            w3_map_load_started ? now - w3_map_load_started : 0);
+}
 
 #define WC3_CAMERA_HEIGHT_RADIUS 4 // terrain cells; half-width of the client camera blur footprint
 static float r_w3_camera_grid_height(void const *data, uint32_t x, uint32_t y) {
@@ -102,10 +117,12 @@ static mapsegment_t *R_BuildMapSegment(war3map_t const *map, uint32_t sx, uint32
 
 static void R_BuildGroundLayers(war3map_t const *map) {
     for (uint32_t layer = map->num_grounds; layer > 0; layer--) {
+        uint32_t const started = R_W3MapStageBegin("ground_layer");
         maplayer_t *mapLayer = R_BuildGroundLayerGlobal(map, layer - 1);
         if (mapLayer) {
             ADD_TO_LIST(mapLayer, g_groundLayers);
         }
+        R_W3MapStageEnd("ground_layer", started);
     }
 }
 
@@ -119,8 +136,14 @@ static vec3_t R_GetMapVertexPoint(war3map_t const *map, uint32_t x, uint32_t y) 
 }
 
 static void R_LoadMapSegments(war3map_t const *map) {
+    uint32_t const segments_x = (map->width - 1) / SEGMENT_SIZE;
+    uint32_t const segments_y = (map->height - 1) / SEGMENT_SIZE;
+    uint32_t const total = segments_x * segments_y;
+    uint32_t completed = 0;
+    uint32_t last_report = SDL_GetTicks();
     FOR_LOOP(fx, (map->width - 1) / SEGMENT_SIZE) {
         FOR_LOOP(fy, (map->height - 1) / SEGMENT_SIZE) {
+            uint32_t const started = SDL_GetTicks();
             mapsegment_t *segment = R_BuildMapSegment(map, fx, fy);
             ADD_TO_LIST(segment, g_mapSegments);
             FOR_LOOP(sx, SEGMENT_SIZE+1) {
@@ -135,6 +158,16 @@ static void R_LoadMapSegments(war3map_t const *map) {
                     segment->bbox.max.y = MAX(segment->bbox.max.y, v.y);
                     segment->bbox.max.z = MAX(segment->bbox.max.z, v.z);
                 }
+            }
+            completed++;
+            uint32_t const now = SDL_GetTicks();
+            if (now - started >= 250 || now - last_report >= 1000) {
+                fprintf(stderr,
+                        "WC3_MAP_LOAD phase=terrain_segment item=%u/%u segment=(%u,%u) item_ms=%u elapsed_ms=%u\n",
+                        (unsigned)completed, (unsigned)total, (unsigned)fx, (unsigned)fy,
+                        (unsigned)(now - started),
+                        w3_map_load_started ? now - w3_map_load_started : 0);
+                last_report = now;
             }
         }
     }
@@ -261,6 +294,10 @@ void _W3M_RegisterMap(char const *mapFilename) {
     uint8_t *mapData;
     int mapSize;
     war3map_t *map;
+    uint32_t started;
+
+    w3_map_load_started = SDL_GetTicks();
+    fprintf(stderr, "WC3_MAP_LOAD phase=begin map=\"%s\"\n", mapFilename ? mapFilename : "");
 
     /* A map registration replaces the whole WC3 world.  Free GPU buffers,
      * map-owned models, fog targets and source terrain before creating the
@@ -268,7 +305,9 @@ void _W3M_RegisterMap(char const *mapFilename) {
     _W3M_ClearMap();
 
     /* Load .w3m file (which is itself an MPQ archive) */
+    started = R_W3MapStageBegin("archive_read");
     mapSize = ri.FS_ReadFile(mapFilename, (void **)&mapData);
+    R_W3MapStageEnd("archive_read", started);
     if (mapSize < 0 || !mapData) {
         ri.error("R_RegisterMap: failed to open map %s\n", mapFilename);
         return;
@@ -280,21 +319,44 @@ void _W3M_RegisterMap(char const *mapFilename) {
         ri.error("R_RegisterMap: failed to open map archive %s\n", mapFilename);
         return;
     }
+    started = R_W3MapStageBegin("archive_parse");
     map = FileReadWar3Map(hMpq);
+    R_W3MapStageEnd("archive_parse", started);
+    if (!map) {
+        SFileCloseArchive(hMpq);
+        ri.FS_FreeFile(mapData);
+        ri.error("R_RegisterMap: failed to parse map %s\n", mapFilename);
+        return;
+    }
+    fprintf(stderr, "WC3_MAP_LOAD phase=archive_parse dimensions=%ux%u grounds=%u\n",
+            (unsigned)map->width, (unsigned)map->height, (unsigned)map->num_grounds);
+    started = R_W3MapStageBegin("shadow_map");
     R_FileReadShadowMap(hMpq, map);
+    R_W3MapStageEnd("shadow_map", started);
+    started = R_W3MapStageBegin("minimap");
     R_LoadMapMinimap(hMpq, mapFilename);
+    R_W3MapStageEnd("minimap", started);
     SFileCloseArchive(hMpq);
     ri.FS_FreeFile(mapData);
     tr.world = map;
+    started = R_W3MapStageBegin("camera_height_map_and_blight");
     R_LoadBlightTexture(map->tileset);
     R_BuildCameraHeightMap(&(cameraHeightBuild_t){ .map = &w3_camera_height, .data = map,
         .width = map->width, .height_count = map->height, .radius = WC3_CAMERA_HEIGHT_RADIUS,
         .samples = BZ_BROAD_HEIGHT_SAMPLES, .origin = map->center, .cell_size = TILE_SIZE,
         .get_height = r_w3_camera_grid_height });
+    R_W3MapStageEnd("camera_height_map_and_blight", started);
 
+    started = R_W3MapStageBegin("terrain_segments");
     R_LoadMapSegments(map);
+    R_W3MapStageEnd("terrain_segments", started);
+    started = R_W3MapStageBegin("cliff_finish");
     R_FinishCliffs();
+    R_W3MapStageEnd("cliff_finish", started);
+    started = R_W3MapStageBegin("ground_layers");
     R_BuildGroundLayers(map);
+    R_W3MapStageEnd("ground_layers", started);
+    R_W3MapStageEnd("map_register", w3_map_load_started);
 }
 
 float R_W3CameraHeightAtPoint(float x, float y) { return R_SampleCameraHeightMap(&w3_camera_height, x, y); }

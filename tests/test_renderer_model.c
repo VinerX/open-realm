@@ -1925,8 +1925,27 @@ w3CliffType_t const *R_CliffType(uint32_t id) {
 /* The cliff material test needs the real bake/finalize lifecycle, but no OpenGL context. */
 static buffer_t *test_cliff_buffer(vertex_t const *vertices, uint32_t count) { return test_alloc(sizeof(buffer_t)); }
 #define R_MakeVertexArrayObject test_cliff_buffer
+static uint32_t missing_cliff_model_log_count;
+static int test_cliff_fprintf(FILE *stream, char const *format, ...) {
+    (void)stream;
+    if (strstr(format, "unresolved cliff model")) missing_cliff_model_log_count++;
+    return 0;
+}
+#define fprintf test_cliff_fprintf
 #include "games/warcraft-3/renderer/w3m/r_war3map_cliffs.c"
+#undef fprintf
 #undef R_MakeVertexArrayObject
+
+TEST(renderer_terrain, missing_cliff_model_is_reported_once_per_cached_path) {
+    cliffData_t data = { .cliffModelDir = "Cliffs", .rampModelDir = "CliffTrans" };
+    R_ResetCliffCache(); reset_registry(); R_SetMapAssetScope(NULL);
+    fail_load = true; missing_cliff_model_log_count = 0;
+    T_NULL(R_LoadCliffModel(&data, "XACX", false));
+    T_NULL(R_LoadCliffModel(&data, "XACX", false));
+    T_EQ(missing_cliff_model_log_count, 1);
+    T_EQ(load_count, 1);
+    R_ResetCliffCache(); fail_load = false;
+}
 
 TEST(renderer_terrain, cliff_cache_distinguishes_model_directories) {
     cliffData_t city = { .cliffModelDir = "CityCliffs", .rampModelDir = "CityCliffTrans" };

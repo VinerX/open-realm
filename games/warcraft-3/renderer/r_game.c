@@ -624,15 +624,32 @@ void R_DrawMinimap(rect_t const *screen, cstring_t map) {
 }
 
 void R_RegisterMap(cstring_t mapFileName) {
+    uint32_t const started = SDL_GetTicks();
+    fprintf(stderr, "WC3_MAP_LOAD phase=renderer_begin map=\"%s\"\n", mapFileName ? mapFileName : "");
     R_SetMapAssetScope(mapFileName);
     R_AdvanceTextureGeneration();
     memset(&model_texture_cache, 0, sizeof(model_texture_cache));
     R_ClearMinimapSpecialAssets();
+    uint32_t stage_started = SDL_GetTicks();
     if (mapFileName && *mapFileName) R_LoadMinimapSpecialAssets();
+    fprintf(stderr, "WC3_MAP_LOAD phase=minimap_special duration_ms=%u\n",
+            (unsigned)(SDL_GetTicks() - stage_started));
+    stage_started = SDL_GetTicks();
     R_WeatherRegisterMap();
+    fprintf(stderr, "WC3_MAP_LOAD phase=weather duration_ms=%u\n",
+            (unsigned)(SDL_GetTicks() - stage_started));
+    stage_started = SDL_GetTicks();
     R_LightningRegisterMap();
+    fprintf(stderr, "WC3_MAP_LOAD phase=lightning duration_ms=%u\n",
+            (unsigned)(SDL_GetTicks() - stage_started));
+    stage_started = SDL_GetTicks();
     _W3M_RegisterMap(mapFileName);
+    fprintf(stderr, "WC3_MAP_LOAD phase=renderer_world duration_ms=%u elapsed_ms=%u\n",
+            (unsigned)(SDL_GetTicks() - stage_started), (unsigned)(SDL_GetTicks() - started));
+    stage_started = SDL_GetTicks();
     R_ReclaimStreamedTextures(0);
+    fprintf(stderr, "WC3_MAP_LOAD phase=texture_reclaim duration_ms=%u elapsed_ms=%u\n",
+            (unsigned)(SDL_GetTicks() - stage_started), (unsigned)(SDL_GetTicks() - started));
 }
 
 void R_SetupEnvironmentLighting(void) {

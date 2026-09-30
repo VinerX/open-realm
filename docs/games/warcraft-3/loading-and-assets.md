@@ -230,13 +230,28 @@ do not infer those capabilities from the renderer's map-import lookup. DotA 6.83
 `CM_LoadMapFormat` mounts that archive via `FS_SetPriorityArchive` so `G_ReadGameDataFile` sees those members
 before Custom_V*/base, and `CM_ReadAbilities` / `G_SetMapAbilityOverrides` apply DataA–I plus common leveled
 fields. See [DotA Custom-Map Playability](dota-map-playability.md) and [WC3 Data Model](../../wc3-data-model.md).
-## Loading progress contract
+## Loading progress and diagnostics
 
 Loading progress is client-owned and intentionally coarse. `CL_BeginLoadingMap` resets `cl.loading_progress` to
-zero. `CL_PrepRefresh` advances it monotonically at existing registration boundaries and
-`SCR_UpdateLoadingPlaque` explicitly repaints the otherwise frozen Quake-style loading plaque after each advance.
+zero. `CL_PrepRefresh` advances it monotonically at map and resource-registration boundaries. Model, image, sound,
+and font registration resumes across frames with an 8 ms per-frame work budget, allowing the normal client frame
+loop to repaint the otherwise frozen Quake-style loading plaque between batches.
+The budget is checked between resources: one model or texture can take longer than 8 ms, and map registration
+remains synchronous. This scheduling change improves loading responsiveness; total load-time reduction requires
+separate measurement.
+The console `map` command advances to the 5% server-map-complete milestone after `SV_Map` returns. Model, image,
+sound, and font phases now weight the remaining progress by the populated configstrings in that phase, rather than
+by the full pool capacity.
 The initial loading batch carries the `Loading.fdf` tree as `svc_layout`; its `FT_SPRITE` bar binds
 `UI_STAT_LOADING_PROGRESS` to the `LoadingProgressBar` MDX sequence using `#0@ratio`. No player-state/network field is involved.
+
+Loading diagnostics use the `CL_LOAD` and `WC3_MAP_LOAD` prefixes. `CL_LOAD` reports map start, numeric progress,
+server-map heartbeat, client registration phase, completed/total populated resources, configstring slot, current path,
+and individual resources taking at least 250 ms. `WC3_MAP_LOAD` times archive read/parse, minimap/shadow, terrain
+segments, cliff and ground-layer construction, and final renderer cleanup. Terrain-segment reports are limited to
+one per second except for a segment that itself takes at least 250 ms. Compare phase `begin`/`done` timestamps; a
+missing `done` record points to the operation that did not return. These diagnostics keep the existing renderer
+registration synchronous and expose its stage boundaries without re-entering the renderer to redraw mid-build.
 
 Current phase values are:
 

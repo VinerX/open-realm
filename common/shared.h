@@ -260,10 +260,10 @@ enum {
 #define MAX_COMMANDS 12
 #define MAX_STATS 32
 
-#define MAX_GAME_ENTITIES 16000
+#define MAX_GAME_ENTITIES 65535
 #define MAX_PACKET_ENTITIES 1024 // per-frame packet snapshot budget
 #define MAX_CLIENTS 24
-#define MAX_MODELS 512 // campaign maps can reference more than 255 distinct models
+#define MAX_MODELS 1024 // large custom maps can reference hundreds of distinct models
 #define MAX_FONTSTYLES 256
 #define MAX_SOUNDS 1024 // campaign maps can reference more than 512 unit and ambient sounds
 #define MAX_IMAGES 2048 // UI-heavy games can reference hundreds of distinct command/status textures in one map session

@@ -51,7 +51,7 @@ Loading follows the Quake-style client state split:
 
 1. `CL_BeginLoadingMap()` resets `cl.loading_progress`, sets `playerState_t.client_ui_state = CLIENT_UI_LOADING`, keeps the connection in `ca_connected`, and raises the frozen loading plaque.
 2. The server sends the map-authored loading `svc_layout` after configstrings; the client draws it before standalone-screen dispatch. `FT_LOADING_BAR` reads client-local progress.
-3. A successful local `SV_Map()` completion advances the local plaque to its first milestone; remote clients skip that listen-server-only milestone. `CL_PrepRefresh()` then loads/registers the world, models, images, sounds, and fonts and advances progress at those real phase boundaries; `SCR_UpdateLoadingPlaque()` explicitly repaints the frozen plaque after each increase.
+3. A successful local `SV_Map()` completion advances the local plaque to its first milestone; remote clients skip that listen-server-only milestone. `CL_PrepRefresh()` then loads/registers the world, models, images, sounds, and fonts and advances progress at those real phase boundaries; `SCR_UpdateLoadingPlaque()` explicitly repaints the frozen plaque after each increase. Loading diagnostics use `CL_LOAD` and `WC3_MAP_LOAD` to report elapsed time, populated resources, the current path, and synchronous WC3 terrain-registration stages.
 4. Once registration is complete, `CL_PrepRefresh()` queues `begin`, closes sound registration, sets `cl.refresh_prepped`, and advances the bar to 1.0.
 5. The first usable server frame then promotes `cls.state` to `ca_active`, changes `client_ui_state` to `CLIENT_UI_GAME`, and calls `SCR_EndLoadingPlaque()`.
 
