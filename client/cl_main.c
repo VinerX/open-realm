@@ -528,14 +528,15 @@ void CL_BeginLoadingMap(cstring_t mapName) {
 }
 
 int CL_ModelIndex(cstring_t modelName) {
-    /* Find or register model */
+    /* Resolve registered names before considering empty model handles: most slots are deferred. */
     for (uint32_t i = 1; i < MAX_MODELS; i++) {
-        if (cl.models[i] == NULL) {
-            cl.models[i] = re.LoadModel(modelName);
+        if (*cl.configstrings[CS_MODELS + i] && !strcmp(cl.configstrings[CS_MODELS + i], modelName)) {
             return (int)i;
         }
-        /* Check if already loaded - compare configstring */
-        if (*cl.configstrings[CS_MODELS + i] && !strcmp(cl.configstrings[CS_MODELS + i], modelName)) {
+    }
+    for (uint32_t i = 1; i < MAX_MODELS; i++) {
+        if (!*cl.configstrings[CS_MODELS + i] && !cl.models[i]) {
+            cl.models[i] = re.LoadModel(modelName);
             return (int)i;
         }
     }
@@ -543,14 +544,15 @@ int CL_ModelIndex(cstring_t modelName) {
 }
 
 int CL_ImageIndex(cstring_t imageName) {
-    /* Find or register image */
+    /* Resolve registered names before considering empty texture handles: most slots are deferred. */
     for (uint32_t i = 1; i < MAX_IMAGES; i++) {
-        if (cl.pics[i] == NULL) {
-            cl.pics[i] = re.LoadTexture(imageName);
+        if (*cl.configstrings[CS_IMAGES + i] && !strcmp(cl.configstrings[CS_IMAGES + i], imageName)) {
             return (int)i;
         }
-        /* Check if already loaded */
-        if (*cl.configstrings[CS_IMAGES + i] && !strcmp(cl.configstrings[CS_IMAGES + i], imageName)) {
+    }
+    for (uint32_t i = 1; i < MAX_IMAGES; i++) {
+        if (!*cl.configstrings[CS_IMAGES + i] && !cl.pics[i]) {
+            cl.pics[i] = re.LoadTexture(imageName);
             return (int)i;
         }
     }
@@ -1110,7 +1112,7 @@ void CL_LoadingFrame(void) {
         last_pump = now;
     }
     CL_ReadPackets();
-    CL_PumpModelLoads();
+    CL_PumpMediaLoads();
 }
 
 void CL_SendCmd(void) {
@@ -1236,7 +1238,7 @@ void CL_Frame(uint32_t msec) {
     CL_CanvasFrame(cl_realtime);
     CL_MovieUpdate();
     CL_ReadPackets();
-    CL_PumpModelLoads();
+    CL_PumpMediaLoads();
     CL_MusicUpdate();
     CL_SendSoundEvents();
     CL_CheckTimeout();

@@ -338,7 +338,7 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.effect_flags = ent->current.effect_flags;
     re.effect_model = CL_ModelForIndex(ent->current.effect);
     re.model = CL_ModelForIndex(ent->current.model);
-    re.skin = cl.pics[ent->current.image];
+    re.skin = CL_PicForIndex(ent->current.image);
     if (ent->current.name) {
         uint32_t i = ent->current.name - 1;
         cstring_t cs = cl.configstrings[CS_GENERAL + (i >> 4)];
@@ -379,10 +379,10 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.tint_valid = ent->tint_valid;
     re.tint = ent->tint_valid ? ent->tint : COLOR32_WHITE;
     re.number = ent->current.number;
-    re.splat = cl.pics[ent->current.splat & 0xffff];
+    re.splat = CL_PicForIndex(ent->current.splat & 0xffff);
     re.splatsize = ent->current.splat >> 16;
 #ifndef USE_SHADOWMAPS
-    re.shadow = cl.pics[ent->current.shadow];
+    re.shadow = CL_PicForIndex(ent->current.shadow);
     re.shadow_rect = MAKE(rect_t,
                           ShadowUnpackRectComponent((uint8_t)(ent->current.shadow_rect & 0xff)),
                           ShadowUnpackRectComponent((uint8_t)((ent->current.shadow_rect >> 8) & 0xff)),
@@ -588,7 +588,7 @@ static void CL_AddCursorSplat(void) {
     memset(&decal, 0, sizeof(decal));
     decal.origin = (vec2_t){ point.x, point.y };
     decal.radius = cl.cursor_splat.radius;
-    decal.texture = cl.pics[cl.cursor_splat.image];
+    decal.texture = CL_PicForIndex(cl.cursor_splat.image);
     decal.color = (color32_t){ 255, 255, 255, 180 };
     V_AddDecal(&decal);
 }
@@ -650,9 +650,11 @@ void CL_PrepRefresh(void) {
         world_loaded = true;
         S_BeginRegistration();
         CL_RefreshProgress(CL_REFRESH_MODELS, MAX_MODELS, "models deferred until referenced", 0, true);
-        CL_RefreshStartPhase(CL_REFRESH_IMAGES, CS_IMAGES + 1, MAX_IMAGES - 1);
+        CL_RefreshProgress(CL_REFRESH_IMAGES, MAX_IMAGES, "images deferred until referenced", 0, true);
+        CL_LoadingStage(0.75f);
+        CL_RefreshStartPhase(CL_REFRESH_SOUNDS, CS_SOUNDS + 1, MAX_SOUNDS - 1);
     }
-    CL_LoadingStage(0.40f);
+    CL_LoadingStage(0.75f);
 
 #ifdef SC2
     if (world_loaded && cls.state != ca_active) {

@@ -12,11 +12,20 @@
 static bool model_attempted[MAX_MODELS];
 static bool model_pending[MAX_MODELS];
 static bool portrait_attempted[MAX_MODELS];
+static bool image_attempted[MAX_IMAGES];
+static bool image_pending[MAX_IMAGES];
+static uint32_t model_cursor = 1, image_cursor = 1;
+static bool model_first = true;
+static void CL_RegisterImageConfigString(uint32_t index, bool replace, cstring_t olds);
 
 void CL_ResetConfigStringResources(void) {
     memset(model_attempted, 0, sizeof(model_attempted));
     memset(model_pending, 0, sizeof(model_pending));
     memset(portrait_attempted, 0, sizeof(portrait_attempted));
+    memset(image_attempted, 0, sizeof(image_attempted));
+    memset(image_pending, 0, sizeof(image_pending));
+    model_cursor = image_cursor = 1;
+    model_first = true;
 }
 
 /* Avoid reloading a resource when the server resends the same configstring. */
@@ -38,6 +47,18 @@ static void CL_RegisterModelConfigString(uint32_t index, bool replace, cstring_t
     if (!*name) return;
     cl.models[model] = re.LoadModel(name);
     if (!cl.models[model]) fprintf(stderr, "CL_RegisterModelConfigString: failed to load %s\n", name);
+    if (replace) {
+        PATHSTR portrait = { 0 };
+        cstring_t ext = strstr(name, ".m");
+        if (ext) {
+            size_t base_len = (size_t)(ext - name);
+            if (base_len >= sizeof(portrait)) base_len = sizeof(portrait) - 1;
+            memcpy(portrait, name, base_len);
+            portrait[base_len] = '\0';
+            snprintf(portrait + base_len, sizeof(portrait) - base_len, "_Portrait%s", ext);
+        }
+        if (portrait[0] && FS_FileExists(portrait)) cl.portraits[model] = re.LoadModel(portrait);
+    }
 }
 
 model_t const *CL_ModelForIndex(uint32_t index) {
@@ -47,17 +68,34 @@ model_t const *CL_ModelForIndex(uint32_t index) {
     return cl.models[index];
 }
 
-void CL_PumpModelLoads(void) {
-    static uint32_t cursor = 1;
-    FOR_LOOP(n, MAX_MODELS - 1) {
-        uint32_t const index = 1 + (cursor - 1 + n) % (MAX_MODELS - 1);
-        if (!model_pending[index]) continue;
-        model_pending[index] = false;
-        cursor = index + 1;
-        if (cursor >= MAX_MODELS) cursor = 1;
-        if (!model_attempted[index] && *cl.configstrings[CS_MODELS + index])
-            CL_RegisterModelConfigString(CS_MODELS + index, false, NULL);
-        return;
+texture_t const *CL_PicForIndex(uint32_t index) {
+    if (!index || index >= MAX_IMAGES) return NULL;
+    if (!cl.pics[index] && !image_attempted[index] && *cl.configstrings[CS_IMAGES + index])
+        image_pending[index] = true;
+    return cl.pics[index];
+}
+
+void CL_PumpMediaLoads(void) {
+    FOR_LOOP(pass, 2) {
+        bool const do_model = (pass == 0) == model_first;
+        uint32_t *cursor = do_model ? &model_cursor : &image_cursor;
+        uint32_t const count = do_model ? MAX_MODELS : MAX_IMAGES;
+        bool *pending = do_model ? model_pending : image_pending;
+        FOR_LOOP(n, count - 1) {
+            uint32_t const index = 1 + (*cursor - 1 + n) % (count - 1);
+            if (!pending[index]) continue;
+            pending[index] = false;
+            *cursor = index + 1;
+            if (*cursor >= count) *cursor = 1;
+            if (do_model) {
+                if (!model_attempted[index] && *cl.configstrings[CS_MODELS + index])
+                    CL_RegisterModelConfigString(CS_MODELS + index, false, NULL);
+            } else if (!image_attempted[index] && *cl.configstrings[CS_IMAGES + index]) {
+                CL_RegisterImageConfigString(CS_IMAGES + index, false, NULL);
+            }
+            model_first = !do_model;
+            return;
+        }
     }
 }
 
@@ -87,6 +125,8 @@ model_t const *CL_PortraitForIndex(uint32_t index) {
 static void CL_RegisterImageConfigString(uint32_t index, bool replace, cstring_t olds) {
     uint32_t image = index - CS_IMAGES;
     cstring_t name = cl.configstrings[index];
+    image_attempted[image] = true;
+    image_pending[image] = false;
     if (!replace && cl.pics[image]) return;
     if (replace && CL_SameResource(cl.pics[image], olds, name)) return;
     if (cl.pics[image]) {
@@ -134,12 +174,18 @@ void CL_UpdateConfigString(uint32_t index, cstring_t olds) {
         uint32_t const model = index - CS_MODELS;
         cstring_t const name = cl.configstrings[index];
         if (CL_SameResource(cl.models[model], olds, name)) return;
-        SAFE_DELETE(cl.models[model], re.ReleaseModel);
-        SAFE_DELETE(cl.portraits[model], re.ReleaseModel);
         model_attempted[model] = false;
         model_pending[model] = false;
         portrait_attempted[model] = false;
-    } else if (index > CS_IMAGES && index < CS_IMAGES + MAX_IMAGES) CL_RegisterImageConfigString(index, true, olds);
+        CL_RegisterModelConfigString(index, true, olds);
+    } else if (index > CS_IMAGES && index < CS_IMAGES + MAX_IMAGES) {
+        uint32_t const image = index - CS_IMAGES;
+        cstring_t const name = cl.configstrings[index];
+        if (CL_SameResource(cl.pics[image], olds, name)) return;
+        image_attempted[image] = false;
+        image_pending[image] = false;
+        CL_RegisterImageConfigString(index, true, olds);
+    }
     else if (index > CS_SOUNDS && index < CS_SOUNDS + MAX_SOUNDS && *cl.configstrings[index]) S_RegisterSound(cl.configstrings[index]);
     else if (index > CS_FONTS && index < CS_FONTS + MAX_FONTSTYLES) CL_RegisterFontConfigString(index, true, olds);
 }
@@ -154,8 +200,30 @@ void CL_PrepLoading(void) {
     if (cl.playerstate.client_ui_state != CLIENT_UI_LOADING)
         CL_BeginLoadingMap(cl.configstrings[CS_WORLD]);
     re.SetAssetScope(cl.configstrings[CS_ASSET_SCOPE]);
-    for (uint32_t i = 1; i < MAX_IMAGES; i++)
-        if (*cl.configstrings[CS_IMAGES + i]) CL_RegisterConfigString(CS_IMAGES + i);
+    SCR_Clear(cl.layout[LAYER_LOADING]);
+    FOR_LOOP(i, SCR_NumFrames()) {
+        uiFrame_t const *frame = SCR_Frame(i);
+        uint32_t image = 0, image2 = 0;
+        if (!frame) continue;
+        switch (frame->flags.type) {
+        case FT_SPRITE:
+        case FT_PORTRAIT:
+            (void)CL_ModelForIndex(frame->tex.index);
+            break;
+        case FT_TEXTURE:
+        case FT_SIMPLESTATUSBAR:
+        case FT_SEGMENTED_STATUSBAR:
+        case FT_LOADING_BAR:
+        case FT_COMMANDBUTTON:
+            image = frame->tex.index;
+            image2 = frame->tex.index2;
+            break;
+        default:
+            break;
+        }
+        if (image && image < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image);
+        if (image2 && image2 < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image2);
+    }
     for (uint32_t i = 1; i < MAX_FONTSTYLES; i++)
         if (*cl.configstrings[CS_FONTS + i]) CL_RegisterConfigString(CS_FONTS + i);
     SCR_UpdateLoadingPlaque();

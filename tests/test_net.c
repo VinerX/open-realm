@@ -4071,7 +4071,7 @@ TEST(net, orbit_prediction_expires_and_yields_to_scripted_camera) {
 
 static void capture_asset_scope(cstring_t scope) { T_STREQ(scope, "Test.w3m"); }
 
-/* Loading dependencies become usable at the first batch boundary; later world resources still defer. */
+/* Loading-frame art is ready immediately; unrelated model resources remain deferred. */
 TEST(net, loading_batch_registers_media_before_full_precache) {
     uint8_t buf[1024];
     sizeBuf_t msg = make_msg_buf(buf, sizeof(buf));
@@ -4109,13 +4109,13 @@ TEST(net, loading_batch_registers_media_before_full_precache) {
     T_NULL(cl.loading.data); T_EQ(cl.loading.cursize, 0);
     T_EQ(MSG_ReadByte(&cls.netchan.message), clc_stringcmd);
     T_STREQ(MSG_ReadString2(&cls.netchan.message), "baselines 25");
-    T_EQ(test_model_loads, 1); T_EQ(test_tex_loads, 1);
-    T_NOT_NULL(cl.models[1]); T_NOT_NULL(cl.pics[1]); T_ASSERT(!cl.precache_ready);
+    T_EQ(test_model_loads, 0); T_EQ(test_tex_loads, 1);
+    T_NULL(cl.models[1]); T_NOT_NULL(cl.pics[1]); T_ASSERT(!cl.precache_ready);
     SZ_Clear(&msg); msg.readcount = 0;
     MSG_WriteByte(&msg, svc_configstring); MSG_WriteShort(&msg, CS_MODELS + 2); MSG_WriteString(&msg, "World.mdx");
     MSG_WriteByte(&msg, svc_mirror); MSG_WriteString(&msg, "baselines");
     CL_ParseServerMessage(&msg);
-    T_ASSERT(!cl.precache_ready); T_NULL(cl.models[2]); T_EQ(test_model_loads, 1);
+    T_ASSERT(!cl.precache_ready); T_NULL(cl.models[2]); T_EQ(test_model_loads, 0);
     SZ_Clear(&msg); msg.readcount = 0;
     MSG_WriteByte(&msg, svc_mirror); MSG_WriteString(&msg, "baselines 25");
     CL_ParseServerMessage(&msg);

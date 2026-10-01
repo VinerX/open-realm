@@ -294,7 +294,7 @@ static rect_t get_uvrect(uint8_t const *tc) {
 }
 
 static texture_t const *SCR_LayoutPic(RESOURCE image) {
-    return image && image < MAX_IMAGES ? cl.pics[image] : NULL;
+    return CL_PicForIndex(image);
 }
 
 static texture_t const *SCR_LayoutGetDynamicTexture(cstring_t resource) {
@@ -359,7 +359,7 @@ void SCR_LayoutDrawSegmentedStatusbar(uiFrame_t const *frame, rect_t const *scre
         if (!image) continue;
         segment.x += (float)i * (width + gap);
         segment.w = width;
-        re.DrawImage(cl.pics[image], &segment, &uv, occupied ? frame->color : COLOR32_WHITE);
+        re.DrawImage(CL_PicForIndex(image), &segment, &uv, occupied ? frame->color : COLOR32_WHITE);
     }
 }
 
@@ -384,10 +384,10 @@ void SCR_LayoutDrawStatusbar(uiFrame_t const *frame, rect_t const *screen) {
     screen2.w *= value;
     uv2.w    *= value;
     rect_t const suv2 = Rect_div(&uv2, 0xff);
-    re.DrawImage(cl.pics[frame->tex.index], &screen2, &suv2, frame->color);
+    re.DrawImage(CL_PicForIndex(frame->tex.index), &screen2, &suv2, frame->color);
     if (frame->tex.index2 > 0) {
         rect_t const suv = Rect_div(&uv, 0xff);
-        re.DrawImage(cl.pics[frame->tex.index2], screen, &suv, COLOR32_WHITE);
+        re.DrawImage(CL_PicForIndex(frame->tex.index2), screen, &suv, COLOR32_WHITE);
     }
 }
 
@@ -400,7 +400,7 @@ void SCR_LayoutDrawTexture(uiFrame_t const *frame, rect_t const *screen) {
      * drops at value 0 because that snapshot means the unit is dead. */
     if (has ? (value <= 0.0f && frame->stat != UI_STAT_CONTEXT_MANA) : ctx) return;
     if (!frame->tex.index) return;  /* unresolved texture — skip to avoid drawing cl.pics[0] */
-    texture_t const *tex = cl.pics[frame->tex.index];
+    texture_t const *tex = CL_PicForIndex(frame->tex.index);
     if (frame->stat >= MAX_STATS && frame->stat - MAX_STATS < PLAYERTEXT_COUNT) {
         cstring_t resource = cl.playerstate.texts[frame->stat - MAX_STATS];
         texture_t const *dyn = SCR_LayoutGetDynamicTexture(resource);
@@ -755,7 +755,7 @@ void SCR_LayoutDrawBuildQueue(uiFrame_t const *frame, rect_t const *scrn) {
     }
     for (uint32_t i = active + 1; i < queue->numitems; i++) {
         if (food_blocked || cl.time < queue->items[i].endtime) {
-            re.DrawImage(cl.pics[queue->items[i].image], &screen, &uv, frame->color);
+            re.DrawImage(CL_PicForIndex(queue->items[i].image), &screen, &uv, frame->color);
             screen.x += queue->itemoffset;
         }
     }
@@ -851,10 +851,10 @@ void SCR_LayoutDrawMultiSelect(uiFrame_t const *frame, rect_t const *scrn) {
                 screen.w * 1.37f,
                 screen.h * 1.75f
             };
-            re.DrawImage(cl.pics[ms->focus_highlight], &highlight, &uv,
+            re.DrawImage(CL_PicForIndex(ms->focus_highlight), &highlight, &uv,
                          MAKE(color32_t, 255, 255, 0, 255));
         }
-        re.DrawImage(cl.pics[item->image], &screen, &uv, frame->color);
+        re.DrawImage(CL_PicForIndex(item->image), &screen, &uv, frame->color);
         entityState_t const *ent = &cl.ents[item->entity].current;
         if (ent) {
             float hp   = BYTE2FLOAT(ent->stats[ENT_HEALTH]);
@@ -862,10 +862,10 @@ void SCR_LayoutDrawMultiSelect(uiFrame_t const *frame, rect_t const *scrn) {
             rect_t rect  = { screen.x, screen.y + screen.h * (1 + HP_BAR_SPACING_RATIO),
                            screen.w * hp, screen.h * HP_BAR_HEIGHT_RATIO };
             uv.w = hp;
-            re.DrawImage(cl.pics[ms->hp_bar],   &rect, &uv, MAKE(color32_t,0,255,0,255));
+            re.DrawImage(CL_PicForIndex(ms->hp_bar),   &rect, &uv, MAKE(color32_t,0,255,0,255));
             uv.w  = mana; rect.w  = screen.w * mana;
             rect.y += screen.h * (HP_BAR_HEIGHT_RATIO + HP_BAR_SPACING_RATIO);
-            re.DrawImage(cl.pics[ms->mana_bar], &rect, &uv, MAKE(color32_t,0,255,255,255));
+            re.DrawImage(CL_PicForIndex(ms->mana_bar), &rect, &uv, MAKE(color32_t,0,255,255,255));
         }
         if (++column >= ms->numcolumns) {
             column   = 0;
@@ -1003,7 +1003,7 @@ void SCR_LayoutDrawCommandButton(uiFrame_t const *frame, rect_t const *screen) {
     rect_t const suv = Rect_div(&uv, 0xff);
     rect_t scrn = scale_rect(screen, SCR_LayoutFrameIsHovered(frame) && layout_left_down ? 0.875f : 0.925f);
     re.DrawImageEx(&MAKE(drawImage_t,
-        .texture     = cl.pics[frame->tex.index],
+        .texture     = CL_PicForIndex(frame->tex.index),
         .screen      = scrn,
         .uv          = suv,
         .color       = SCR_CommandButtonColor(frame),

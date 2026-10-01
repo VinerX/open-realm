@@ -197,7 +197,8 @@ void CL_RegisterConfigString(uint32_t index);
 void CL_UpdateConfigString(uint32_t index, cstring_t olds);
 model_t const *CL_ModelForIndex(uint32_t index);
 model_t const *CL_PortraitForIndex(uint32_t index);
-void CL_PumpModelLoads(void);
+texture_t const *CL_PicForIndex(uint32_t index);
+void CL_PumpMediaLoads(void);
 void CL_ResetConfigStringResources(void);
 void CL_RestartRefresh(void);
 // cl_parse.c
