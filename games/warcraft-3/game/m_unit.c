@@ -1500,7 +1500,16 @@ bool G_HeroModifySkillPoints(edict_t *ent, int32_t delta) {
     return true;
 }
 
+#ifdef BZ_TESTS
+static uint32_t test_unit_ability_level_queries;
+void G_TestResetUnitAbilityLevelQueries(void) { test_unit_ability_level_queries = 0; }
+uint32_t G_TestUnitAbilityLevelQueries(void) { return test_unit_ability_level_queries; }
+#endif
+
 uint32_t G_UnitAbilityLevel(edict_t const *ent, uint32_t abilcode) {
+#ifdef BZ_TESTS
+    test_unit_ability_level_queries++;
+#endif
     uint32_t const hero_level = G_HeroSkillLevel(ent, abilcode);
     char id[5] = { 0 };
     if (hero_level) {

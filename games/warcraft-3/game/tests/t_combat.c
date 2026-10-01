@@ -1907,6 +1907,60 @@ TEST(wc3_combat, endurance_aura_ignores_hidden_sources_and_recipients) {
     free_slk_rows(rows);
 }
 
+void G_TestResetUnitAbilityLevelQueries(void);
+uint32_t G_TestUnitAbilityLevelQueries(void);
+void S_TestResetHeroAuraAliasResolves(void);
+uint32_t S_TestHeroAuraAliasResolves(void);
+
+TEST(wc3_combat, endurance_attack_queries_scale_with_sources) {
+    const char slk[] =
+        "ID;PWXL;N;EBB;Y2;X6\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"Area1\"\n"
+        "C;Y1;X4;K\"DataA1\"\nC;Y1;X5;K\"DataB1\"\nC;Y1;X6;K\"levels\"\n"
+        "C;Y2;X1;K\"AOae\"\nC;Y2;X2;K\"AOae\"\nC;Y2;X3;K\"900\"\n"
+        "C;Y2;X4;K\"13\"\nC;Y2;X5;K\"37\"\nC;Y2;X6;K\"1\"\nE\n";
+    slkTestData_t *rows = parse_slk_string(slk), *old = G_SetSLKRows("AbilityData", rows);
+    edict_t *units[96];
+    reset_entities(); setup_test_world();
+    ((mapInfo_t *)level.mapinfo)->players[0].playerType = kPlayerTypeHuman;
+    ((mapInfo_t *)level.mapinfo)->players[1].playerType = kPlayerTypeHuman;
+    edict_t *source = make_combat_unit(MAKEFOURCC('O','b','l','m'), 725.0f, 0, 0);
+    source->abilities.added[0] = MAKEFOURCC('A','O','a','e');
+    ARRAY_COUNT(source->abilities.added) = 1;
+    FOR_LOOP(i, 256) {
+        edict_t *scenery = G_Spawn();
+        scenery->svflags = SVF_STATIC_SCENERY;
+    }
+    FOR_LOOP(i, 64) {
+        edict_t *enemy = make_combat_unit(MAKEFOURCC('o','g','r','u'), 700, 100, 0);
+        enemy->s.player = 1;
+    }
+    FOR_LOOP(i, 96) {
+        units[i] = make_combat_unit(MAKEFOURCC('o','g','r','u'), 700, 100, 0);
+        units[i]->s.player = source->s.player;
+        units[i]->hero.agi = 0;
+        units[i]->attack1.cooldown = 1.0f;
+        units[i]->attack1.damagePoint = 0.2f;
+    }
+    G_TestResetUnitAbilityLevelQueries();
+    S_TestResetHeroAuraAliasResolves();
+    FOR_LOOP(i, 96) {
+        attack_melee_cooldown(units[i]);
+        T_FEQ(units[i]->wait, 0.8f / 1.37f, 0.001f);
+    }
+    T_ASSERT(G_TestUnitAbilityLevelQueries() <= globals.num_edicts * 16);
+    T_ASSERT(S_TestHeroAuraAliasResolves() <= globals.num_edicts * 16);
+    source->s.renderfx |= RF_HIDDEN;
+    attack_melee_cooldown(units[0]);
+    T_FEQ(units[0]->wait, 0.8f, 0.001f);
+    source->s.renderfx &= ~RF_HIDDEN;
+    source->abilities.added[0] = 0;
+    level.framenum++;
+    attack_melee_cooldown(units[0]);
+    T_FEQ(units[0]->wait, 0.8f, 0.001f);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_combat, endurance_aura_uses_map_authored_rank_five) {
     const char slk[] =
         "ID;PWXL;N;EBB;Y2;X6\n"

@@ -2,6 +2,75 @@
 
 For process footprint, allocation profiling, and RAM reduction priorities, see [WC3 memory](memory.md).
 
+## October 2: 23-Race aura scans and deferred media loading
+
+The 481x481 23-Race-Legion scene contains about 37,750 live server entities;
+its starting camera receives about 15,505 client entities. After segment ground
+culling reduced submitted terrain to roughly 224K vertices, the scene still ran
+at about 1 FPS in the Windows debug build.
+
+Endurance's attack-speed calculation queried `G_UnitAbilityLevel` across every
+edict on each attack windup/recovery. Its group-movement calculation did the
+same. Slow Aura independently repeated source discovery for each recipient.
+Both now reuse the existing per-frame aura-provider list. Discovery excludes
+freed slots and static scenery, which `S_AuraUnitActive` already excludes, and
+reuses resolved Devotion/Unholy references instead of resolving duplicate keys.
+Range, alliances, visibility and the retained source's current rank are still
+checked at use time. Endurance retains the existing multiplication of movement
+factors and addition of attack bonuses; this optimization does not establish
+retail stacking parity.
+
+`wc3_combat.endurance_attack_queries_scale_with_sources` drives real attack
+recovery for 96 recipients, 64 hostile units and 256 scenery edicts. It failed
+the lookup-count bound before each corresponding optimization and passes after
+it. Existing hidden-source, hidden-recipient, rank-five and Slow Aura value/range
+tests also pass. Scripted doodads now have an animation-only think callback,
+skip unit physics/status/ability dispatch, and preserve that callback through
+the append-only save roster.
+
+Temporary timing probes recorded about 2-3 FPS in the updated debug scene and
+3-4 FPS in the release scene while resources were still streaming. The release
+client spent about 118-242 ms in `CL_PumpMediaLoads`, compared with 4-10 ms in
+screen rendering and approximately zero in window swapping. Individual models
+took roughly 117-353 ms; some missing image requests also took over 100 ms.
+Ground-surface conformity was not the cause in this starting scene: 15,505
+entities, zero conforming actors and about 119 surface entities took 0-1 ms.
+Server frames still cost roughly 80-120 ms in common samples. These are partial
+startup-scene measurements, not a claim that sustained gameplay FPS is fixed.
+
+The same release build on Season9 `(2)TerenasStand_LV.w3x` received about 1,755
+client entities. Once its queued model loads finished, client frames were about
+3-4 ms. Its sample model jobs took roughly 13-58 ms. The remaining investigation
+is to separate archive/model/texture costs inside each media job, measure the
+23-Race scene after its queue drains, and then re-profile server work. Do not
+attribute the media-load interval to rendering or disable gameplay behind fog.
+
+The local comparison logs are under `build/perf-release/`, including
+`legion-media-profile.log` and `terenas-client-profile.log`; these files are
+ignored artifacts. Investigative probes were removed from production source.
+The Windows full `make test` attempt stops at `tests/test_net.c`'s unconditional
+`arpa/inet.h` include. Direct ROC/TFT combat, doodad and callback-save checks
+pass. Broader spell/movement runs still have failures, including Unix `/tmp`
+save paths and an Unsummon approach assertion; they must not be reported as
+passing suites.
+
+### Warsmash comparison
+
+[Warsmash's stat-aura template](https://github.com/Retera/WarsmashModEngine/blob/main/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/abilitybuilder/ability/template/CAbilityAbilityBuilderStatAuraTemplate.java)
+owns a recipient set, enumerates nearby units through the world collision
+index approximately every 0.4 seconds, and checks recipient departure every
+3 seconds. Add/remove/death paths apply or retire stored stat buffs.
+[Its older aura base](https://github.com/Retera/WarsmashModEngine/blob/main/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/abilities/skills/util/CAbilityAuraBase.java)
+uses a 2-second spatial check instead. These are distinct implementations;
+their intervals are not proof of retail Warcraft timing.
+
+[The authored aura definitions](https://github.com/Retera/WarsmashModEngine/blob/main/core/assets/abilityBehaviors/auras.json)
+route `AOae` and `Aasl` through the stat-aura template. That template uses
+non-stacking stat buffs keyed by BuffID. Our retained Endurance stacking and
+its numeric field units need a separate authoritative-data parity check before
+changing behavior. The shared lesson for performance is that stat consumers
+should not rediscover sources across the whole map on every attack.
+
 ## September 21 CPU profile: Graveyard update scan
 
 Inspection of `build/perf-full.txt` found about 7K `cpu/cycles/P` samples, no lost samples,
