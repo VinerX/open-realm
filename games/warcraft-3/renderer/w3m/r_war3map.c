@@ -3,7 +3,6 @@
 #include "renderer/r_shader.h"
 
 mapsegment_t *g_mapSegments = NULL;
-maplayer_t *g_groundLayers = NULL;
 static cameraHeightMap_t w3_camera_height;
 static uint32_t w3_map_load_started;
 
@@ -56,7 +55,6 @@ void _W3M_ClearMap(void) {
     texture_t *shadow = tr.texture[TEX_TERRAIN_SHADOW];
 
     R_FreeMapSegments();
-    R_FreeMapLayers(&g_groundLayers);
     R_ResetGroundTextures();
     R_ResetCliffCache();
     R_ResetBlightCache();
@@ -104,6 +102,7 @@ static void R_FileReadShadowMap(handle_t hMpq, war3map_t *pWorld) {
 typedef struct {
     uint64_t water_ms;
     uint64_t cliffs_ms;
+    uint64_t ground_ms;
     uint32_t cliff_layers;
 } mapSegmentBuildStats_t;
 
@@ -122,20 +121,18 @@ static mapsegment_t *R_BuildMapSegment(war3map_t const *map, uint32_t sx, uint32
         }
     }
     stats->cliffs_ms += SDL_GetTicks() - started;
+    /* Ground is built per segment so a view can cull it; a whole-map buffer submits
+     * every tile in the map each frame and collapses frame rate on large maps. */
+    started = SDL_GetTicks();
+    for (uint32_t layer = map->num_grounds; layer > 0; layer--) {
+        if ((mapLayer = R_BuildMapSegmentLayer(map, sx, sy, layer - 1))) {
+            ADD_TO_LIST(mapLayer, mapSegment->layers);
+        }
+    }
+    stats->ground_ms += SDL_GetTicks() - started;
     mapSegment->bbox.min = MAKE(vec3_t, FLT_MAX, FLT_MAX, FLT_MAX);
     mapSegment->bbox.max = MAKE(vec3_t, -FLT_MAX, -FLT_MAX, -FLT_MAX);
     return mapSegment;
-}
-
-static void R_BuildGroundLayers(war3map_t const *map) {
-    for (uint32_t layer = map->num_grounds; layer > 0; layer--) {
-        uint32_t const started = R_W3MapStageBegin("ground_layer");
-        maplayer_t *mapLayer = R_BuildGroundLayerGlobal(map, layer - 1);
-        if (mapLayer) {
-            ADD_TO_LIST(mapLayer, g_groundLayers);
-        }
-        R_W3MapStageEnd("ground_layer", started);
-    }
 }
 
 static vec3_t R_GetMapVertexPoint(war3map_t const *map, uint32_t x, uint32_t y) {
@@ -188,9 +185,10 @@ static void R_LoadMapSegments(war3map_t const *map) {
         }
     }
     fprintf(stderr,
-            "WC3_MAP_LOAD phase=terrain_segment_build segments=%u water_ms=%llu cliffs_ms=%llu cliff_layers=%u\n",
+            "WC3_MAP_LOAD phase=terrain_segment_build segments=%u water_ms=%llu cliffs_ms=%llu ground_ms=%llu cliff_layers=%u\n",
             (unsigned)completed, (unsigned long long)stats.water_ms,
-            (unsigned long long)stats.cliffs_ms, (unsigned)stats.cliff_layers);
+            (unsigned long long)stats.cliffs_ms, (unsigned long long)stats.ground_ms,
+            (unsigned)stats.cliff_layers);
     fprintf(stderr, "WC3_MAP_LOAD phase=terrain_height_bounds min_z=%.3f max_z=%.3f\n",
             (double)min_height, (double)max_height);
 }
@@ -344,9 +342,6 @@ void _W3M_RegisterMap(char const *mapFilename) {
     started = R_W3MapStageBegin("cliff_finish");
     R_FinishCliffs();
     R_W3MapStageEnd("cliff_finish", started);
-    started = R_W3MapStageBegin("ground_layers");
-    R_BuildGroundLayers(map);
-    R_W3MapStageEnd("ground_layers", started);
     R_W3MapStageEnd("map_register", w3_map_load_started);
 }
 
@@ -411,26 +406,16 @@ void _W3M_DrawWorld(void) {
                                  ? &lighting : NULL);
     }
 
-    FOR_EACH_LIST(maplayer_t, layer, g_groundLayers) {
-        if (layer == g_groundLayers) {
-            R_Call(glDisable, GL_BLEND);
-        } else {
-            R_Call(glEnable, GL_BLEND);
-            R_Call(glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        }
-        R_BindTexture(layer->texture, 0);
-        R_ApplyShader(&tr.shader_default);
-        R_DrawBuffer(layer->buffer, layer->num_vertices);
+    /* Ground travels with its segment so the view frustum culls tiles off-screen;
+     * a whole-map buffer submits the entire board every frame. */
+    FOR_EACH_LIST(mapsegment_t, segment, g_mapSegments) {
+        R_DrawTerrainSegment(segment, (1 << MAPLAYERTYPE_GROUND) | (1 << MAPLAYERTYPE_CLIFF));
     }
 
     R_UpdateBlightLayer();
     R_Call(glEnable, GL_BLEND);
     R_Call(glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     R_DrawBlightLayer();
-
-    FOR_EACH_LIST(mapsegment_t, segment, g_mapSegments) {
-        R_DrawTerrainSegment(segment, (1 << MAPLAYERTYPE_CLIFF));
-    }
 }
 
 void _W3M_DrawAlphaSurfaces(void) {

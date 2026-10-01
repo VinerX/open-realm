@@ -503,45 +503,11 @@ maplayer_t *R_BuildMapSegmentLayer(war3map_t const *map, uint32_t sx, uint32_t s
         }
     }
     mapLayer->num_vertices = (uint32_t)(ground_current_vertex - ground_vertex_buffer);
-    mapLayer->buffer = R_MakeVertexArrayObject(ground_vertex_buffer, mapLayer->num_vertices);
-    return mapLayer;
-}
-
-maplayer_t *R_BuildGroundLayerGlobal(war3map_t const *map, uint32_t layer) {
-    maplayer_t *mapLayer;
-    PATHSTR zBuffer;
-
-    if (g_groundTextures[layer] == NULL) {
-        w3TerrainArt_t const *terrain = R_TerrainArt(map->grounds[layer]);
-        if (terrain->file && terrain->dir) {
-            sprintf(zBuffer, "%s\\%s.blp", terrain->dir, terrain->file);
-            g_groundTextures[layer] = R_LoadTexture(zBuffer);
-        } else {
-            return NULL;
-        }
-    }
-
-    /* Construction scratch must not remain resident (or leak when the next map is larger). */
-    vertex_t *whole_map_buffer = ri.MemAlloc(sizeof(vertex_t) * (map->width - 1) * (map->height - 1) * 6);
-
-    mapLayer = ri.MemAlloc(sizeof(maplayer_t));
-    mapLayer->texture = g_groundTextures[layer];
-    mapLayer->type = MAPLAYERTYPE_GROUND;
-    ground_current_vertex = whole_map_buffer;
-    for (uint32_t x = 0; x < map->width - 1; x++) {
-        for (uint32_t y = 0; y < map->height - 1; y++) {
-            R_MakeTile(map, x, y, layer, mapLayer->texture);
-        }
-    }
-    mapLayer->num_vertices = (uint32_t)(ground_current_vertex - whole_map_buffer);
-    if (mapLayer->num_vertices)
-        mapLayer->buffer = R_MakeVertexArrayObject(whole_map_buffer, mapLayer->num_vertices);
-    ri.MemFree(whole_map_buffer);
-    ground_current_vertex = NULL;
     if (!mapLayer->num_vertices) {
         ri.MemFree(mapLayer);
         return NULL;
     }
+    mapLayer->buffer = R_MakeVertexArrayObject(ground_vertex_buffer, mapLayer->num_vertices);
     return mapLayer;
 }
 
