@@ -101,15 +101,27 @@ static void R_FileReadShadowMap(handle_t hMpq, war3map_t *pWorld) {
     tr.texture[TEX_TERRAIN_SHADOW] = pShadowmap;
 }
 
-static mapsegment_t *R_BuildMapSegment(war3map_t const *map, uint32_t sx, uint32_t sy) {
+typedef struct {
+    uint64_t water_ms;
+    uint64_t cliffs_ms;
+    uint32_t cliff_layers;
+} mapSegmentBuildStats_t;
+
+static mapsegment_t *R_BuildMapSegment(war3map_t const *map, uint32_t sx, uint32_t sy,
+                                       mapSegmentBuildStats_t *stats) {
     mapsegment_t *mapSegment = ri.MemAlloc(sizeof(mapsegment_t));
+    uint32_t started = SDL_GetTicks();
     maplayer_t *mapLayer = R_BuildMapSegmentWater(map, sx, sy);
+    stats->water_ms += SDL_GetTicks() - started;
     ADD_TO_LIST(mapLayer, mapSegment->layers);
+    started = SDL_GetTicks();
     FOR_LOOP(cliff, map->num_cliffs) {
         if ((mapLayer = R_BuildMapSegmentCliffs(map, sx, sy, cliff))) {
             ADD_TO_LIST(mapLayer, mapSegment->layers);
+            stats->cliff_layers++;
         }
     }
+    stats->cliffs_ms += SDL_GetTicks() - started;
     mapSegment->bbox.min = MAKE(vec3_t, FLT_MAX, FLT_MAX, FLT_MAX);
     mapSegment->bbox.max = MAKE(vec3_t, -FLT_MAX, -FLT_MAX, -FLT_MAX);
     return mapSegment;
@@ -141,10 +153,11 @@ static void R_LoadMapSegments(war3map_t const *map) {
     uint32_t const total = segments_x * segments_y;
     uint32_t completed = 0;
     uint32_t last_report = SDL_GetTicks();
+    mapSegmentBuildStats_t stats = {0};
     FOR_LOOP(fx, (map->width - 1) / SEGMENT_SIZE) {
         FOR_LOOP(fy, (map->height - 1) / SEGMENT_SIZE) {
             uint32_t const started = SDL_GetTicks();
-            mapsegment_t *segment = R_BuildMapSegment(map, fx, fy);
+            mapsegment_t *segment = R_BuildMapSegment(map, fx, fy, &stats);
             ADD_TO_LIST(segment, g_mapSegments);
             FOR_LOOP(sx, SEGMENT_SIZE+1) {
                 FOR_LOOP(sy, SEGMENT_SIZE+1) {
@@ -171,6 +184,10 @@ static void R_LoadMapSegments(war3map_t const *map) {
             }
         }
     }
+    fprintf(stderr,
+            "WC3_MAP_LOAD phase=terrain_segment_build segments=%u water_ms=%llu cliffs_ms=%llu cliff_layers=%u\n",
+            (unsigned)completed, (unsigned long long)stats.water_ms,
+            (unsigned long long)stats.cliffs_ms, (unsigned)stats.cliff_layers);
 }
 
 void R_AllocateFogOfWar(war3map_t *map) {
