@@ -203,31 +203,18 @@ static void R_LoadMapMinimap(handle_t hMpq, cstring_t mapFilename) {
     }
 }
 
-static bool R_ReadWar3MapVertex(handle_t file, war3mapVertex_t *vert) {
+static void R_DecodeWar3MapVertex(uint8_t const *raw, war3mapVertex_t *vert) {
     uint16_t water_and_edge;
     uint8_t flags;
     uint8_t variation;
     uint8_t cliff_and_layer;
 
-    if (!file || !vert) {
-        return false;
-    }
     memset(vert, 0, sizeof(*vert));
-    if (!SFileReadFile(file, &vert->accurate_height, sizeof(vert->accurate_height), NULL, NULL)) {
-        return false;
-    }
-    if (!SFileReadFile(file, &water_and_edge, sizeof(water_and_edge), NULL, NULL)) {
-        return false;
-    }
-    if (!SFileReadFile(file, &flags, sizeof(flags), NULL, NULL)) {
-        return false;
-    }
-    if (!SFileReadFile(file, &variation, sizeof(variation), NULL, NULL)) {
-        return false;
-    }
-    if (!SFileReadFile(file, &cliff_and_layer, sizeof(cliff_and_layer), NULL, NULL)) {
-        return false;
-    }
+    vert->accurate_height = (uint16_t)(raw[0] | ((uint16_t)raw[1] << 8));
+    water_and_edge = (uint16_t)(raw[2] | ((uint16_t)raw[3] << 8));
+    flags = raw[4];
+    variation = raw[5];
+    cliff_and_layer = raw[6];
 
     vert->waterlevel = water_and_edge & 0x3FFF;
     vert->mapedge = (water_and_edge & 0x4000) != 0;
@@ -240,7 +227,6 @@ static bool R_ReadWar3MapVertex(handle_t file, war3mapVertex_t *vert) {
     vert->groundVariation = variation & 0x1F;
     vert->cliff = (cliff_and_layer >> 4) & 0x0F;
     vert->level = cliff_and_layer & 0x0F;
-    return true;
 }
 
 war3map_t *FileReadWar3Map(handle_t archive) {
@@ -260,10 +246,16 @@ war3map_t *FileReadWar3Map(handle_t archive) {
     int const vertexblocksize = sizeof(war3mapVertex_t) * num_vertices;
     map->vertices = ri.MemAlloc(vertexblocksize);
     R_AllocateFogOfWar(map);
-    FOR_LOOP(i, num_vertices) {
-        if (!R_ReadWar3MapVertex(file, (war3mapVertex_t *)map->vertices + i)) {
+    uint8_t vertex_chunk[7 * 8192];
+    for (uint32_t first = 0; first < num_vertices;) {
+        uint32_t const count = MIN(num_vertices - first, 8192u);
+        if (!SFileReadFile(file, vertex_chunk, count * 7u, NULL, NULL)) {
             break;
         }
+        FOR_LOOP(i, count)
+            R_DecodeWar3MapVertex(vertex_chunk + i * 7u,
+                                  (war3mapVertex_t *)map->vertices + first + i);
+        first += count;
     }
     SFileCloseFile(file);
     FOR_LOOP(y, map->height) {
