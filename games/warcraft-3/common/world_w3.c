@@ -3,8 +3,10 @@
 #include "common/ui_constants.h"
 #include <float.h>
 #include <math.h>
+#include <time.h>
 
 typedef void (*cmW3Read_t)(handle_t archive);
+typedef struct { char const *name; cmW3Read_t read; } cmW3Reader_t;
 
 void CM_ReadPathMap(handle_t archive);
 static void CM_ReadDoodads(handle_t archive);
@@ -21,19 +23,25 @@ void CM_ReadMapScript(handle_t archive);
 static handle_t cm_w3_map_archive;
 static handle_t cm_w3_map_data;
 
-static cmW3Read_t const cm_w3_readers[] = {
-    CM_ReadInfo,
-    CM_ReadPathMap,
-    CM_ReadDoodads,
-    CM_ReadUnitDoodads,
-    CM_ReadHeightmap,
-    CM_ReadWeather,
-    CM_ReadUnits,
-    CM_ReadItems,
-    CM_ReadAbilities,
-    CM_ReadStrings,
-    CM_ReadMapScript,
+static cmW3Reader_t const cm_w3_readers[] = {
+    { "info", CM_ReadInfo },
+    { "path_map", CM_ReadPathMap },
+    { "doodads", CM_ReadDoodads },
+    { "unit_doodads", CM_ReadUnitDoodads },
+    { "heightmap", CM_ReadHeightmap },
+    { "weather", CM_ReadWeather },
+    { "units", CM_ReadUnits },
+    { "items", CM_ReadItems },
+    { "abilities", CM_ReadAbilities },
+    { "strings", CM_ReadStrings },
+    { "map_script", CM_ReadMapScript },
 };
+
+static uint64_t CM_W3LoadMilliseconds(void) {
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    return (uint64_t)now.tv_sec * 1000u + (uint64_t)now.tv_nsec / 1000000u;
+}
 
 #ifdef BZ_CLIENT_WORLD
 #include "client/client.h"
@@ -348,7 +356,10 @@ bool CM_LoadMapFormat(cstring_t mapFilename, cmLoadYield_t yield) {
      * (G_ReadGameDataFile) see map-imported Units\*.txt and war3mapMisc.txt. */
     FS_SetPriorityArchive(cm_w3_map_archive);
     FOR_LOOP(i, sizeof(cm_w3_readers) / sizeof(*cm_w3_readers)) {
-        cm_w3_readers[i](cm_w3_map_archive);
+        uint64_t const started = CM_W3LoadMilliseconds();
+        cm_w3_readers[i].read(cm_w3_map_archive);
+        fprintf(stderr, "WC3_MAP_PARSE phase=%s duration_ms=%u\n",
+                cm_w3_readers[i].name, (unsigned)(CM_W3LoadMilliseconds() - started));
         yield();
     }
     return true;

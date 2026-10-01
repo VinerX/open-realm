@@ -23,6 +23,8 @@
  *   6. G_SolveCollisions() — resolve entity overlaps (g_phys.c).
  *   7. G_RunDeferredFrees() — retire JASS RemoveUnit handles after the frame.
  */
+#include <time.h>
+
 #include "common/common.h"
 #include "g_local.h"
 #include "common/ui_constants.h"
@@ -251,13 +253,29 @@ void G_UpdateTimeOfDay(void) {
     G_PublishTimeOfDayPhase();
 }
 
+static uint64_t G_MapLoadMilliseconds(void) {
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    return (uint64_t)now.tv_sec * 1000u + (uint64_t)now.tv_nsec / 1000000u;
+}
+
+static void G_LogMapLoadStage(cstring_t phase, uint64_t started) {
+    fprintf(stderr, "WC3_GAME_LOAD phase=%s duration_ms=%u\n",
+            phase, (unsigned)(G_MapLoadMilliseconds() - started));
+}
+
 static bool G_LoadMap(cstring_t mapFilename) {
+    uint64_t const load_started = G_MapLoadMilliseconds();
+    uint64_t stage_started = load_started;
     if (!CM_LoadMap(mapFilename, gi.LoadingFrame)) {
+        G_LogMapLoadStage("collision_map", stage_started);
         G_SetMapUnitOverrides(NULL);
         G_SetMapAbilityOverrides(NULL);
         return false;
     }
+    G_LogMapLoadStage("collision_map", stage_started);
     gi.LoadingFrame();
+    stage_started = G_MapLoadMilliseconds();
     /* CS_MODELS is rebuilt from index 1 for every SV_Map.  The server-side
      * animation metadata cache uses those indices too, so retaining it across
      * levels can make a new index resolve to the previous map's filename. */
@@ -269,6 +287,8 @@ static bool G_LoadMap(cstring_t mapFilename) {
      * HUD before swapping the map-selected object-data overlay. */
     UI_ResetHud();
     G_ApplyMapGameDataSet(CM_GetMapInfo());
+    G_LogMapLoadStage("game_data_and_map_state", stage_started);
+    stage_started = G_MapLoadMilliseconds();
     /* Resolve presentation from the active map data set before publishing the
      * gameplay media contract. */
     cstring_t marker = Stb_IniCacheFind(&game.config.theme, "Default", "TargetPointConfirm");
@@ -278,16 +298,24 @@ static bool G_LoadMap(cstring_t mapFilename) {
     G_MusicResetState();
     G_SetMapUnitOverrides(CM_GetMapInfo());
     G_SetMapAbilityOverrides(CM_GetMapInfo());
+    G_LogMapLoadStage("presentation_and_overrides", stage_started);
     /* SV_Map already wiped CS_IMAGES/CS_FONTS. Bind every panel once so write
      * paths do not parse FDF on first use. */
+    stage_started = G_MapLoadMilliseconds();
     if (!gi.CvarString || atoi(gi.CvarString("dedicated", "0")) == 0) UI_LoadHud();
+    G_LogMapLoadStage("hud", stage_started);
     gi.LoadingFrame();
+    stage_started = G_MapLoadMilliseconds();
     G_SpawnEntities();
+    G_LogMapLoadStage("spawn_entities_and_scripts", stage_started);
     gi.LoadingFrame();
     strlcpy(level.map_path, mapFilename, sizeof(level.map_path));
+    stage_started = G_MapLoadMilliseconds();
     G_StartScripts();
+    G_LogMapLoadStage("start_scripts", stage_started);
     gi.LoadingFrame();
     level.started = true;
+    G_LogMapLoadStage("total", load_started);
     return true;
 }
 
