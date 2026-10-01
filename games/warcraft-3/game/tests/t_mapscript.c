@@ -11,6 +11,7 @@
  */
 #include "test.h"
 #include "../g_local.h"
+#include "games/warcraft-3/common/terrain.h"
 #include "jass/jass.h"
 
 #include <stdio.h>
@@ -401,6 +402,45 @@ TEST(wc3_mapscript, lua_trigger_execute_calls_registered_lua_action) {
     T_ASSERT(WC3_LuaCall(lua, "RunTriggerTest"));
     level.lua_vm = previous_lua;
     WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_trigger_evaluate_reports_non_handle_argument_type) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunInvalidTriggerTest() TriggerEvaluate({}) end\n",
+        "lua-invalid-trigger-test.lua"));
+    T_ASSERT(!WC3_LuaCall(lua, "RunInvalidTriggerTest"));
+    T_ASSERT(strstr(WC3_LuaErrorMessage(lua), "arg_type=table") != NULL);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, reforged_w3e_v12_decodes_two_byte_vertex_flags) {
+    uint8_t raw[] = { 0x10, 0x20, 0x00, 0x20, 0xFF, 0x03, 0x1D, 0xA7 };
+    uint8_t legacy[] = { 0x10, 0x20, 0x00, 0x20, 0xFF, 0x1D, 0xA7 };
+    war3mapVertex_t vertex = { 0 };
+
+    WC3_DecodeMapVertex(raw, 12, &vertex);
+    T_EQ(vertex.accurate_height, 0x2010);
+    T_EQ(vertex.waterlevel, 0x2000);
+    T_EQ(vertex.ground, 0x3F);
+    T_ASSERT(vertex.ramp && vertex.blight && vertex.water && vertex.boundary);
+    T_EQ(vertex.groundVariation, 0x1D);
+    T_EQ(vertex.cliffVariation, 0);
+    T_EQ(vertex.cliff, 0xA);
+    T_EQ(vertex.level, 0x7);
+
+    WC3_DecodeMapVertex(legacy, 11, &vertex);
+    T_EQ(vertex.ground, 0xF);
+    T_ASSERT(vertex.ramp && vertex.blight && vertex.water && vertex.boundary);
+    T_EQ(vertex.groundVariation, 0x1D);
+    T_EQ(vertex.cliff, 0xA);
+    T_EQ(vertex.level, 0x7);
 }
 
 TEST(wc3_mapscript, lua_version_get_matches_active_edition) {

@@ -969,12 +969,25 @@ bool G_LuaTriggerExecuteHost(handle_t handle, jassTriggerContext_t const *contex
     return G_LuaTriggerExecute(handle, &lua_context);
 }
 
+static trigger_t *LuaCheckTrigger(lua_State *L, int index, cstring_t native) {
+    trigger_t *trigger = lua_touserdata(L, index);
+    uint32_t const count = MIN(level.num_triggers, MAX_TRIGGERS);
+    FOR_LOOP(i, count) {
+        if (&level.triggers[i] != trigger) continue;
+        if (level.triggers[i].lua_vm == level.lua_vm) return &level.triggers[i];
+        luaL_error(L, "%s: invalid Lua trigger (arg_type=%s registry_slot=%u)",
+                   native, lua_typename(L, lua_type(L, index)), (unsigned)i);
+        return NULL;
+    }
+    luaL_error(L, "%s: invalid Lua trigger (arg_type=%s registry_slot=absent)",
+               native, lua_typename(L, lua_type(L, index)));
+    return NULL;
+}
+
 static int LuaTriggerExecute(lua_State *L) {
-    trigger_t *trigger = lua_touserdata(L, 1);
+    trigger_t *trigger = LuaCheckTrigger(L, 1, "TriggerExecute");
     wc3LuaTriggerContext_t context;
     char error[512];
-    if (!trigger || trigger->lua_vm != level.lua_vm)
-        return luaL_error(L, "TriggerExecute: invalid Lua trigger");
     context = WC3_LuaGetTriggerContext(level.lua_vm);
     if (!G_LuaTriggerExecute(trigger, &context)) {
         strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
@@ -985,11 +998,9 @@ static int LuaTriggerExecute(lua_State *L) {
 }
 
 static int LuaTriggerEvaluate(lua_State *L) {
-    trigger_t *trigger = lua_touserdata(L, 1);
+    trigger_t *trigger = LuaCheckTrigger(L, 1, "TriggerEvaluate");
     wc3LuaTriggerContext_t context;
     bool result;
-    if (!trigger || trigger->lua_vm != level.lua_vm)
-        return luaL_error(L, "TriggerEvaluate: invalid Lua trigger");
     context = WC3_LuaGetTriggerContext(level.lua_vm);
     context.trigger = trigger;
     result = G_LuaTriggerEvaluate(trigger, &context);

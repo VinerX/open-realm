@@ -298,6 +298,20 @@ maplayer_t *R_BuildMapSegmentCliffs(war3map_t const *map, uint32_t sx, uint32_t 
 
 /* Weld before uploading any segment/material batch so their boundaries cannot retain lighting seams. */
 void R_FinishCliffs(void) {
+    if (cliff_bake.num_vertices) {
+        vec3_t min = { FLT_MAX, FLT_MAX, FLT_MAX };
+        vec3_t max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+        FOR_LOOP(i, cliff_bake.num_vertices) {
+            vec3_t const *p = &cliff_bake.vertices[i].position;
+            min.x = MIN(min.x, p->x); min.y = MIN(min.y, p->y); min.z = MIN(min.z, p->z);
+            max.x = MAX(max.x, p->x); max.y = MAX(max.y, p->y); max.z = MAX(max.z, p->z);
+        }
+        fprintf(stderr,
+                "WC3_MAP_LOAD phase=cliff_vertex_bounds vertices=%u min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f)\n",
+                (unsigned)cliff_bake.num_vertices,
+                (double)min.x, (double)min.y, (double)min.z,
+                (double)max.x, (double)max.y, (double)max.z);
+    }
     R_CliffWeldNormals(&cliff_bake, 0.01f);
     while (cliff_layers) {
         cliffLayer_t *part = cliff_layers; cliff_layers = part->next;

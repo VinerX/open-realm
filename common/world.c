@@ -1,4 +1,5 @@
 #include "common.h"
+#include "games/warcraft-3/common/terrain.h"
 #include <ctype.h>
 
 #ifndef _WIN32
@@ -669,32 +670,6 @@ static void __attribute__((unused)) CM_ReadUnitDoodads(handle_t archive) {
     SFileCloseFile(file);
 }
 
-static void CM_DecodeWar3MapVertex(uint8_t const *raw, war3mapVertex_t *vert) {
-    uint16_t water_and_edge;
-    uint8_t flags;
-    uint8_t variation;
-    uint8_t cliff_and_layer;
-
-    memset(vert, 0, sizeof(*vert));
-    vert->accurate_height = (uint16_t)(raw[0] | ((uint16_t)raw[1] << 8));
-    water_and_edge = (uint16_t)(raw[2] | ((uint16_t)raw[3] << 8));
-    flags = raw[4];
-    variation = raw[5];
-    cliff_and_layer = raw[6];
-
-    vert->waterlevel = water_and_edge & 0x3FFF;
-    vert->mapedge = (water_and_edge & 0x4000) != 0;
-    vert->ground = flags & 0x0F;
-    vert->ramp = (flags & 0x10) != 0;
-    vert->blight = (flags & 0x20) != 0;
-    vert->water = (flags & 0x40) != 0;
-    vert->boundary = (flags & 0x80) != 0;
-    vert->cliffVariation = (variation >> 5) & 0x07;
-    vert->groundVariation = variation & 0x1F;
-    vert->cliff = (cliff_and_layer >> 4) & 0x0F;
-    vert->level = cliff_and_layer & 0x0F;
-}
-
 static void __attribute__((unused)) CM_ReadHeightmap(handle_t archive) {
     world.map = MemAlloc(sizeof(war3map_t));
     handle_t file;
@@ -713,14 +688,15 @@ static void __attribute__((unused)) CM_ReadHeightmap(handle_t archive) {
     uint32_t const num_vertices = world.map->width * world.map->height;
     int const vertexblocksize = sizeof(war3mapVertex_t) * num_vertices;
     world.map->vertices = MemAlloc(vertexblocksize);
-    uint8_t vertex_chunk[7 * 8192];
+    uint32_t const vertex_size = WC3_MapVertexEncodedSize(world.map->version);
+    uint8_t vertex_chunk[8 * 8192];
     for (uint32_t first = 0; first < num_vertices;) {
         uint32_t const count = MIN(num_vertices - first, 8192u);
-        if (!SFileReadFile(file, vertex_chunk, count * 7u, NULL, NULL)) {
+        if (!SFileReadFile(file, vertex_chunk, count * vertex_size, NULL, NULL)) {
             break;
         }
         FOR_LOOP(i, count)
-            CM_DecodeWar3MapVertex(vertex_chunk + i * 7u,
+            WC3_DecodeMapVertex(vertex_chunk + i * vertex_size, world.map->version,
                                    (war3mapVertex_t *)world.map->vertices + first + i);
         first += count;
     }

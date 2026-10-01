@@ -154,6 +154,7 @@ static void R_LoadMapSegments(war3map_t const *map) {
     uint32_t completed = 0;
     uint32_t last_report = SDL_GetTicks();
     mapSegmentBuildStats_t stats = {0};
+    float min_height = FLT_MAX, max_height = -FLT_MAX;
     FOR_LOOP(fx, (map->width - 1) / SEGMENT_SIZE) {
         FOR_LOOP(fy, (map->height - 1) / SEGMENT_SIZE) {
             uint32_t const started = SDL_GetTicks();
@@ -164,6 +165,8 @@ static void R_LoadMapSegments(war3map_t const *map) {
                     float x = fx * SEGMENT_SIZE + sx;
                     float y = fy * SEGMENT_SIZE + sy;
                     vec3_t v = R_GetMapVertexPoint(map, x, y);
+                    min_height = MIN(min_height, v.z);
+                    max_height = MAX(max_height, v.z);
                     segment->bbox.min.x = MIN(segment->bbox.min.x, v.x);
                     segment->bbox.min.y = MIN(segment->bbox.min.y, v.y);
                     segment->bbox.min.z = MIN(segment->bbox.min.z, v.z);
@@ -188,6 +191,8 @@ static void R_LoadMapSegments(war3map_t const *map) {
             "WC3_MAP_LOAD phase=terrain_segment_build segments=%u water_ms=%llu cliffs_ms=%llu cliff_layers=%u\n",
             (unsigned)completed, (unsigned long long)stats.water_ms,
             (unsigned long long)stats.cliffs_ms, (unsigned)stats.cliff_layers);
+    fprintf(stderr, "WC3_MAP_LOAD phase=terrain_height_bounds min_z=%.3f max_z=%.3f\n",
+            (double)min_height, (double)max_height);
 }
 
 void R_AllocateFogOfWar(war3map_t *map) {
@@ -220,32 +225,6 @@ static void R_LoadMapMinimap(handle_t hMpq, cstring_t mapFilename) {
     }
 }
 
-static void R_DecodeWar3MapVertex(uint8_t const *raw, war3mapVertex_t *vert) {
-    uint16_t water_and_edge;
-    uint8_t flags;
-    uint8_t variation;
-    uint8_t cliff_and_layer;
-
-    memset(vert, 0, sizeof(*vert));
-    vert->accurate_height = (uint16_t)(raw[0] | ((uint16_t)raw[1] << 8));
-    water_and_edge = (uint16_t)(raw[2] | ((uint16_t)raw[3] << 8));
-    flags = raw[4];
-    variation = raw[5];
-    cliff_and_layer = raw[6];
-
-    vert->waterlevel = water_and_edge & 0x3FFF;
-    vert->mapedge = (water_and_edge & 0x4000) != 0;
-    vert->ground = flags & 0x0F;
-    vert->ramp = (flags & 0x10) != 0;
-    vert->blight = (flags & 0x20) != 0;
-    vert->water = (flags & 0x40) != 0;
-    vert->boundary = (flags & 0x80) != 0;
-    vert->cliffVariation = (variation >> 5) & 0x07;
-    vert->groundVariation = variation & 0x1F;
-    vert->cliff = (cliff_and_layer >> 4) & 0x0F;
-    vert->level = cliff_and_layer & 0x0F;
-}
-
 war3map_t *FileReadWar3Map(handle_t archive) {
     war3map_t *map = ri.MemAlloc(sizeof(war3map_t));
     handle_t file;
@@ -260,18 +239,21 @@ war3map_t *FileReadWar3Map(handle_t archive) {
     SFileReadFile(file, &map->height, 4, NULL, NULL);
     SFileReadFile(file, &map->center, 8, NULL, NULL);
     uint32_t const num_vertices = map->width * map->height;
+    uint32_t const vertex_size = WC3_MapVertexEncodedSize(map->version);
     int const vertexblocksize = sizeof(war3mapVertex_t) * num_vertices;
     map->vertices = ri.MemAlloc(vertexblocksize);
     R_AllocateFogOfWar(map);
-    uint8_t vertex_chunk[7 * 8192];
+    uint8_t vertex_chunk[8 * 8192];
     for (uint32_t first = 0; first < num_vertices;) {
         uint32_t const count = MIN(num_vertices - first, 8192u);
-        if (!SFileReadFile(file, vertex_chunk, count * 7u, NULL, NULL)) {
+        if (!SFileReadFile(file, vertex_chunk, count * vertex_size, NULL, NULL)) {
+            fprintf(stderr, "WC3: truncated war3map.w3e vertex data at vertex %u (version %u, stride %u)\n",
+                    (unsigned)first, (unsigned)map->version, (unsigned)vertex_size);
             break;
         }
         FOR_LOOP(i, count)
-            R_DecodeWar3MapVertex(vertex_chunk + i * 7u,
-                                  (war3mapVertex_t *)map->vertices + first + i);
+            WC3_DecodeMapVertex(vertex_chunk + i * vertex_size, map->version,
+                                (war3mapVertex_t *)map->vertices + first + i);
         first += count;
     }
     SFileCloseFile(file);
