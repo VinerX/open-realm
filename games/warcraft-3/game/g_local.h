@@ -3255,6 +3255,7 @@ void G_DestructableStartDeathAnimation(edict_t *ent);
 void G_DestructableStartAliveAnimation(edict_t *ent, bool birth);
 
 bool G_IsDoodad(edict_t const *ent);
+void G_DoodadThink(edict_t *ent);
 void G_DoodadAnimationEnd(edict_t *ent);
 bool G_DoodadSetAnimation(edict_t *ent, cstring_t anim_name, bool random_animation);
 typedef struct {

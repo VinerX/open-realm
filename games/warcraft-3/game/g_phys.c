@@ -177,6 +177,10 @@ static bool G_UnitRegeneratesHP(edict_t const *ent) {
  * into the 8-bit stat fields that are sent to clients. */
 void G_RunEntity(edict_t *ent) {
     if (!ent->inuse) return; /* defensive: freed edicts carry no simulation state */
+    if ((ent->svflags & SVF_STATIC_SCENERY) && G_IsDoodad(ent)) {
+        if (G_UnitIsWorldActive(ent)) SAFE_CALL(ent->think, ent);
+        return;
+    }
     bool const world_active = G_UnitIsWorldActive(ent);
     spell_run_frame(ent);
     unit_updatestatuses(ent);

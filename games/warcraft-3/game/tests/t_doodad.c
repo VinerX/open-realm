@@ -116,12 +116,12 @@ TEST(wc3_doodad, spawn_enters_nonzero_stand_and_script_can_replace_it) {
         T_NOT_NULL(ent->animation);
         T_EQ(ent->s.frame, first);
         T_STREQ(ent->animation_request, "Stand");
-        T_ASSERT(ent->think == monster_think);
+        T_ASSERT(ent->think == G_DoodadThink);
         if (ent->animation && ent->think) {
-            ent->think(ent);
+            G_RunEntity(ent);
             T_ASSERT(ent->s.frame > first && ent->s.frame < last);
             ent->s.frame = last - 1;
-            ent->think(ent);
+            G_RunEntity(ent);
             T_EQ(ent->s.frame, first);
             T_EQ(G_SetDoodadAnimationRect(&area, ent->class_id, "portrait", false), 1);
             T_EQ(ent->s.frame, 67333);

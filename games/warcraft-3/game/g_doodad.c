@@ -12,6 +12,10 @@
 
 static umove_t doodad_scripted_move = { .animation = "stand", .think = NULL, .endfunc = G_DoodadAnimationEnd };
 
+void G_DoodadThink(edict_t *ent) {
+    M_MoveFrame(ent);
+}
+
 /* Identify static scenery that has an authored doodad row for scripted animation. */
 bool G_IsDoodad(edict_t const *ent) {
     return ent && ent->inuse && ent->class_id && (ent->svflags & SVF_STATIC_SCENERY) &&
@@ -59,7 +63,7 @@ bool G_DoodadSetAnimation(edict_t *ent, cstring_t anim_name, bool random_animati
     ent->currentmove = &doodad_scripted_move;
     ent->aiflags &= ~AI_HOLD_FRAME;
     ent->s.frame = anim->interval[0];
-    ent->think = monster_think;
+    ent->think = G_DoodadThink;
     return true;
 }
 
