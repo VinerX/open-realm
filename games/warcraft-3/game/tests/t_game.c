@@ -3998,6 +3998,7 @@ SAVE_PTR_FIELD_TEST(field_primary_builder_round_trip, "construction.primary_buil
 SAVE_PTR_FIELD_TEST(creep_status_source_round_trip, "abilstatus.source", abilstatus[3].source, 0)
 SAVE_PTR_FIELD_TEST(field_construction_worker_round_trip, "construction.worker", construction.worker, 0)
 SAVE_PTR_FIELD_TEST(field_rally_entity_round_trip, "rally.entity", rally.entity, 0)
+SAVE_PTR_FIELD_TEST(field_graveyard_thinker_round_trip, "graveyard_thinker", graveyard_thinker, 0)
 SAVE_PTR_FIELD_TEST(field_revival_producer_round_trip, "revival.producer", revival.producer, 0)
 SAVE_PTR_FIELD_TEST(field_revival_queue_next_round_trip, "revival.queue_next", revival.queue_next, 0)
 SAVE_PTR_FIELD_TEST(field_sacrifice_worker_round_trip, "sacrifice.worker", sacrifice.worker, 0)

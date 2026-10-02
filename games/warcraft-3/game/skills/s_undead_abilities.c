@@ -197,14 +197,28 @@ BZ_ABILITY_PROC(CAbilityReplenishMana) {
  * capped at five nearby corpses.
  */
 #define ID_GRAVEYARD_CORPSE MAKEFOURCC('A','g','y','d')
+#ifdef BZ_TESTS
+uint32_t graveyard_test_world_lookups;
+#endif
 
 static bool graveyard_is_under_construction(edict_t *graveyard) {
     return graveyard && (graveyard->construction.active || graveyard->build == graveyard);
 }
 
 static edict_t *graveyard_find_thinker(edict_t *graveyard) {
+    edict_t *thinker = graveyard->graveyard_thinker;
+    if (thinker && thinker->inuse && thinker->owner == graveyard &&
+        thinker->think == graveyard_think && thinker->class_id == ID_GRAVEYARD_CORPSE)
+        return thinker;
+    graveyard->graveyard_thinker = NULL;
+#ifdef BZ_TESTS
+    graveyard_test_world_lookups++;
+#endif
     FILTER_EDICTS(ent, ent->inuse && ent->owner == graveyard && ent->think == graveyard_think &&
-                  ent->class_id == ID_GRAVEYARD_CORPSE) return ent;
+                  ent->class_id == ID_GRAVEYARD_CORPSE) {
+        graveyard->graveyard_thinker = ent;
+        return ent;
+    }
     return NULL;
 }
 
@@ -247,6 +261,8 @@ void graveyard_think(edict_t *thinker) {
     if (!thinker || !graveyard || !graveyard->inuse || M_IsDead(graveyard) ||
         graveyard_is_under_construction(graveyard) ||
         !(level = G_UnitAbilityLevel(graveyard, ID_GRAVEYARD_CORPSE))) {
+        if (graveyard && graveyard->graveyard_thinker == thinker)
+            graveyard->graveyard_thinker = NULL;
         if (thinker) G_FreeEdict(thinker);
         return;
     }
@@ -277,6 +293,7 @@ static void graveyard_ensure(edict_t *graveyard) {
     thinker = G_Spawn();
     if (!thinker) return;
     thinker->owner = graveyard;
+    graveyard->graveyard_thinker = thinker;
     thinker->class_id = ID_GRAVEYARD_CORPSE;
     thinker->think = graveyard_think;
     thinker->freetime = G_Time() + (uint32_t)(interval * 1000.0f);
@@ -284,6 +301,14 @@ static void graveyard_ensure(edict_t *graveyard) {
 
 BZ_ABILITY_PROC(CAbilityGraveyard) {
     if (msg == A_UPDATE) { graveyard_ensure(ent); return true; }
+    if ((msg == A_UNIT_REMOVE || msg == A_DISABLE) && ent) {
+        edict_t *thinker = ent->graveyard_thinker;
+        ent->graveyard_thinker = NULL;
+        if (thinker && thinker->inuse && thinker->owner == ent &&
+            thinker->think == graveyard_think && thinker->class_id == ID_GRAVEYARD_CORPSE)
+            G_FreeEdict(thinker);
+        return true;
+    }
     return false;
 }
 

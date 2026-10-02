@@ -1605,6 +1605,7 @@ struct edict_s {
     edict_t *combatentity;
     edict_t *secondarygoal;
     edict_t *owner;
+    edict_t *graveyard_thinker;
     edict_t *build;
     animation_t const *animation;
     float animation_speed; /* JASS SetUnitTimeScale multiplier for the simulation animation clock */

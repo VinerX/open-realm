@@ -374,6 +374,44 @@ static uint32_t graveyard_test_corpse_count(edict_t *graveyard) {
     return count;
 }
 
+TEST(wc3_spell, graveyard_reuses_thinker_without_repeated_world_lookup) {
+    extern uint32_t graveyard_test_world_lookups;
+    slkTestData_t *rows, *old;
+    reset_entities(); setup_test_world(); level.time = 1000;
+    rows = parse_slk_string(graveyard_slk); old = G_SetSLKRows("AbilityData", rows);
+    edict_t *graveyard = alloc_test_unit(MAKEFOURCC('u','g','r','v'), 100, 100);
+    graveyard->s.player = 0; graveyard->svflags |= SVF_MONSTER;
+    graveyard->health.value = graveyard->health.max_value = 900;
+    graveyard->heroabilities[0] = MAKE(heroability_t, .code = BZ_AGYD, .level = 1);
+    T_ASSERT(G_ActorAddSkill(graveyard, BZ_AGYD));
+    S_RunAbilityUpdates(graveyard);
+    edict_t *thinker = graveyard_test_thinker(graveyard);
+    T_NOT_NULL(thinker);
+    graveyard_test_world_lookups = 0;
+    FOR_LOOP(i, 8) { level.time += FRAMETIME; S_RunAbilityUpdates(graveyard); }
+    T_EQ(graveyard_test_thinker(graveyard), thinker);
+    T_EQ(graveyard_test_world_lookups, 0);
+    graveyard->graveyard_thinker = NULL;
+    S_RunAbilityUpdates(graveyard);
+    T_EQ(graveyard->graveyard_thinker, thinker);
+    G_FreeEdict(thinker);
+    edict_t *other = G_Spawn();
+    T_NOT_NULL(other);
+    S_RunAbilityUpdates(graveyard);
+    edict_t *replacement = graveyard_test_thinker(graveyard);
+    T_NOT_NULL(replacement); T_ASSERT(replacement != other);
+    T_ASSERT(G_ActorRemoveSkill(graveyard, BZ_AGYD));
+    T_ASSERT(!replacement->inuse);
+    T_NULL(graveyard->graveyard_thinker);
+    T_ASSERT(G_ActorAddSkill(graveyard, BZ_AGYD));
+    S_RunAbilityUpdates(graveyard);
+    replacement = graveyard_test_thinker(graveyard);
+    T_NOT_NULL(replacement);
+    G_FreeEdict(graveyard);
+    T_ASSERT(!replacement->inuse);
+    G_SetSLKRows("AbilityData", old); free_slk_rows(rows);
+}
+
 TEST(wc3_spell, graveyard_waits_for_construction_completion_before_starting_cooldown) {
     slkTestData_t *rows, *old;
     edict_t *graveyard, *thinker;

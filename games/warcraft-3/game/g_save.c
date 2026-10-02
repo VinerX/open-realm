@@ -765,6 +765,7 @@ field_t edict_fields[] = {
     F(edict_s, combatentity, F_EDICT, 0, FIELD_NONE),
     F(edict_s, secondarygoal, F_EDICT, 0, FIELD_NONE),
     F(edict_s, owner, F_EDICT, 0, FIELD_NONE),
+    F(edict_s, graveyard_thinker, F_EDICT, 0, FIELD_NONE),
     F(edict_s, build, F_EDICT, 0, FIELD_NONE),
     F(edict_s, client, F_IGNORE, 0, FIELD_RUNTIME),
     F(edict_s, pathtex, F_IGNORE, 0, FIELD_RUNTIME),

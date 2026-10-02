@@ -30,6 +30,32 @@ map advanced. This is an improvement over 3-4 FPS during the prior resource
 stream, not a solved gameplay performance claim. Further server profiling and
 controlled scene/time comparisons remain necessary.
 
+### Follow-up: Graveyard thinker ownership
+
+After the scoped-file fix, a bounded release split measured 48-79 ms in
+`G_RunEntities`, roughly 4-10 ms in fog updates and 5-15 ms in client presentation;
+deferred media loads were usually 0-1 ms. Temporary ability probes attributed
+about 226-233 ms over 20 simulation steps to `CAbilityGraveyard` (`Agyd`). These
+probes add measurement overhead and are not a clean-build FPS comparison.
+
+The ability checked ownership first, but every active Graveyard still scanned
+the full edict pool to find its existing corpse-generation thinker every step.
+The building now retains that link in `graveyard_thinker`. Lookup validates
+the live slot, owner, callback and class before using it. A missing link can be
+reconstructed from existing thinkers, including saves made before the field
+existed. Creation publishes the link; construction interruption, ability
+disable and building removal retire it. The pointer uses the normal `F_EDICT`
+save fixup rather than a parallel registry.
+
+The regression verifies zero further world lookups across eight updates,
+missing-link reconstruction, freed/reused thinker slots, ability removal and
+building removal. Graveyard cases pass 39/39 assertions in ROC and TFT, the
+pointer save codec passes 7/7, and adjacent Exhume cases pass 22/22 in TFT.
+The clean 500-frame release run (`build/perf-release/graveyard-fps.log`) completed
+and its late samples were approximately 16-22 FPS. That overlaps the preceding
+split run, so removal of the repeated lookup is proven by the counter regression,
+but a distinct end-to-end FPS gain from this change has not been established.
+
 The 481x481 23-Race-Legion scene contains about 37,750 live server entities;
 its starting camera receives about 15,505 client entities. After segment ground
 culling reduced submitted terrain to roughly 224K vertices, the scene still ran
