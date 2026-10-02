@@ -948,8 +948,11 @@ void UI_WriteMultiselect(edict_t * *ents, uint32_t count, gameClient_t *viewer) 
     multi->numcolumns = 6;
     multi->numitems = count;
     FOR_LOOP(i, count) {
+        cstring_t art = ents[i]->data.UnitProfile ? ents[i]->data.UnitProfile->art : NULL;
         multi->items[i].entity = ents[i]->s.number;
-        multi->items[i].image = gi.ImageIndex(FindConfigValue(GetClassName(ents[i]->class_id), STR_ART));
+        if (!art || !*art)
+            fprintf(stderr, "UI_WriteMultiselect: missing resolved icon for %.4s\n", (cstring_t)&ents[i]->class_id);
+        multi->items[i].image = art && *art ? gi.ImageIndex(art) : 0;
         /* Warsmash highlights the whole selected subgroup: units group by
          * unit type, even though clicking one icon chooses a concrete focus. */
         if (focused && ents[i]->class_id == focused->class_id)

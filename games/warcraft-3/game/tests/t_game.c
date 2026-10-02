@@ -110,6 +110,7 @@ static cstring_t give_resources_cheat_cvar(cstring_t name, cstring_t fallback) {
 
 static uint32_t multiselect_capture_count;
 static uint16_t multiselect_capture_flags[MAX_SELECTED_ENTITIES];
+static uint16_t multiselect_capture_images[MAX_SELECTED_ENTITIES];
 static uint32_t selection_sync_count;
 static uint32_t selection_sync_entities[MAX_SELECTED_ENTITIES];
 static uint32_t selection_sync_entity_index;
@@ -169,8 +170,10 @@ static void selection_test_write(pfWriteType_t type, void const *data) {
             uiMultiselect_t const *multi = frame->buffer.data;
             uint32_t const available = (frame->buffer.size - sizeof(uiMultiselect_t)) / sizeof(uiMultiselectItem_t);
             multiselect_capture_count = MIN((uint32_t)multi->numitems, available);
-            FOR_LOOP(i, multiselect_capture_count)
+            FOR_LOOP(i, multiselect_capture_count) {
                 multiselect_capture_flags[i] = multi->items[i].flags;
+                multiselect_capture_images[i] = multi->items[i].image;
+            }
         }
         return;
     }
@@ -1865,6 +1868,32 @@ static int hud_test_image_index(cstring_t name) {
         }
     }
     return 0;
+}
+
+TEST(wc3_game, multiselect_icons_use_resolved_unit_profile_art) {
+    __typeof__(gi.ImageIndex) old_image = gi.ImageIndex;
+    __typeof__(gi.Write) old_write = gi.Write;
+    __typeof__(gi.unicast) old_unicast = gi.unicast;
+    reset_entities(); setup_test_world();
+    gameClient_t *client = &game.clients[0];
+    edict_t *player = &g_edicts[0]; player->client = client; client->ps.number = 0;
+    edict_t *selected[2] = { alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0),
+                            alloc_test_unit(MAKEFOURCC('h','f','o','o'), 32, 0) };
+    UnitProfile_t profile = { .art = "ReplaceableTextures\\CommandButtons\\BTNMapOverride.blp" };
+    FOR_LOOP(i, 2) {
+        selected[i]->data.UnitProfile = &profile;
+        selected[i]->svflags |= SVF_MONSTER; selected[i]->s.player = 0;
+        G_SelectEntity(client, selected[i]);
+    }
+    memset(hud_test_images, 0, sizeof(hud_test_images)); multiselect_capture_count = 0;
+    gi.ImageIndex = hud_test_image_index; gi.Write = selection_test_write; gi.unicast = selection_test_unicast;
+    UI_SendInfoPanel(player, selected, 2);
+    T_EQ(multiselect_capture_count, 2);
+    FOR_LOOP(i, 2) {
+        T_ASSERT(multiselect_capture_images[i] != 0);
+        T_STREQ(hud_test_images[multiselect_capture_images[i]], profile.art);
+    }
+    gi.ImageIndex = old_image; gi.Write = old_write; gi.unicast = old_unicast;
 }
 
 TEST(wc3_game, hud_image_rebinds_after_configstring_wipe) {
