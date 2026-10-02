@@ -151,13 +151,13 @@ TEST(wc3_slk, map_archive_campaign_unit_func_overrides_base) {
     bytes = gi.ReadFile("Maps\\MapOverlay.w3x", &size);
     T_NOT_NULL(bytes);
     T_ASSERT(SFileOpenArchiveFromMemory(bytes, size, 0, &archive));
-    gi.SetPriorityArchive(archive);
+    gi.SetPriorityArchive(archive, NULL);
 
     T_ASSERT(Stb_IniCacheLoad(&data, "Units\\CampaignUnitFunc.txt"));
     T_STREQ(Stb_IniCacheFind(&data, "Harf", "Name"), "MapOverlay Omniknight");
     Stb_IniCacheFree(&data);
 
-    gi.SetPriorityArchive(NULL);
+    gi.SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     gi.MemFree(bytes);
     strlcpy(game.data_prefix, saved_prefix, sizeof(game.data_prefix));
@@ -177,7 +177,7 @@ TEST(wc3_slk, map_archive_war3map_misc_overrides_max_hero_level) {
     bytes = gi.ReadFile("Maps\\MapOverlay.w3x", &size);
     T_NOT_NULL(bytes);
     T_ASSERT(SFileOpenArchiveFromMemory(bytes, size, 0, &archive));
-    gi.SetPriorityArchive(archive);
+    gi.SetPriorityArchive(archive, NULL);
 
     /* Read the fixture value first so the assertion cannot pass on a hardcoded 25. */
     {
@@ -193,7 +193,7 @@ TEST(wc3_slk, map_archive_war3map_misc_overrides_max_hero_level) {
         Stb_IniCacheFree(&file);
     }
 
-    gi.SetPriorityArchive(NULL);
+    gi.SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     gi.MemFree(bytes);
     strlcpy(game.data_prefix, saved_prefix, sizeof(game.data_prefix));

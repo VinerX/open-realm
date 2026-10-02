@@ -37,7 +37,7 @@ static void entity_pathtex_transform(pathTexTransformParams_t const *params, pat
 static inline handle_t G_WorldReadFile(cstring_t filename, uint32_t *size) { return gi.ReadFile(filename, size); }
 static inline handle_t G_WorldMemAlloc(long size) { return gi.MemAlloc(size); }
 static inline void G_WorldMemFree(handle_t mem) { gi.MemFree(mem); }
-static inline void G_WorldSetPriorityArchive(handle_t archive) { gi.SetPriorityArchive(archive); }
+static inline void G_WorldSetPriorityArchive(handle_t archive, cstring_t path) { gi.SetPriorityArchive(archive, path); }
 static inline BOMStatus G_WorldTextRemoveBom(string_t buffer) {
 	size_t len;
 	if (!buffer) return INVALID_BOM;

@@ -191,8 +191,8 @@ void Sys_Quit(void);
 handle_t FS_AddArchive(cstring_t filename);
 bool FS_AddDataDirectory(cstring_t dirname);
 bool FS_ArchiveFileVisible(cstring_t archive, cstring_t filename);
-/* Highest-priority open archive for FS_OpenFile/FS_ReadFile (e.g. current map MPQ). NULL clears. */
-void FS_SetPriorityArchive(handle_t archive);
+/* Borrowed map archive; path also resolves explicit path\\member requests. NULL clears. */
+void FS_SetPriorityArchive(handle_t archive, cstring_t path);
 handle_t FS_GetPriorityArchive(void);
 handle_t FS_OpenFile(cstring_t fileName);
 bool FS_ReadFileHandle(handle_t file, void *buffer, uint32_t length, uint32_t *bytes_read);

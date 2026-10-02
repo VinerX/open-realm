@@ -304,7 +304,7 @@ static void CM_W3FreeDoodadPlacement(doodad_t *doodad) {
 }
 
 static void CM_W3ReleaseMapArchive(void) {
-    FS_SetPriorityArchive(NULL);
+    FS_SetPriorityArchive(NULL, NULL);
     if (cm_w3_map_archive) {
         SFileCloseArchive(cm_w3_map_archive);
         cm_w3_map_archive = NULL;
@@ -354,7 +354,7 @@ bool CM_LoadMapFormat(cstring_t mapFilename, cmLoadYield_t yield) {
     }
     /* Keep the open map as the highest-priority FS source so sheet/INI loaders
      * (G_ReadGameDataFile) see map-imported Units\*.txt and war3mapMisc.txt. */
-    FS_SetPriorityArchive(cm_w3_map_archive);
+    FS_SetPriorityArchive(cm_w3_map_archive, mapFilename);
     FOR_LOOP(i, sizeof(cm_w3_readers) / sizeof(*cm_w3_readers)) {
         uint64_t const started = CM_W3LoadMilliseconds();
         cm_w3_readers[i].read(cm_w3_map_archive);

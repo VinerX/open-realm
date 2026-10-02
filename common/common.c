@@ -84,6 +84,7 @@ static handle_t archives[MAX_ARCHIVES] = { 0 };
 static PATHSTR archiveNames[MAX_ARCHIVES];
 static PATHSTR gameDirs[MAX_GAME_DIRS];
 static handle_t priority_archive; /* optional session overlay; searched before archives[] */
+static PATHSTR priority_archive_path;
 #ifdef WC3
 #define MAX_CASC_STORAGES MAX_GAME_DIRS
 static fsCascStorage_t *cascStorages[MAX_CASC_STORAGES];
@@ -282,8 +283,9 @@ handle_t FS_AddArchive(cstring_t filename) {
     return NULL;
 }
 
-void FS_SetPriorityArchive(handle_t archive) {
+void FS_SetPriorityArchive(handle_t archive, cstring_t path) {
     priority_archive = archive;
+    FS_NormalizePath(archive && path ? path : "", priority_archive_path, sizeof(priority_archive_path));
 }
 
 handle_t FS_GetPriorityArchive(void) {
@@ -1071,6 +1073,17 @@ handle_t FS_OpenFile(cstring_t fileName) {
     }
     if (priority_archive) {
         handle_t file;
+        char outer[MAX_PATHLEN * 2], normalized[MAX_PATHLEN * 2];
+        cstring_t inner;
+        if (priority_archive_path[0] && FS_SplitNestedArchivePath(fileName, outer, sizeof(outer), &inner)) {
+            FS_NormalizePath(outer, normalized, sizeof(normalized));
+            if (!strcasecmp(normalized, priority_archive_path)) {
+                if (SFileOpenFileEx(priority_archive, inner, SFILE_OPEN_FROM_MPQ, &file))
+                    return FS_WrapMpqFile(file, fileName);
+                filelock = false;
+                return NULL;
+            }
+        }
         if (SFileOpenFileEx(priority_archive, fileName, SFILE_OPEN_FROM_MPQ, &file))
             return FS_WrapMpqFile(file, fileName);
     }
@@ -1714,7 +1727,7 @@ void FS_Init(void) {
 }
 
 void FS_Shutdown(void) {
-    priority_archive = NULL;
+    FS_SetPriorityArchive(NULL, NULL);
 #ifdef WC3
     FOR_LOOP(i, MAX_CASC_STORAGES) {
         FS_CascCloseStorage(cascStorages[i]);

@@ -4,6 +4,32 @@ For process footprint, allocation profiling, and RAM reduction priorities, see [
 
 ## October 2: 23-Race aura scans and deferred media loading
 
+### Follow-up: scoped assets reuse the mounted map
+
+A bounded release run traced scoped model/texture misses to
+`FS_OpenNestedLooseFile`: each attempt read the entire 128,836,165-byte Legion
+map again. Reads cost about 45-68 ms, with another 1-2 ms reopening the archive.
+Model extension retries and dependent textures multiplied that cost.
+
+`FS_SetPriorityArchive` now records the map path alongside its borrowed archive
+handle. Explicit `map.w3x\\member` requests matching that path resolve directly
+inside the open archive, including negative results. Other archive paths retain
+the existing nested-file path; bare requests retain overlay/CASC precedence.
+Map replacement and shutdown clear both handle and path. Engine and game DLLs
+must be rebuilt together because the import signature changed.
+
+The regression mounts an in-memory fixture, removes its disk file, reads a
+case/slash-varied scoped request, checks a missing member and a different map,
+then changes/clears the mount. It failed before the scoped lookup and passes
+after it. `wc3_fs.*` passes 35/35 assertions in ROC and TFT without retail data;
+optional CASC tests skip when `WC3_CASC_DATA` is unset.
+
+The matching release run (`build/perf-release/scoped-fps.log`) reached roughly
+18-20 FPS in early starting-scene samples, then 9-11 FPS in later samples as the
+map advanced. This is an improvement over 3-4 FPS during the prior resource
+stream, not a solved gameplay performance claim. Further server profiling and
+controlled scene/time comparisons remain necessary.
+
 The 481x481 23-Race-Legion scene contains about 37,750 live server entities;
 its starting camera receives about 15,505 client entities. After segment ground
 culling reduced submitted terrain to roughly 224K vertices, the scene still ran

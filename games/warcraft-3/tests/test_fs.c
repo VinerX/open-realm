@@ -54,7 +54,7 @@ TEST(wc3_fs, mpq_handle_ops) {
     T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
     if (!archive) { unlink(path); return; }
 
-    FS_SetPriorityArchive(archive);
+    FS_SetPriorityArchive(archive, NULL);
     file = FS_OpenFile("vfs-test.txt");
     T_NOT_NULL(file);
     if (file) {
@@ -69,9 +69,57 @@ TEST(wc3_fs, mpq_handle_ops) {
         T_STREQ(rest, "handle");
         FS_CloseFile(file);
     }
-    FS_SetPriorityArchive(NULL);
+    FS_SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     unlink(path);
+}
+
+TEST(wc3_fs, mounted_map_scope_survives_disk_removal_and_resets) {
+    cstring_t path = "build/tests/wc3-scoped-map.w3x";
+    cstring_t other = "build/tests/wc3-other-map.w3x";
+    handle_t archive = NULL, replacement = NULL;
+    uint8_t *map_data = NULL;
+    FILE *disk;
+    long map_size;
+    char contents[32] = {0};
+    uint32_t size = 0;
+    T_ASSERT(FS_AddDataDirectory("."));
+    T_ASSERT(fs_test_make_mpq(path, "Textures\\scoped.txt", "mounted map", &archive));
+    T_ASSERT(fs_test_make_mpq(other, "Textures\\scoped.txt", "other map", &replacement));
+    if (!archive || !replacement) goto cleanup;
+    SFileCloseArchive(archive); archive = NULL;
+    disk = fopen(path, "rb");
+    T_NOT_NULL(disk);
+    if (!disk) goto cleanup;
+    fseek(disk, 0, SEEK_END); map_size = ftell(disk); rewind(disk);
+    map_data = malloc(map_size);
+    T_NOT_NULL(map_data);
+    if (!map_data) { fclose(disk); goto cleanup; }
+    T_EQ(fread(map_data, 1, map_size, disk), map_size);
+    fclose(disk);
+    T_ASSERT(SFileOpenArchiveFromMemory(map_data, (uint32_t)map_size, 0, &archive));
+    if (!archive) goto cleanup;
+    FS_SetPriorityArchive(archive, path);
+    T_EQ(unlink(path), 0);
+    T_ASSERT(fs_test_read("BUILD\\TESTS\\WC3-SCOPED-MAP.W3X/Textures/scoped.txt", contents, sizeof(contents)-1, &size));
+    T_STREQ(contents, "mounted map");
+    T_ASSERT(!FS_FileExists("build/tests/wc3-scoped-map.w3x/Textures/missing.txt"));
+    memset(contents, 0, sizeof(contents));
+    T_ASSERT(fs_test_read("build/tests/wc3-other-map.w3x/Textures/scoped.txt", contents, sizeof(contents)-1, &size));
+    T_STREQ(contents, "other map");
+    FS_SetPriorityArchive(replacement, other);
+    T_ASSERT(!FS_FileExists("build/tests/wc3-scoped-map.w3x/Textures/scoped.txt"));
+    memset(contents, 0, sizeof(contents));
+    T_ASSERT(fs_test_read("Textures/scoped.txt", contents, sizeof(contents)-1, &size));
+    T_STREQ(contents, "other map");
+    FS_SetPriorityArchive(NULL, NULL);
+    T_ASSERT(!FS_FileExists("Textures/scoped.txt"));
+cleanup:
+    FS_SetPriorityArchive(NULL, NULL);
+    if (archive) SFileCloseArchive(archive);
+    if (replacement) SFileCloseArchive(replacement);
+    free(map_data);
+    unlink(path); unlink(other);
 }
 
 TEST(wc3_fs, casc_file_exists_and_reads_manifest_path) {
@@ -108,11 +156,11 @@ TEST(wc3_fs, map_priority_mpq_overrides_casc) {
     T_ASSERT(FS_AddDataDirectory(root));
     T_ASSERT(fs_test_make_mpq(archive_path, member, expected, &archive));
     if (!archive) return;
-    FS_SetPriorityArchive(archive);
+    FS_SetPriorityArchive(archive, NULL);
     T_ASSERT(fs_test_read(member, contents, sizeof(contents) - 1, &size));
     T_STREQ(contents, expected);
     T_EQ(size, strlen(expected));
-    FS_SetPriorityArchive(NULL);
+    FS_SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     unlink(archive_path);
 }

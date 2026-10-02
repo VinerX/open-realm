@@ -154,7 +154,7 @@ TEST(wc3_minimap, fixture_mpq_skin_override_wins_over_stock_default) {
     if (!bytes) goto done;
     T_ASSERT(SFileOpenArchiveFromMemory(bytes, size, 0, &archive));
     if (!archive) { gi.MemFree(bytes); goto done; }
-    gi.SetPriorityArchive(archive);
+    gi.SetPriorityArchive(archive, NULL);
     T_ASSERT(Stb_IniCacheLoad(&theme, "UI\\war3skins.txt"));
     T_ASSERT(Stb_IniCacheLoad(&map_skin, "war3mapSkin.txt"));
     T_STREQ(wc3_minimap_skin_texture_path(&theme, NULL, "MinimapHeroTexture"),
@@ -186,7 +186,7 @@ TEST(wc3_minimap, fixture_mpq_skin_override_wins_over_stock_default) {
 
     Stb_IniCacheFree(&map_skin);
     Stb_IniCacheFree(&theme);
-    gi.SetPriorityArchive(NULL);
+    gi.SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     gi.MemFree(bytes);
     if (texture_bytes) gi.MemFree(texture_bytes);

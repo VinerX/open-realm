@@ -201,7 +201,7 @@ TEST(wc3_music, map_skin_overrides_stock_music_skin_fields) {
     bytes = gi.ReadFile("Maps\\MapOverlay.w3x", &size);
     T_NOT_NULL(bytes);
     T_ASSERT(SFileOpenArchiveFromMemory(bytes, size, 0, &archive));
-    gi.SetPriorityArchive(archive);
+    gi.SetPriorityArchive(archive, NULL);
     T_ASSERT(Stb_IniCacheLoad(&game.config.map_skin, "war3mapSkin.txt"));
     T_STREQ(Theme_PlayerString(&client, "Music", "fallback"), "MapMusicOverride");
 
@@ -211,7 +211,7 @@ TEST(wc3_music, map_skin_overrides_stock_music_skin_fields) {
     T_STREQ(Theme_PlayerString(&client, "VersionedMusic", "fallback"), expected_versioned);
 
     Stb_IniCacheFree(&game.config.map_skin);
-    gi.SetPriorityArchive(NULL);
+    gi.SetPriorityArchive(NULL, NULL);
     SFileCloseArchive(archive);
     gi.MemFree(bytes);
 }
