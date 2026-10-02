@@ -298,8 +298,12 @@ uint32_t ForGroup(jass_t *j) {
         return 0;
     }
     edict_t *previous = currentunit;
-    FOR_LOOP(i, whichGroup->num_units) {
-        currentunit = whichGroup->units[i];
+    groupMember_t members[MAX_GROUP_SIZE];
+    uint32_t count = G_CopyGroupMembers(whichGroup, members);
+    FOR_LOOP(i, count) {
+        edict_t *unit = members[i].unit;
+        if (!unit || !unit->inuse || unit->spawn_time != members[i].spawn_time || G_IsDeferredFree(unit)) continue;
+        currentunit = unit;
         jass_pushfunction(j, callback);
         jass_call(j, 0);
     }

@@ -22,7 +22,7 @@
 #define INF_LOOP_PROTECTION 1000000  /* SC2 Galaxy scripts have large but legitimate loops */
 #define SYNTAX_C_OPERATORS 1 // bitmask; enables Galaxy symbolic logic and shift operators
 #define SYNTAX_INCLUDES    2 // bitmask; enables Galaxy include preprocessing
-#define BZ_JASS_SNAPSHOT_VERSION 6 // format version; persists region trigger context
+#define BZ_JASS_SNAPSHOT_VERSION 7 // format version; persists chat trigger context
 #define BZ_JASS_SNAPSHOT_MAX_COUNT (1u << 20) // records; bounds allocations and list walks from corrupt snapshots
 #define BZ_JASS_SNAPSHOT_MAX_STRING (1u << 20) // bytes; bounds strings from corrupt snapshots
 
@@ -36,6 +36,7 @@ typedef struct {
     handle_t timer;
     handle_t region;
     bool timer_pending;
+    cstring_t chat_text, chat_match;
 } jassTriggerContextParams_t;
 
 #define assert_type(var, type) do { if (!jass_checktype(var, type)) jass_rterror(j, "invalid native argument: expected " #type); } while (0)
@@ -1039,6 +1040,7 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
             .point_y = params->point ? params->point->y : 0.0f,
             .has_point = params->has_point,
             .timer_pending = params->timer_pending,
+            .chat_text = params->chat_text, .chat_match = params->chat_match,
         };
         return jass_host.LuaTriggerEvaluate &&
             jass_host.LuaTriggerEvaluate(params->trigger, &context);
@@ -1052,6 +1054,8 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
         tmp_state.context.unit = params->unit;
         tmp_state.context.source = params->source;
         tmp_state.context.eventValue = params->value;
+        snprintf(tmp_state.context.chat_text, sizeof(tmp_state.context.chat_text), "%s", params->chat_text ? params->chat_text : "");
+        snprintf(tmp_state.context.chat_match, sizeof(tmp_state.context.chat_match), "%s", params->chat_match ? params->chat_match : "");
         tmp_state.context.point = params->point ? *params->point : (vec2_t){ 0.0f, 0.0f };
         tmp_state.context.hasPoint = params->has_point;
         tmp_state.context.playerState = player;
@@ -1124,6 +1128,7 @@ static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t con
             .point_y = params->point ? params->point->y : 0.0f,
             .has_point = params->has_point,
             .timer_pending = params->timer_pending,
+            .chat_text = params->chat_text, .chat_match = params->chat_match,
         };
         if (jass_host.LuaTriggerExecute)
             jass_host.LuaTriggerExecute(params->trigger, &context);
@@ -1131,7 +1136,7 @@ static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t con
     }
     FOR_EACH_LIST(gTriggerAction_t, action, params->trigger->actions) {
         player_t *player = jass_eventplayer(params->unit);
-        jasscoroutine_t *co = jass_startcoroutine(j, &MAKE(jassContext_t,
+        jassContext_t context = MAKE(jassContext_t,
                                   .trigger = params->trigger,
                                   .func = action->func,
                                   .unit = params->unit,
@@ -1145,7 +1150,10 @@ static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t con
                                   .region = params->region,
                                   .timer_generation = params->timer ? ((gtimer_t const *)params->timer)->generation : 0,
                                   .timer_pending = params->timer_pending,
-                              ));
+                              );
+        snprintf(context.chat_text, sizeof(context.chat_text), "%s", params->chat_text ? params->chat_text : "");
+        snprintf(context.chat_match, sizeof(context.chat_match), "%s", params->chat_match ? params->chat_match : "");
+        jasscoroutine_t *co = jass_startcoroutine(j, &context);
         jassVar_t *loop_index = find_global(j, "bj_forLoopAIndex");
         /* Keep queued and suspended actions on the loop index captured at dispatch. */
         if (co && loop_index && loop_index->value && jass_getvarbasetype(loop_index) == jasstype_integer) {
@@ -1195,6 +1203,8 @@ bool jass_calltriggerevent(jass_t *j, trigger_t *trigger, gameEvent_t const *eve
     return jass_calltriggercontext(j, &(jassTriggerContextParams_t){
         .trigger = trigger, .unit = event->edict, .source = event->source, .value = event->value,
         .point = event->has_point ? &event->point : NULL, .has_point = event->has_point,
+        .chat_text = event->type == EVENT_PLAYER_CHAT ? event->chat_text : NULL,
+        .chat_match = event->type == EVENT_PLAYER_CHAT && event->responseTo ? event->responseTo->chat_match : NULL,
         .region = event->responseTo && (event->type == EVENT_GAME_ENTER_REGION || event->type == EVENT_GAME_LEAVE_REGION)
             ? event->responseTo->region : NULL });
 }
@@ -2608,6 +2618,8 @@ static bool jass_snapshot_writecontext(jassSnapshot_t *snapshot, jassContext_t c
         !jass_snapshot_io(snapshot, (void *)&context->eventValue, sizeof(context->eventValue)) ||
         !jass_snapshot_io(snapshot, (void *)&context->point, sizeof(context->point)) ||
         !jass_snapshot_io(snapshot, (void *)&context->hasPoint, sizeof(context->hasPoint)) ||
+        !jass_snapshot_io(snapshot, (void *)context->chat_text, sizeof(context->chat_text)) ||
+        !jass_snapshot_io(snapshot, (void *)context->chat_match, sizeof(context->chat_match)) ||
         !jass_snapshot_io(snapshot, (void *)&context->timer_generation, sizeof(context->timer_generation)) ||
         !jass_snapshot_io(snapshot, (void *)&context->timer_pending, sizeof(context->timer_pending))) return false;
     FOR_LOOP(i, sizeof(handles) / sizeof(*handles))
@@ -2632,9 +2644,13 @@ static bool jass_snapshot_readcontext(jass_t *j, jassSnapshot_t *snapshot, jassC
     if (!jass_snapshot_io(snapshot, &context->eventValue, sizeof(context->eventValue)) ||
         !jass_snapshot_io(snapshot, &context->point, sizeof(context->point)) ||
         !jass_snapshot_io(snapshot, &context->hasPoint, sizeof(context->hasPoint)) ||
+        !jass_snapshot_io(snapshot, context->chat_text, sizeof(context->chat_text)) ||
+        !jass_snapshot_io(snapshot, context->chat_match, sizeof(context->chat_match)) ||
         !jass_snapshot_io(snapshot, &context->timer_generation, sizeof(context->timer_generation)) ||
         !jass_snapshot_io(snapshot, &context->timer_pending, sizeof(context->timer_pending)) ||
-        context->hasPoint > 1 || context->timer_pending > 1) return false;
+        context->hasPoint > 1 || context->timer_pending > 1 ||
+        context->chat_text[sizeof(context->chat_text) - 1] ||
+        context->chat_match[sizeof(context->chat_match) - 1]) return false;
     FOR_LOOP(i, sizeof(handles) / sizeof(*handles)) {
         uint32_t present, id;
         if (!jass_snapshot_io(snapshot, &present, sizeof(present)) || present > 1) return false;

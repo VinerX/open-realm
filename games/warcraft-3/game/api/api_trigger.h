@@ -356,11 +356,21 @@ uint32_t TriggerRegisterPlayerStateEvent(jass_t *j) {
     return jass_pushnullhandle(j, "event");
 }
 uint32_t TriggerRegisterPlayerChatEvent(jass_t *j) {
-    //trigger_t *whichTrigger = jass_checkhandle(j, 1, "trigger");
-    //player_t *whichPlayer = jass_checkhandle(j, 2, "player");
-    //cstring_t chatMessageToDetect = jass_checkstring(j, 3);
-    //bool exactMatchOnly = jass_checkboolean(j, 4);
-    return jass_pushnullhandle(j, "event");
+    trigger_t *trigger = jass_checkhandle(j, 1, "trigger");
+    player_t *player = jass_checkhandle(j, 2, "player");
+    cstring_t match = jass_checkstring(j, 3);
+    event_t *event;
+    if (!trigger || !player || !match || strlen(match) >= sizeof(event->chat_match)) {
+        fprintf(stderr, "TriggerRegisterPlayerChatEvent: invalid arguments\n");
+        return jass_pushnullhandle(j, "event");
+    }
+    event = G_MakeEvent(EVENT_PLAYER_CHAT);
+    if (!event) return jass_pushnullhandle(j, "event");
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->trigger = trigger;
+    snprintf(event->chat_match, sizeof(event->chat_match), "%s", match);
+    event->chat_exact = jass_checkboolean(j, 4);
+    return jass_pushlighthandle(j, G_EventHandle(event), "event");
 }
 uint32_t TriggerRegisterDeathEvent(jass_t *j) {
     /* Fire whichTrigger when whichWidget dies.  "widget" is the base type of

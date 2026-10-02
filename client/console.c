@@ -133,7 +133,26 @@ static void CON_DrawFull(void) {
 void CON_DrawConsole(void) {
     if (cls.key_dest == key_console) {
         CON_DrawFull();
+    } else if (cls.key_dest == key_message) {
+        size2_t window = re.GetWindowSize();
+        float scale = CON_ScaleForWindow(window);
+        char prompt[CON_INPUT_LEN + 16];
+        snprintf(prompt, sizeof(prompt), "Chat: %s_", con_input);
+        float y = window.height * 0.65f;
+        re.DrawFill(&(rect_t){ 0, y, window.width, 24 * scale }, (color32_t){ 0, 0, 0, 200 });
+        CON_DrawString(CON_MARGIN * scale, y + CON_MARGIN * scale, prompt, scale);
     }
+}
+
+void CON_ToggleChat(void) {
+    if (cls.key_dest == key_message) {
+        cls.key_dest = key_game;
+        CL_SetTransientTextInput(CL_WindowTextInputActive());
+    } else if (cls.key_dest == key_game && cls.state == ca_active) {
+        cls.key_dest = key_message;
+        SDL_StartTextInput();
+    } else return;
+    CON_ClearInput();
 }
 
 void CON_ToggleConsole(void) {
@@ -170,10 +189,10 @@ void CON_TextInput(cstring_t text) {
     size_t input_len;
     size_t text_len;
 
-    if (cls.key_dest != key_console || !text || !*text) {
+    if ((cls.key_dest != key_console && cls.key_dest != key_message) || !text || !*text) {
         return;
     }
-    if ((!strcmp(text, "`") || !strcmp(text, "~"))) {
+    if (cls.key_dest == key_console && (!strcmp(text, "`") || !strcmp(text, "~"))) {
         return;
     }
 
@@ -195,6 +214,16 @@ void CON_TextInput(cstring_t text) {
 
 static void CON_Submit(void) {
     char command[CON_INPUT_LEN];
+
+    if (cls.key_dest == key_message) {
+        if (con_input[0]) {
+            char message[CON_INPUT_LEN + 8];
+            snprintf(message, sizeof(message), "say %s", con_input);
+            Cmd_ForwardToServer(message);
+        }
+        CON_ToggleChat();
+        return;
+    }
 
     if (!con_input[0]) {
         return;
@@ -369,7 +398,7 @@ static void CON_CompleteInput(void) {
 void CON_KeyEvent(int key, bool down) {
     SDL_Keymod mod;
 
-    if (cls.key_dest != key_console || !down) {
+    if ((cls.key_dest != key_console && cls.key_dest != key_message) || !down) {
         return;
     }
 
@@ -386,14 +415,15 @@ void CON_KeyEvent(int key, bool down) {
     switch (key) {
         case SDLK_ESCAPE:
         case SDLK_BACKQUOTE:
-            CON_ToggleConsole();
+            if (cls.key_dest == key_message) CON_ToggleChat();
+            else CON_ToggleConsole();
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
             CON_Submit();
             break;
         case SDLK_TAB:
-            CON_CompleteInput();
+            if (cls.key_dest == key_console) CON_CompleteInput();
             break;
         case SDLK_BACKSPACE:
             if (con_cursor > 0) {
@@ -448,3 +478,35 @@ void CON_Init(void) {
     Cmd_AddCommand("toggleconsole", CON_ToggleConsole_f);
     Cmd_AddCommand("clear", CON_Clear_f);
 }
+
+#ifdef BZ_TESTS
+#include "shared/test.h"
+
+TEST(client_chat, sends_opaque_text_and_returns_to_game) {
+    keydest_t old_dest = cls.key_dest;
+    connstate_t old_state = cls.state;
+    sizeBuf_t old_message = cls.netchan.message;
+    uint8_t data[1024];
+    cls.state = ca_active;
+    cls.key_dest = key_game;
+    cls.netchan.message = (sizeBuf_t){ .data = data, .maxsize = sizeof(data) };
+    CON_ToggleChat();
+    T_EQ(cls.key_dest, key_message);
+    CON_TextInput("-kill \"quoted\"; quit  now");
+    CON_KeyEvent(SDLK_RETURN, true);
+    T_EQ(cls.key_dest, key_game);
+    cls.netchan.message.readcount = 0;
+    uint8_t opcode = 0;
+    T_ASSERT(MSG_Read(&cls.netchan.message, &opcode, 1));
+    T_EQ(opcode, clc_stringcmd);
+    T_ASSERT(!strcmp(MSG_ReadString2(&cls.netchan.message), "say -kill \"quoted\"; quit  now"));
+    CON_ToggleChat();
+    CON_TextInput("discard");
+    CON_KeyEvent(SDLK_ESCAPE, true);
+    T_EQ(cls.key_dest, key_game);
+    T_EQ(con_cursor, 0);
+    cls.netchan.message = old_message;
+    cls.key_dest = old_dest;
+    cls.state = old_state;
+}
+#endif

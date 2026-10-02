@@ -869,6 +869,7 @@ typedef struct gameevent_s {
     vec2_t point;
     bool has_point;
     event_t *responseTo;
+    char chat_text[256];
 } gameEvent_t;
 
 typedef struct {
@@ -956,6 +957,11 @@ typedef struct {
     edict_t *units[MAX_GROUP_SIZE];
     uint32_t num_units;
 } ggroup_t;
+
+typedef struct {
+    edict_t *unit;
+    uint32_t spawn_time;
+} groupMember_t;
 
 typedef bool (*groupUnitFilter_t)(edict_t *ent, void *context);
 
@@ -1761,6 +1767,8 @@ struct gevent_s {
     uint32_t limitop;
     float limitval;
     cstring_t variable;
+    char chat_match[256];
+    bool chat_exact;
     bool inuse;
     uint32_t handle_generation;
     uint8_t generation_exhausted;
@@ -2281,6 +2289,7 @@ handle_t G_LoadJassHandle(cstring_t type, uint32_t id);
 ggroup_t *G_AllocJassGroup(void);
 bool G_EnsureJassGroupSlots(uint32_t count);
 bool G_JassGroupValid(ggroup_t const *group);
+uint32_t G_CopyGroupMembers(ggroup_t const *group, groupMember_t *members);
 bool G_AddUnitToGroup(ggroup_t *group, edict_t *ent);
 void G_EnumUnitsOfPlayer(ggroup_t *group, player_t *player, groupUnitFilter_t filter, void *context);
 bool G_GetCameraMargin(int32_t which, float *margin);

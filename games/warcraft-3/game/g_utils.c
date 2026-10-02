@@ -252,6 +252,15 @@ bool G_JassGroupValid(ggroup_t const *group) {
     return G_JassGroupIndex(group, NULL) && group->inuse;
 }
 
+uint32_t G_CopyGroupMembers(ggroup_t const *group, groupMember_t *members) {
+    if (!G_JassGroupValid(group)) return 0;
+    FOR_LOOP(i, group->num_units) {
+        members[i].unit = group->units[i];
+        members[i].spawn_time = group->units[i] ? group->units[i]->spawn_time : 0;
+    }
+    return group->num_units;
+}
+
 bool G_AddUnitToGroup(ggroup_t *group, edict_t *ent) {
     if (!G_JassGroupValid(group) || !ent || group->num_units >= MAX_GROUP_SIZE) return false;
     FOR_LOOP(i, group->num_units) if (group->units[i] == ent) return false;

@@ -119,6 +119,14 @@ static void G_ExecuteEvent(gameEvent_t *evt) {
     FOR_EACH_EVENT(e) {
         if (!G_EventSubjectIsCurrent(e)) continue;
         switch (e->type) {
+            case EVENT_PLAYER_CHAT:
+                if (evt->type == EVENT_PLAYER_CHAT && e->subject == subject &&
+                    (e->chat_exact ? !strcmp(evt->chat_text, e->chat_match) : strstr(evt->chat_text, e->chat_match) != NULL)) {
+                    gameEvent_t chat = *evt;
+                    chat.responseTo = e;
+                    jass_calltriggerevent(level.vm, e->trigger, &chat);
+                }
+                break;
             case EVENT_GAME_VICTORY:
                 break;
             case EVENT_GAME_END_LEVEL:

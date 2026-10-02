@@ -184,6 +184,10 @@ The loose map may also live outside the Warcraft III data tree. Its parent
 folder is mounted as `extra_data`, while `--data` remains the CASC game
 installation. For example:
 
+For current Legion archives, native coverage gaps, and init/cleanup verification,
+see [Legion native coverage](legion-native-coverage.md). The old unversioned
+archive in historical commands below predates the current map-source fix.
+
 ```powershell
 make audit-wc3-maps WC3DATA='E:\Games\Warcraft III' WC3_AUDIT_ARGS='--jobs 1 --frames 600 --timeout 180 --loose-map "C:\Development\Warcraft 3\23-Race-Legion\23-Race-Legion.w3x" --output-dir build/wc3-map-audit-23-race'
 ```

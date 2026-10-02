@@ -27,6 +27,7 @@ typedef struct jassTriggerContext_s {
     float point_x, point_y;
     bool has_point;
     bool timer_pending;
+    cstring_t chat_text, chat_match;
 } jassTriggerContext_t;
 
 struct jass_module {

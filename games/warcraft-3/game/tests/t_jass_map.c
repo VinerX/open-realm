@@ -94,6 +94,47 @@ static void cheat_console_capture_reset(void) {
  * Shared JASS/list lexer regressions
  * ========================================================================= */
 
+TEST(wc3_jass_map, for_group_removes_every_member) {
+    setup_test_world();
+    T_ASSERT(run_test_jass(
+        "globals\ngroup cleanupGroup = null\ninteger removedCount = 0\nendglobals\n"
+        "function RemoveMember takes nothing returns nothing\n"
+        "set removedCount = removedCount + 1\ncall RemoveUnit(GetEnumUnit())\nendfunction\n"
+        "function main takes nothing returns nothing\n"
+        "local integer i = 0\nset cleanupGroup = CreateGroup()\nloop\nexitwhen i == 4\n"
+        "call GroupAddUnit(cleanupGroup, CreateUnit(Player(0), 'hfoo', I2R(i*32), 32.0, 0.0))\n"
+        "set i = i + 1\nendloop\ncall ForGroup(cleanupGroup, function RemoveMember)\n"
+        "call BJassAssert(removedCount == 4, \"all members removed\")\n"
+        "call BJassAssert(FirstOfGroup(cleanupGroup) == null, \"group empty\")\nendfunction\n"));
+}
+
+TEST(wc3_jass_map, chat_callbacks_retain_queued_text) {
+    T_ASSERT(run_test_jass(
+        "globals\ninteger chatCount = 0\nendglobals\n"
+        "function OnChat takes nothing returns nothing\n"
+        "call BJassAssert(GetTriggerPlayer() == Player(0), \"chat player\")\n"
+        "call BJassAssert(GetEventPlayerChatStringMatched() == \"-x\", \"chat match\")\n"
+        "if chatCount == 0 then\n"
+        "call BJassAssert(GetEventPlayerChatString() == \"first -x\", \"first chat retained\")\n"
+        "else\n"
+        "call BJassAssert(GetEventPlayerChatString() == \"second -x\", \"second chat retained\")\n"
+        "endif\nset chatCount = chatCount + 1\nendfunction\n"
+        "function main takes nothing returns nothing\n"
+        "local trigger t = CreateTrigger()\n"
+        "call TriggerRegisterPlayerChatEvent(t, Player(0), \"-x\", false)\n"
+        "call TriggerAddAction(t, function OnChat)\nendfunction\n"
+        "function CheckChat takes nothing returns nothing\n"
+        "call BJassAssert(chatCount == 2, \"two queued messages\")\nendfunction\n"));
+    cstring_t first[] = { "say", "first -x" }, second[] = { "say", "second -x" };
+    G_ClientCommand(G_GetPlayerEntityByNumber(0), 2, first);
+    G_ClientCommand(G_GetPlayerEntityByNumber(0), 2, second);
+    G_RunEvents();
+    jass_runevents(level.vm);
+    jass_callbyname(level.vm, "CheckChat", true);
+    jass_runevents(level.vm);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
+
 TEST(wc3_jass_map, parse_segment_quoted_single_value_stops_at_end) {
     wordExtractor_t parser = {
         .buffer = "\"Learn Holy Light - [Level %d]\"",

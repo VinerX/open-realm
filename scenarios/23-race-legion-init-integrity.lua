@@ -18,6 +18,7 @@ local REQUIRED_TRIGGERS = {
   'gg_trg_Unit_Indexer', 'gg_trg_InitForEconomics', 'gg_trg_UnitUpgraded',
   'gg_trg_MainInfo', 'gg_trg_Initial_things', 'gg_trg_Init',
   'gg_trg_InitGlobals', 'gg_trg_Owner', 'gg_trg_PortalFix',
+  'gg_trg_KillTestUnits___OFF_ME',
 }
 
 -- Globals the deferred steps populate and later systems read.
@@ -60,5 +61,15 @@ function scenario_step(frame)
     end
   end
 
+  if gg_rct_TestRegion == nil then
+    return 'FAIL: test-unit cleanup region was never created'
+  end
+  local group = CreateGroup()
+  GroupEnumUnitsInRect(group, gg_rct_TestRegion, nil)
+  local remaining = BlzGroupGetSize(group)
+  DestroyGroup(group)
+  if remaining ~= 0 then
+    return 'FAIL: test-unit cleanup left ' .. tostring(remaining) .. ' units in TestRegion'
+  end
   return 'PASS'
 end

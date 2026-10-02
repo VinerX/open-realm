@@ -234,6 +234,7 @@ void CON_DrawConsole(void);
 void CON_printf(cstring_t fmt, ...);
 void CON_Init(void);
 void CON_ToggleConsole(void);
+void CON_ToggleChat(void);
 void CON_TextInput(cstring_t text);
 void CON_KeyEvent(int key, bool down);
 

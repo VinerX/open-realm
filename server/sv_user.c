@@ -159,6 +159,12 @@ void SV_ExecuteUserCommand(sizeBuf_t *msg, client_t *client) {
     static cstring_t argv[MAX_CMDARGS];
     uint32_t argc = 0;
     cstring_t command = MSG_ReadString2(msg);
+    /* Chat is opaque text, including quotes, semicolons and repeated spaces. */
+    if (!strncmp(command, "say ", 4)) {
+        cstring_t chat_args[] = { "say", command + 4 };
+        if (client->edict) ge->ClientCommand(client->edict, 2, chat_args);
+        return;
+    }
     parser_t p = { 0 };
     p.tok = p.token;
     p.str = command;

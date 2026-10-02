@@ -457,22 +457,23 @@ static int LuaTriggerRegisterDeathEvent(lua_State *L) {
     return 1;
 }
 
-/* Chat events are not routed by the headless server (there is no human
- * chatter), but the map's diagnostic triggers must still register cleanly.
- * Return a real event handle so the registration graph stays well-formed. */
 static int LuaTriggerRegisterPlayerChatEvent(lua_State *L) {
     trigger_t *trigger = lua_touserdata(L, 1);
     player_t *player = lua_touserdata(L, 2);
     event_t *event;
 
-    (void)luaL_checkstring(L, 3);
-    (void)lua_toboolean(L, 4);
+    cstring_t match = luaL_checkstring(L, 3);
+    bool exact = lua_toboolean(L, 4);
+    if (strlen(match) >= sizeof(event->chat_match))
+        return luaL_error(L, "TriggerRegisterPlayerChatEvent: match string too long");
     if (!trigger || trigger->lua_vm != level.lua_vm || !player)
         return luaL_error(L, "TriggerRegisterPlayerChatEvent: invalid trigger or player");
     event = G_MakeEvent(EVENT_PLAYER_CHAT);
     if (!event) return luaL_error(L, "TriggerRegisterPlayerChatEvent: event registry is full");
     G_SetPlayerEventSubject(event, PLAYER_ENT(player));
     event->trigger = trigger;
+    snprintf(event->chat_match, sizeof(event->chat_match), "%s", match);
+    event->chat_exact = exact;
     lua_pushlightuserdata(L, G_EventHandle(event));
     return 1;
 }
@@ -587,6 +588,18 @@ static int LuaRegionAddRect(lua_State *L) {
     }
     region->rects[region->num_rects++] = *rect;
     return 0;
+}
+
+static int LuaGetEventPlayerChatString(lua_State *L) {
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushstring(L, context.chat_text);
+    return 1;
+}
+
+static int LuaGetEventPlayerChatStringMatched(lua_State *L) {
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushstring(L, context.chat_match);
+    return 1;
 }
 
 static int LuaGetTriggerPlayer(lua_State *L) {
@@ -946,7 +959,7 @@ bool G_LuaTimerExpired(gtimer_t *timer) {
 }
 
 static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t const *context) {
-    return (wc3LuaTriggerContext_t){
+    wc3LuaTriggerContext_t result = {
         .trigger = context ? context->trigger : NULL,
         .unit = context ? context->unit : NULL,
         .source = context ? context->source : NULL,
@@ -957,6 +970,9 @@ static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t con
         .point_y = context ? context->point_y : 0.0f,
         .has_point = context ? context->has_point : false,
     };
+    snprintf(result.chat_text, sizeof(result.chat_text), "%s", context && context->chat_text ? context->chat_text : "");
+    snprintf(result.chat_match, sizeof(result.chat_match), "%s", context && context->chat_match ? context->chat_match : "");
+    return result;
 }
 
 bool G_LuaTriggerEvaluateHost(handle_t handle, jassTriggerContext_t const *context) {
@@ -2091,6 +2107,7 @@ static int LuaFirstOfGroup(lua_State *L) {
  * GetEnumUnit(), mirroring the JASS ForGroup/currentunit pair. */
 static int LuaForGroup(lua_State *L) {
     ggroup_t *group = lua_touserdata(L, 1);
+    groupMember_t members[MAX_GROUP_SIZE];
     void *previous;
     uint32_t index;
 
@@ -2102,8 +2119,11 @@ static int LuaForGroup(lua_State *L) {
         if (reference == LUA_NOREF || reference == LUA_REFNIL)
             return luaL_error(L, "ForGroup: could not retain callback");
         previous = WC3_LuaEnumUnit(level.lua_vm);
-        for (index = 0; index < group->num_units; ++index) {
-            WC3_LuaSetEnumUnit(level.lua_vm, group->units[index]);
+        uint32_t count = G_CopyGroupMembers(group, members);
+        for (index = 0; index < count; ++index) {
+            edict_t *unit = members[index].unit;
+            if (!unit || !unit->inuse || unit->spawn_time != members[index].spawn_time || G_IsDeferredFree(unit)) continue;
+            WC3_LuaSetEnumUnit(level.lua_vm, unit);
             if (!WC3_LuaCallRef(level.lua_vm, reference)) {
                 char error[512];
                 strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
@@ -2359,6 +2379,12 @@ static int LuaCreateItem(lua_State *L) {
     }
     item = SP_SpawnAtLocation((uint32_t)itemid, 0, &MAKE(vec2_t, x, y));
     if (item) lua_pushlightuserdata(L, item); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetItemTypeId(lua_State *L) {
+    edict_t *item = lua_touserdata(L, 1);
+    lua_pushinteger(L, item ? (int32_t)item->class_id : 0);
     return 1;
 }
 
@@ -2775,6 +2801,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetSpellTargetY", LuaGetSpellTargetY);
     WC3_LuaRegisterNative(L, "GetSpellTargetLoc", LuaGetSpellTargetLoc);
     WC3_LuaRegisterNative(L, "GetTriggerPlayer", LuaGetTriggerPlayer);
+    WC3_LuaRegisterNative(L, "GetEventPlayerChatString", LuaGetEventPlayerChatString);
+    WC3_LuaRegisterNative(L, "GetEventPlayerChatStringMatched", LuaGetEventPlayerChatStringMatched);
     WC3_LuaRegisterNative(L, "GetLocalPlayer", LuaGetLocalPlayer);
     WC3_LuaRegisterNative(L, "GetPlayerId", LuaGetPlayerId);
     WC3_LuaRegisterNative(L, "BlzGetPlayerTownHallCount", LuaBlzGetPlayerTownHallCount);
@@ -2978,6 +3006,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetGameSpeed", LuaSetGameSpeed);
     WC3_LuaRegisterNative(L, "SetMapFlag", LuaSetMapFlag);
     WC3_LuaRegisterNative(L, "CreateItem", LuaCreateItem);
+    WC3_LuaRegisterNative(L, "GetItemTypeId", LuaGetItemTypeId);
     WC3_LuaRegisterNative(L, "RemoveItem", LuaRemoveItem);
     WC3_LuaRegisterNative(L, "UnitItemInSlot", LuaUnitItemInSlot);
     WC3_LuaRegisterNative(L, "AddSpecialEffect", LuaAddSpecialEffect);

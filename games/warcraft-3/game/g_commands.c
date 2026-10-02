@@ -2796,7 +2796,31 @@ static void CMD_UICanvas(edict_t *ent, uint32_t argc, cstring_t argv[]) {
     ent->client->canvas = (UICANVASCLASS)value;
 }
 
+static void CMD_Say(edict_t *ent, uint32_t argc, cstring_t argv[]) {
+    char text[256] = "";
+    size_t length = 0;
+    for (uint32_t i = 1; i < argc; i++) {
+        size_t n = strlen(argv[i]);
+        if (length + n + (i > 1) >= sizeof(text)) {
+            fprintf(stderr, "say: message exceeds %u bytes\n", (unsigned)sizeof(text) - 1);
+            return;
+        }
+        if (i > 1) text[length++] = ' ';
+        memcpy(text + length, argv[i], n + 1);
+        length += n;
+    }
+    if (!length) return;
+    gameEvent_t *event = G_PublishEvent(ent, EVENT_PLAYER_CHAT);
+    if (event) memcpy(event->chat_text, text, length + 1);
+    FOR_LOOP(i, game.max_clients) {
+        edict_t *player = G_GetPlayerEntityByNumber(i);
+        if (player && player->client && player->client->connected)
+            UI_ShowTransientText(player, NULL, text, 8.0f);
+    }
+}
+
 clientCommand_t clientCommands[] = {
+    { "say", CMD_Say },
     { "give", CMD_Give },
     { "god", CMD_God },
     { "kill", CMD_Kill },

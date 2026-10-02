@@ -784,10 +784,10 @@ uint32_t GetEventPlayerState(jass_t *j) {
     return jass_pushnullhandle(j, "playerstate");
 }
 uint32_t GetEventPlayerChatString(jass_t *j) {
-    return jass_pushstring(j, 0);
+    return jass_pushstring(j, jass_getcontext(j)->chat_text);
 }
 uint32_t GetEventPlayerChatStringMatched(jass_t *j) {
-    return jass_pushstring(j, 0);
+    return jass_pushstring(j, jass_getcontext(j)->chat_match);
 }
 uint32_t GetEventUnitState(jass_t *j) {
     return jass_pushnullhandle(j, "unitstate");

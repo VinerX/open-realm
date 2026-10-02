@@ -1,0 +1,2438 @@
+{
+  "map": "23_Race_Legion_v1_6_508.w3x",
+  "script_sha256": "8219651F185EA63B1A19FA0553B4167AE855D686C7572DF57BD6BEB8B2FD4478",
+  "declarations_source": "HiveWE/data/tools/common.j",
+  "scope": "Static native references in map Lua; excludes transitive Blizzard.j and dynamic calls. Binding present is not behavior verification.",
+  "natives": [
+    {
+      "name": "AddLightning",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaAddLightning"
+    },
+    {
+      "name": "AddSpecialEffect",
+      "references": 18,
+      "status": "binding_present",
+      "binding": "LuaAddSpecialEffect"
+    },
+    {
+      "name": "AddSpecialEffectTarget",
+      "references": 9,
+      "status": "binding_present",
+      "binding": "LuaAddSpecialEffectTarget"
+    },
+    {
+      "name": "AddUnitAnimationProperties",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "AddUnitToStock",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "AddWeatherEffect",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaAddWeatherEffect"
+    },
+    {
+      "name": "Atan2",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "AttachSoundToUnit",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaAttachSoundToUnit"
+    },
+    {
+      "name": "BlzCreateFrame",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzCreateFrameByType",
+      "references": 6,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzCreateUnitWithSkin",
+      "references": 621,
+      "status": "binding_present",
+      "binding": "LuaBlzCreateUnitWithSkin"
+    },
+    {
+      "name": "BlzEnableSelections",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzEndUnitAbilityCooldown",
+      "references": 11,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameClearAllPoints",
+      "references": 15,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameGetChild",
+      "references": 3,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetAbsPoint",
+      "references": 27,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetAllPoints",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetEnable",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetLevel",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetPoint",
+      "references": 10,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetScale",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetSize",
+      "references": 4,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetText",
+      "references": 11,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetTextAlignment",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetTexture",
+      "references": 11,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetTooltip",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzFrameSetVisible",
+      "references": 8,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetAbilityTooltip",
+      "references": 5,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetEventAttackType",
+      "references": 6,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetEventDamageTarget",
+      "references": 12,
+      "status": "binding_present",
+      "binding": "LuaBlzGetEventDamageTarget"
+    },
+    {
+      "name": "BlzGetFrameByName",
+      "references": 31,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetOriginFrame",
+      "references": 5,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetTriggerPlayerMouseButton",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetTriggerPlayerMousePosition",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetTriggerSyncData",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaBlzGetTriggerSyncData"
+    },
+    {
+      "name": "BlzGetUnitAbilityCooldown",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitAbilityCooldownRemaining",
+      "references": 16,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitArmor",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitBaseDamage",
+      "references": 4,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitBooleanField",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitMaxHP",
+      "references": 13,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitMaxMana",
+      "references": 3,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitRealField",
+      "references": 2,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitStringField",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitWeaponBooleanField",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGetUnitWeaponIntegerField",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzGroupGetSize",
+      "references": 88,
+      "status": "binding_present",
+      "binding": "LuaBlzGroupGetSize"
+    },
+    {
+      "name": "BlzGroupUnitAt",
+      "references": 96,
+      "status": "binding_present",
+      "binding": "LuaBlzGroupUnitAt"
+    },
+    {
+      "name": "BlzIsUnitInvulnerable",
+      "references": 2,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzLoadTOCFile",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzPlaySpecialEffect",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetAbilityTooltip",
+      "references": 3,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetEventDamage",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetSpecialEffectColor",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetSpecialEffectScale",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetSpecialEffectTime",
+      "references": 2,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetUnitArmor",
+      "references": 5,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetUnitBaseDamage",
+      "references": 2,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetUnitMaxHP",
+      "references": 10,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetUnitMaxMana",
+      "references": 3,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzSetUnitName",
+      "references": 9,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzStartUnitAbilityCooldown",
+      "references": 60,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzTriggerRegisterPlayerSyncEvent",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzUnitCancelTimedLife",
+      "references": 2,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzUnitDisableAbility",
+      "references": 20,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzUnitHideAbility",
+      "references": 14,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "BlzUnitInterruptAttack",
+      "references": 1,
+      "status": "stub",
+      "binding": "LuaBlzUnsupported"
+    },
+    {
+      "name": "CameraSetupSetDestPosition",
+      "references": 7,
+      "status": "binding_present",
+      "binding": "LuaCameraSetupSetDestPosition"
+    },
+    {
+      "name": "CameraSetupSetField",
+      "references": 77,
+      "status": "binding_present",
+      "binding": "LuaCameraSetupSetField"
+    },
+    {
+      "name": "Condition",
+      "references": 835,
+      "status": "binding_present",
+      "binding": "LuaCondition"
+    },
+    {
+      "name": "ConvertPlayerColor",
+      "references": 129,
+      "status": "binding_present",
+      "binding": "LuaConvertPlayerColor"
+    },
+    {
+      "name": "ConvertUnitBooleanField",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaConvertEnum"
+    },
+    {
+      "name": "Cos",
+      "references": 14,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "CreateBlightedGoldmine",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "CreateCameraSetup",
+      "references": 7,
+      "status": "binding_present",
+      "binding": "LuaCreateCameraSetup"
+    },
+    {
+      "name": "CreateForce",
+      "references": 13,
+      "status": "binding_present",
+      "binding": "LuaCreateForce"
+    },
+    {
+      "name": "CreateGroup",
+      "references": 170,
+      "status": "binding_present",
+      "binding": "LuaCreateGroup"
+    },
+    {
+      "name": "CreateItem",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaCreateItem"
+    },
+    {
+      "name": "CreateLeaderboard",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "CreateMultiboard",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "CreateRegion",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaCreateRegion"
+    },
+    {
+      "name": "CreateSound",
+      "references": 4,
+      "status": "binding_present",
+      "binding": "LuaCreateSound"
+    },
+    {
+      "name": "CreateTextTag",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "CreateTimer",
+      "references": 74,
+      "status": "binding_present",
+      "binding": "LuaCreateTimer"
+    },
+    {
+      "name": "CreateTrigger",
+      "references": 1275,
+      "status": "binding_present",
+      "binding": "LuaCreateTrigger"
+    },
+    {
+      "name": "CreateUnit",
+      "references": 46,
+      "status": "binding_present",
+      "binding": "LuaCreateUnit"
+    },
+    {
+      "name": "CreateUnitAtLoc",
+      "references": 30,
+      "status": "binding_present",
+      "binding": "LuaCreateUnitAtLoc"
+    },
+    {
+      "name": "DefineStartLocation",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaDefineStartLocation"
+    },
+    {
+      "name": "DestroyBoolExpr",
+      "references": 13,
+      "status": "binding_present",
+      "binding": "LuaDestroyBoolExpr"
+    },
+    {
+      "name": "DestroyEffect",
+      "references": 23,
+      "status": "binding_present",
+      "binding": "LuaDestroyEffect"
+    },
+    {
+      "name": "DestroyFogModifier",
+      "references": 21,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "DestroyForce",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaDestroyForce"
+    },
+    {
+      "name": "DestroyGroup",
+      "references": 94,
+      "status": "binding_present",
+      "binding": "LuaDestroyGroup"
+    },
+    {
+      "name": "DestroyLightning",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "DestroyTextTag",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "DestroyTimer",
+      "references": 47,
+      "status": "binding_present",
+      "binding": "LuaDestroyTimer"
+    },
+    {
+      "name": "DestroyTrigger",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "DisableTrigger",
+      "references": 302,
+      "status": "binding_present",
+      "binding": "LuaDisableTrigger"
+    },
+    {
+      "name": "DisplayTextToPlayer",
+      "references": 32,
+      "status": "binding_present",
+      "binding": "LuaDisplayTextToPlayer"
+    },
+    {
+      "name": "DisplayTimedTextFromPlayer",
+      "references": 23,
+      "status": "binding_present",
+      "binding": "LuaDisplayTimedTextFromPlayer"
+    },
+    {
+      "name": "DisplayTimedTextToPlayer",
+      "references": 41,
+      "status": "binding_present",
+      "binding": "LuaDisplayTimedTextToPlayer"
+    },
+    {
+      "name": "EnableTrigger",
+      "references": 408,
+      "status": "binding_present",
+      "binding": "LuaEnableTrigger"
+    },
+    {
+      "name": "EnableWeatherEffect",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaEnableWeatherEffect"
+    },
+    {
+      "name": "EnumDestructablesInRect",
+      "references": 5,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "EnumItemsInRect",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "ExecuteFunc",
+      "references": 5,
+      "status": "binding_present",
+      "binding": "LuaExecuteFunc"
+    },
+    {
+      "name": "Filter",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaFilter"
+    },
+    {
+      "name": "FirstOfGroup",
+      "references": 77,
+      "status": "binding_present",
+      "binding": "LuaFirstOfGroup"
+    },
+    {
+      "name": "FogModifierStop",
+      "references": 21,
+      "status": "binding_present",
+      "binding": "LuaFogModifierStop"
+    },
+    {
+      "name": "ForceAddPlayer",
+      "references": 13,
+      "status": "binding_present",
+      "binding": "LuaForceAddPlayer"
+    },
+    {
+      "name": "ForceClear",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaForceClear"
+    },
+    {
+      "name": "ForceEnumAllies",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "ForcePlayerStartLocation",
+      "references": 23,
+      "status": "binding_present",
+      "binding": "LuaForcePlayerStartLocation"
+    },
+    {
+      "name": "ForceRemovePlayer",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaForceRemovePlayer"
+    },
+    {
+      "name": "ForForce",
+      "references": 95,
+      "status": "binding_present",
+      "binding": "LuaForForce"
+    },
+    {
+      "name": "ForGroup",
+      "references": 37,
+      "status": "binding_present",
+      "binding": "LuaForGroup"
+    },
+    {
+      "name": "GetAttacker",
+      "references": 89,
+      "status": "binding_present",
+      "binding": "LuaGetAttacker"
+    },
+    {
+      "name": "GetCameraMargin",
+      "references": 8,
+      "status": "binding_present",
+      "binding": "LuaGetCameraMargin"
+    },
+    {
+      "name": "GetCancelledStructure",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetChangingUnit",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetChangingUnitPrevOwner",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetConstructedStructure",
+      "references": 23,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetConstructingStructure",
+      "references": 11,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetDestructableLife",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetDestructableTypeId",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetDestructableX",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetDestructableY",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetDyingUnit",
+      "references": 9,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetEnteringUnit",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetEnumDestructable",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetEnumPlayer",
+      "references": 375,
+      "status": "binding_present",
+      "binding": "LuaGetEnumPlayer"
+    },
+    {
+      "name": "GetEnumUnit",
+      "references": 216,
+      "status": "binding_present",
+      "binding": "LuaGetEnumUnit"
+    },
+    {
+      "name": "GetEventDamage",
+      "references": 18,
+      "status": "binding_present",
+      "binding": "LuaGetEventDamage"
+    },
+    {
+      "name": "GetEventDamageSource",
+      "references": 92,
+      "status": "binding_present",
+      "binding": "LuaGetEventDamageSource"
+    },
+    {
+      "name": "GetEventPlayerChatString",
+      "references": 31,
+      "status": "binding_present",
+      "binding": "LuaGetEventPlayerChatString"
+    },
+    {
+      "name": "GetEventTargetUnit",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetExpiredTimer",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetExpiredTimer"
+    },
+    {
+      "name": "GetFilterPlayer",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetFilterPlayer"
+    },
+    {
+      "name": "GetFilterUnit",
+      "references": 179,
+      "status": "binding_present",
+      "binding": "LuaGetFilterUnit"
+    },
+    {
+      "name": "GetHandleId",
+      "references": 74,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetHeroAgi",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaGetHeroAgi"
+    },
+    {
+      "name": "GetHeroLevel",
+      "references": 38,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetHeroStr",
+      "references": 5,
+      "status": "binding_present",
+      "binding": "LuaGetHeroStr"
+    },
+    {
+      "name": "GetHeroXP",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetItemTypeId",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaGetItemTypeId"
+    },
+    {
+      "name": "GetKillingUnit",
+      "references": 25,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetLearnedSkill",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetLearnedSkillLevel",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetLearningUnit",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetLocalPlayer",
+      "references": 5,
+      "status": "binding_present",
+      "binding": "LuaGetLocalPlayer"
+    },
+    {
+      "name": "GetLocationX",
+      "references": 10,
+      "status": "binding_present",
+      "binding": "LuaGetLocationX"
+    },
+    {
+      "name": "GetLocationY",
+      "references": 10,
+      "status": "binding_present",
+      "binding": "LuaGetLocationY"
+    },
+    {
+      "name": "GetLocationZ",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetManipulatedItem",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetOrderedUnit",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetOrderTargetUnit",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetOwningPlayer",
+      "references": 1727,
+      "status": "binding_present",
+      "binding": "LuaGetOwningPlayer"
+    },
+    {
+      "name": "GetPlayerAlliance",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetPlayerColor",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerColor"
+    },
+    {
+      "name": "GetPlayerController",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerController"
+    },
+    {
+      "name": "GetPlayerId",
+      "references": 314,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerId"
+    },
+    {
+      "name": "GetPlayerName",
+      "references": 48,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerName"
+    },
+    {
+      "name": "GetPlayerSlotState",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerSlotState"
+    },
+    {
+      "name": "GetPlayerState",
+      "references": 36,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerState"
+    },
+    {
+      "name": "GetPlayerTechCount",
+      "references": 186,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerTechCount"
+    },
+    {
+      "name": "GetPlayerTechMaxAllowed",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerTechMaxAllowed"
+    },
+    {
+      "name": "GetPlayerTechResearched",
+      "references": 11,
+      "status": "binding_present",
+      "binding": "LuaGetPlayerTechResearched"
+    },
+    {
+      "name": "GetRandomInt",
+      "references": 203,
+      "status": "binding_present",
+      "binding": "LuaGetRandomInt"
+    },
+    {
+      "name": "GetRandomReal",
+      "references": 17,
+      "status": "binding_present",
+      "binding": "LuaGetRandomReal"
+    },
+    {
+      "name": "GetRectCenterX",
+      "references": 71,
+      "status": "binding_present",
+      "binding": "LuaGetRectCenterX"
+    },
+    {
+      "name": "GetRectCenterY",
+      "references": 71,
+      "status": "binding_present",
+      "binding": "LuaGetRectCenterY"
+    },
+    {
+      "name": "GetRectMaxX",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetRectMaxX"
+    },
+    {
+      "name": "GetRectMaxY",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetRectMaxY"
+    },
+    {
+      "name": "GetRectMinX",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetRectMinX"
+    },
+    {
+      "name": "GetRectMinY",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetRectMinY"
+    },
+    {
+      "name": "GetResearched",
+      "references": 418,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetResourceAmount",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetRevivableUnit",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetRevivingUnit",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetSellingUnit",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetSoldUnit",
+      "references": 33,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetSpellAbilityId",
+      "references": 366,
+      "status": "binding_present",
+      "binding": "LuaGetSpellAbilityId"
+    },
+    {
+      "name": "GetSpellAbilityUnit",
+      "references": 94,
+      "status": "binding_present",
+      "binding": "LuaGetSpellAbilityUnit"
+    },
+    {
+      "name": "GetSpellTargetLoc",
+      "references": 47,
+      "status": "binding_present",
+      "binding": "LuaGetSpellTargetLoc"
+    },
+    {
+      "name": "GetSpellTargetUnit",
+      "references": 84,
+      "status": "binding_present",
+      "binding": "LuaGetSpellTargetUnit"
+    },
+    {
+      "name": "GetSpellTargetX",
+      "references": 22,
+      "status": "binding_present",
+      "binding": "LuaGetSpellTargetX"
+    },
+    {
+      "name": "GetSpellTargetY",
+      "references": 22,
+      "status": "binding_present",
+      "binding": "LuaGetSpellTargetY"
+    },
+    {
+      "name": "GetSummonedUnit",
+      "references": 14,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetSummoningUnit",
+      "references": 5,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetTrainedUnit",
+      "references": 172,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetTrainedUnitType",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetTriggerEventId",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetTriggeringTrigger",
+      "references": 31,
+      "status": "binding_present",
+      "binding": "LuaGetTriggeringTrigger"
+    },
+    {
+      "name": "GetTriggerPlayer",
+      "references": 117,
+      "status": "binding_present",
+      "binding": "LuaGetTriggerPlayer"
+    },
+    {
+      "name": "GetTriggerUnit",
+      "references": 2667,
+      "status": "binding_present",
+      "binding": "LuaGetTriggerUnit"
+    },
+    {
+      "name": "GetUnitAbilityLevel",
+      "references": 260,
+      "status": "binding_present",
+      "binding": "LuaGetUnitAbilityLevel"
+    },
+    {
+      "name": "GetUnitCurrentOrder",
+      "references": 20,
+      "status": "binding_present",
+      "binding": "LuaGetUnitCurrentOrder"
+    },
+    {
+      "name": "GetUnitDefaultFlyHeight",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitDefaultMoveSpeed",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitFacing",
+      "references": 9,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitFlyHeight",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitFoodMade",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitLevel",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitLoc",
+      "references": 141,
+      "status": "binding_present",
+      "binding": "LuaGetUnitLoc"
+    },
+    {
+      "name": "GetUnitName",
+      "references": 10,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitRallyDestructable",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitRallyPoint",
+      "references": 38,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetUnitState",
+      "references": 143,
+      "status": "binding_present",
+      "binding": "LuaGetUnitState"
+    },
+    {
+      "name": "GetUnitTypeId",
+      "references": 361,
+      "status": "binding_present",
+      "binding": "LuaGetUnitTypeId"
+    },
+    {
+      "name": "GetUnitUserData",
+      "references": 34,
+      "status": "binding_present",
+      "binding": "LuaGetUnitUserData"
+    },
+    {
+      "name": "GetUnitX",
+      "references": 186,
+      "status": "binding_present",
+      "binding": "LuaGetUnitX"
+    },
+    {
+      "name": "GetUnitY",
+      "references": 190,
+      "status": "binding_present",
+      "binding": "LuaGetUnitY"
+    },
+    {
+      "name": "GetWidgetLife",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetWidgetX",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetWidgetY",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GetWorldBounds",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaGetWorldBounds"
+    },
+    {
+      "name": "GroupAddUnit",
+      "references": 179,
+      "status": "binding_present",
+      "binding": "LuaGroupAddUnit"
+    },
+    {
+      "name": "GroupClear",
+      "references": 116,
+      "status": "binding_present",
+      "binding": "LuaGroupClear"
+    },
+    {
+      "name": "GroupEnumUnitsInRange",
+      "references": 41,
+      "status": "binding_present",
+      "binding": "LuaGroupEnumUnitsInRange"
+    },
+    {
+      "name": "GroupEnumUnitsInRangeCounted",
+      "references": 7,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupEnumUnitsInRangeOfLoc",
+      "references": 22,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupEnumUnitsInRangeOfLocCounted",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupEnumUnitsInRect",
+      "references": 18,
+      "status": "binding_present",
+      "binding": "LuaGroupEnumUnitsInRect"
+    },
+    {
+      "name": "GroupEnumUnitsOfPlayer",
+      "references": 73,
+      "status": "binding_present",
+      "binding": "LuaGroupEnumUnitsOfPlayer"
+    },
+    {
+      "name": "GroupEnumUnitsSelected",
+      "references": 13,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupImmediateOrder",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupPointOrder",
+      "references": 20,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupPointOrderLoc",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "GroupRemoveUnit",
+      "references": 112,
+      "status": "binding_present",
+      "binding": "LuaGroupRemoveUnit"
+    },
+    {
+      "name": "I2R",
+      "references": 70,
+      "status": "binding_present",
+      "binding": "LuaI2R"
+    },
+    {
+      "name": "I2S",
+      "references": 92,
+      "status": "binding_present",
+      "binding": "LuaI2S"
+    },
+    {
+      "name": "IncUnitAbilityLevel",
+      "references": 5,
+      "status": "binding_present",
+      "binding": "LuaIncUnitAbilityLevel"
+    },
+    {
+      "name": "InitHashtable",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaInitHashtable"
+    },
+    {
+      "name": "IsItemOwned",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsPlayerAlly",
+      "references": 15,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsPlayerEnemy",
+      "references": 34,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsPlayerInForce",
+      "references": 7,
+      "status": "binding_present",
+      "binding": "LuaIsPlayerInForce"
+    },
+    {
+      "name": "IssueBuildOrderById",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IssueImmediateOrder",
+      "references": 109,
+      "status": "binding_present",
+      "binding": "LuaIssueImmediateOrder"
+    },
+    {
+      "name": "IssueImmediateOrderById",
+      "references": 69,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IssueNeutralImmediateOrderById",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IssuePointOrder",
+      "references": 65,
+      "status": "binding_present",
+      "binding": "LuaIssuePointOrder"
+    },
+    {
+      "name": "IssuePointOrderLoc",
+      "references": 37,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IssueTargetOrder",
+      "references": 62,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsTerrainPathable",
+      "references": 19,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsTriggerEnabled",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaIsTriggerEnabled"
+    },
+    {
+      "name": "IsUnitAlly",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitEnemy",
+      "references": 13,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitHidden",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitIdType",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitInGroup",
+      "references": 96,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitSelected",
+      "references": 29,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "IsUnitType",
+      "references": 127,
+      "status": "binding_present",
+      "binding": "LuaIsUnitType"
+    },
+    {
+      "name": "KillDestructable",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "KillUnit",
+      "references": 28,
+      "status": "binding_present",
+      "binding": "LuaKillUnit"
+    },
+    {
+      "name": "LeaderboardAddItem",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "LeaderboardDisplay",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "LeaderboardSetItemValue",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "LeaderboardSetLabel",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "LeaderboardSetSizeByItemCount",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "LoadInteger",
+      "references": 12,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Location",
+      "references": 9,
+      "status": "binding_present",
+      "binding": "LuaLocation"
+    },
+    {
+      "name": "MathRound",
+      "references": 9,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MoveLocation",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MoveRectTo",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardDisplay",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardGetItem",
+      "references": 12,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardMinimize",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardReleaseItem",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetColumnCount",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetItemsStyle",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetItemValue",
+      "references": 22,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetItemWidth",
+      "references": 12,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetRowCount",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "MultiboardSetTitleText",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "NewSoundEnvironment",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaNewSoundEnvironment"
+    },
+    {
+      "name": "OrderId",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaOrderId"
+    },
+    {
+      "name": "OrderId2String",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "PauseTimer",
+      "references": 9,
+      "status": "binding_present",
+      "binding": "LuaPauseTimer"
+    },
+    {
+      "name": "PauseUnit",
+      "references": 12,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Player",
+      "references": 716,
+      "status": "binding_present",
+      "binding": "LuaPlayer"
+    },
+    {
+      "name": "PlayerSetLeaderboard",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Pow",
+      "references": 10,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Preload",
+      "references": 4,
+      "status": "noop",
+      "binding": "LuaNoop"
+    },
+    {
+      "name": "Preloader",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "PreloadGenClear",
+      "references": 4,
+      "status": "noop",
+      "binding": "LuaNoop"
+    },
+    {
+      "name": "PreloadGenEnd",
+      "references": 4,
+      "status": "noop",
+      "binding": "LuaNoop"
+    },
+    {
+      "name": "PreloadGenStart",
+      "references": 4,
+      "status": "noop",
+      "binding": "LuaNoop"
+    },
+    {
+      "name": "R2I",
+      "references": 60,
+      "status": "binding_present",
+      "binding": "LuaR2I"
+    },
+    {
+      "name": "R2S",
+      "references": 10,
+      "status": "binding_present",
+      "binding": "LuaR2S"
+    },
+    {
+      "name": "R2SW",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Rect",
+      "references": 155,
+      "status": "binding_present",
+      "binding": "LuaRect"
+    },
+    {
+      "name": "RegionAddRect",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaRegionAddRect"
+    },
+    {
+      "name": "RemoveItem",
+      "references": 4,
+      "status": "binding_present",
+      "binding": "LuaRemoveItem"
+    },
+    {
+      "name": "RemoveLocation",
+      "references": 218,
+      "status": "binding_present",
+      "binding": "LuaRemoveLocation"
+    },
+    {
+      "name": "RemoveRect",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaRemoveRect"
+    },
+    {
+      "name": "RemoveUnit",
+      "references": 94,
+      "status": "binding_present",
+      "binding": "LuaRemoveUnit"
+    },
+    {
+      "name": "RemoveUnitFromStock",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "ResetUnitLookAt",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "ResumeTimer",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaResumeTimer"
+    },
+    {
+      "name": "ReviveHero",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "S2I",
+      "references": 19,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "S2R",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SaveInteger",
+      "references": 18,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SelectHeroSkill",
+      "references": 126,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetCameraBounds",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetCameraBounds"
+    },
+    {
+      "name": "SetDayNightModels",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetDayNightModels"
+    },
+    {
+      "name": "SetDestructableLife",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetGamePlacement",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetGamePlacement"
+    },
+    {
+      "name": "SetGameSpeed",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetGameSpeed"
+    },
+    {
+      "name": "SetHeroXP",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetMapDescription",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetMapDescription"
+    },
+    {
+      "name": "SetMapFlag",
+      "references": 18,
+      "status": "binding_present",
+      "binding": "LuaSetMapFlag"
+    },
+    {
+      "name": "SetMapMusic",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetMapMusic"
+    },
+    {
+      "name": "SetMapName",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetMapName"
+    },
+    {
+      "name": "SetPlayerAbilityAvailable",
+      "references": 21,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerAbilityAvailable"
+    },
+    {
+      "name": "SetPlayerColor",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerColor"
+    },
+    {
+      "name": "SetPlayerController",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerController"
+    },
+    {
+      "name": "SetPlayerHandicap",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetPlayerHandicapDamage",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetPlayerName",
+      "references": 33,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetPlayerRacePreference",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerRacePreference"
+    },
+    {
+      "name": "SetPlayerRaceSelectable",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerRaceSelectable"
+    },
+    {
+      "name": "SetPlayers",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetPlayers"
+    },
+    {
+      "name": "SetPlayerStartLocation",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerStartLocation"
+    },
+    {
+      "name": "SetPlayerState",
+      "references": 5,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerState"
+    },
+    {
+      "name": "SetPlayerTeam",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerTeam"
+    },
+    {
+      "name": "SetPlayerTechMaxAllowed",
+      "references": 259,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerTechMaxAllowed"
+    },
+    {
+      "name": "SetPlayerTechResearched",
+      "references": 21,
+      "status": "binding_present",
+      "binding": "LuaSetPlayerTechResearched"
+    },
+    {
+      "name": "SetRect",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetResourceAmount",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetSoundChannel",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetSoundChannel"
+    },
+    {
+      "name": "SetSoundDuration",
+      "references": 4,
+      "status": "binding_present",
+      "binding": "LuaSetSoundDuration"
+    },
+    {
+      "name": "SetSoundParamsFromLabel",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaSetSoundParamsFromLabel"
+    },
+    {
+      "name": "SetSoundPitch",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetSoundPitch"
+    },
+    {
+      "name": "SetSoundPosition",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetSoundPosition"
+    },
+    {
+      "name": "SetSoundVolume",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaSetSoundVolume"
+    },
+    {
+      "name": "SetStartLocPrio",
+      "references": 39,
+      "status": "binding_present",
+      "binding": "LuaSetStartLocPrio"
+    },
+    {
+      "name": "SetStartLocPrioCount",
+      "references": 24,
+      "status": "binding_present",
+      "binding": "LuaSetStartLocPrioCount"
+    },
+    {
+      "name": "SetTeams",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetTeams"
+    },
+    {
+      "name": "SetTerrainFogEx",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetTerrainFogEx"
+    },
+    {
+      "name": "SetTextTagFadepoint",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetTextTagLifespan",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetTextTagPermanent",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetTextTagVelocity",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitAbilityLevel",
+      "references": 36,
+      "status": "binding_present",
+      "binding": "LuaSetUnitAbilityLevel"
+    },
+    {
+      "name": "SetUnitAnimation",
+      "references": 16,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitAnimationWithRarity",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitColor",
+      "references": 104,
+      "status": "binding_present",
+      "binding": "LuaSetUnitColor"
+    },
+    {
+      "name": "SetUnitFacing",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitFlyHeight",
+      "references": 11,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitInvulnerable",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitLookAt",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitMoveSpeed",
+      "references": 6,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitOwner",
+      "references": 11,
+      "status": "binding_present",
+      "binding": "LuaSetUnitOwner"
+    },
+    {
+      "name": "SetUnitPathing",
+      "references": 11,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitPosition",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitPositionLoc",
+      "references": 22,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitState",
+      "references": 29,
+      "status": "binding_present",
+      "binding": "LuaSetUnitState"
+    },
+    {
+      "name": "SetUnitTimeScale",
+      "references": 9,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitUserData",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaSetUnitUserData"
+    },
+    {
+      "name": "SetUnitX",
+      "references": 10,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetUnitY",
+      "references": 10,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SetWaterBaseColor",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSetWaterBaseColor"
+    },
+    {
+      "name": "ShowUnit",
+      "references": 11,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "Sin",
+      "references": 14,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "SquareRoot",
+      "references": 35,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "StartSound",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaStartSound"
+    },
+    {
+      "name": "StringHash",
+      "references": 125,
+      "status": "binding_present",
+      "binding": "LuaStringHash"
+    },
+    {
+      "name": "SubString",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaSubString"
+    },
+    {
+      "name": "SyncSelections",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "TimerGetRemaining",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaTimerGetRemaining"
+    },
+    {
+      "name": "TimerStart",
+      "references": 59,
+      "status": "binding_present",
+      "binding": "LuaTimerStart"
+    },
+    {
+      "name": "TriggerAddAction",
+      "references": 1276,
+      "status": "binding_present",
+      "binding": "LuaTriggerAddAction"
+    },
+    {
+      "name": "TriggerAddCondition",
+      "references": 750,
+      "status": "binding_present",
+      "binding": "LuaTriggerAddCondition"
+    },
+    {
+      "name": "TriggerEvaluate",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaTriggerEvaluate"
+    },
+    {
+      "name": "TriggerExecute",
+      "references": 78,
+      "status": "binding_present",
+      "binding": "LuaTriggerExecute"
+    },
+    {
+      "name": "TriggerRegisterDeathEvent",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterDeathEvent"
+    },
+    {
+      "name": "TriggerRegisterEnterRegion",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterEnterRegion"
+    },
+    {
+      "name": "TriggerRegisterPlayerChatEvent",
+      "references": 214,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterPlayerChatEvent"
+    },
+    {
+      "name": "TriggerRegisterPlayerStateEvent",
+      "references": 2,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterPlayerStateEvent"
+    },
+    {
+      "name": "TriggerRegisterPlayerUnitEvent",
+      "references": 1,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterPlayerUnitEvent"
+    },
+    {
+      "name": "TriggerRegisterTimerEvent",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterTimerEvent"
+    },
+    {
+      "name": "TriggerRegisterTimerExpireEvent",
+      "references": 9,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterTimerExpireEvent"
+    },
+    {
+      "name": "TriggerRegisterUnitEvent",
+      "references": 13,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterUnitEvent"
+    },
+    {
+      "name": "TriggerRegisterUnitStateEvent",
+      "references": 4,
+      "status": "binding_present",
+      "binding": "LuaTriggerRegisterUnitStateEvent"
+    },
+    {
+      "name": "TriggerSleepAction",
+      "references": 46,
+      "status": "binding_present",
+      "binding": "LuaTriggerSleepAction"
+    },
+    {
+      "name": "UnitAddAbility",
+      "references": 188,
+      "status": "binding_present",
+      "binding": "LuaUnitAddAbility"
+    },
+    {
+      "name": "UnitAddItem",
+      "references": 3,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitAddItemById",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitApplyTimedLife",
+      "references": 8,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitDamageTarget",
+      "references": 6,
+      "status": "binding_present",
+      "binding": "LuaUnitDamageTarget"
+    },
+    {
+      "name": "UnitHasItem",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitInventorySize",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitItemInSlot",
+      "references": 3,
+      "status": "binding_present",
+      "binding": "LuaUnitItemInSlot"
+    },
+    {
+      "name": "UnitMakeAbilityPermanent",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitRemoveAbility",
+      "references": 95,
+      "status": "binding_present",
+      "binding": "LuaUnitRemoveAbility"
+    },
+    {
+      "name": "UnitRemoveItem",
+      "references": 2,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitSetConstructionProgress",
+      "references": 4,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "UnitShareVision",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "WaygateActivate",
+      "references": 79,
+      "status": "binding_present",
+      "binding": "LuaWaygateActivate"
+    },
+    {
+      "name": "WaygateGetDestinationX",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "WaygateGetDestinationY",
+      "references": 1,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "WaygateIsActive",
+      "references": 9,
+      "status": "unregistered",
+      "binding": null
+    },
+    {
+      "name": "WaygateSetDestination",
+      "references": 70,
+      "status": "binding_present",
+      "binding": "LuaWaygateSetDestination"
+    }
+  ]
+}

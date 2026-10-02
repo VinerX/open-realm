@@ -78,7 +78,7 @@ enum {
 static uint32_t const save_magic = MAKEFOURCC('W', '3', 'S', 'V');
 static uint32_t const save_commit = MAKEFOURCC('W', '3', 'O', 'K');
 /* The fixed edict layout is validated by SAVEHEADER.edict_size. */
-static uint32_t const save_version = 47;
+static uint32_t const save_version = 48;
 #define MAX_SAVE_STRING (1u << 20) // bytes; bounds quest-string allocations from corrupt saves
 #define MAX_SAVE_GROUP_HANDLES 65536u // corrupt-save bound only; runtime group registry itself grows dynamically
 #define UMOVE_RELOC_RANGE (64 << 20) // bytes; every umove_t is static data in libgame, so a valid offset from the anchor stays well inside one module image
@@ -266,6 +266,8 @@ static field_t const save_event_fields[] = {
     F(gevent_s, limitop, F_INT),
     F(gevent_s, limitval, F_FLOAT),
     F(gevent_s, variable, F_LSTRING),
+    F(gevent_s, chat_match, F_INT),
+    F(gevent_s, chat_exact, F_INT),
     F(gevent_s, inuse, F_INT),
     F(gevent_s, handle_generation, F_INT),
     F(gevent_s, generation_exhausted, F_INT),
@@ -296,6 +298,7 @@ static field_t const save_game_event_fields[] = {
     F(gameevent_s, point, F_VECTOR),
     F(gameevent_s, has_point, F_INT),
     F(gameevent_s, responseTo, F_EVENT, 0, FIELD_NONE),
+    F(gameevent_s, chat_text, F_INT),
     { NULL, 0, 0, 0, 0, 0 }
 };
 
@@ -1974,8 +1977,9 @@ TEST(wc3_save, rejects_prior_save_versions) {
         "/tmp/openwarcraft3-wc3-save-version-44.bin",
         "/tmp/openwarcraft3-wc3-save-version-45.bin",
         "/tmp/openwarcraft3-wc3-save-version-46.bin",
+        "/tmp/openwarcraft3-wc3-save-version-47.bin",
     };
-    uint32_t const old_versions[] = { 39, 40, 41, 42, 43, 44, 45, 46 };
+    uint32_t const old_versions[] = { 39, 40, 41, 42, 43, 44, 45, 46, 47 };
 
     reset_entities();
     setup_test_world();

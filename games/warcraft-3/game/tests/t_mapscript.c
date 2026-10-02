@@ -381,6 +381,51 @@ TEST(wc3_mapscript, lua_player_slot_state_reads_shared_state) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, lua_chat_events_match_player_and_preserve_text) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    reset_entities();
+    setup_test_world();
+    FOR_LOOP(i, 2) {
+        globals.edicts[i].client = &game.clients[i];
+        globals.edicts[i].inuse = true;
+        game.clients[i].ps.number = i;
+    }
+    level.lua_vm = lua;
+    jass_sethost(&MAKE(jassHost_t,
+        .MemAlloc = gi.MemAlloc, .MemFree = gi.MemFree,
+        .GetPlayerByNumber = G_GetPlayerByNumber,
+        .LuaTriggerEvaluate = G_LuaTriggerEvaluateHost,
+        .LuaTriggerExecute = G_LuaTriggerExecuteHost,
+    ));
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "count = 0; exact = 0\n"
+        "function config() end\n"
+        "function main()\n"
+        "local t = CreateTrigger()\n"
+        "TriggerRegisterPlayerChatEvent(t, Player(0), '-kill', false)\n"
+        "TriggerAddAction(t, function()\n"
+        "assert(GetEventPlayerChatString() == 'please -kill now')\n"
+        "assert(GetEventPlayerChatStringMatched() == '-kill')\n"
+        "assert(GetTriggerPlayer() == Player(0)); count = count + 1\n"
+        "end)\n"
+        "local e = CreateTrigger()\n"
+        "TriggerRegisterPlayerChatEvent(e, Player(0), '-kill', true)\n"
+        "TriggerAddAction(e, function() exact = exact + 1 end)\n"
+        "end\n"
+        "function check() assert(count == 1 and exact == 0) end\n",
+        "chat-events.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "main"));
+    cstring_t args[] = { "say", "please -kill now" };
+    G_ClientCommand(G_GetPlayerEntityByNumber(1), 2, args);
+    G_ClientCommand(G_GetPlayerEntityByNumber(0), 2, args);
+    G_RunEvents();
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_trigger_execute_calls_registered_lua_action) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua = WC3_LuaNewState();
@@ -1245,6 +1290,25 @@ TEST(wc3_mapscript, lua_trigger_register_timer_event_allocates_timer) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_for_group_removes_every_member) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function DeleteGroup()\n"
+        "local g = CreateGroup(); local n = 0\n"
+        "for i=1,4 do GroupAddUnit(g, CreateUnit(Player(0), FourCC('hfoo'), i*32, 32, 0)) end\n"
+        "ForGroup(g, function() n=n+1; RemoveUnit(GetEnumUnit()) end)\n"
+        "assert(n == 4, 'deleted ' .. tostring(n) .. '/4')\n"
+        "assert(BlzGroupGetSize(g) == 0)\nDestroyGroup(g)\nend\n", "group-delete.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "DeleteGroup"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_for_group_exposes_enum_unit) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua;
@@ -1497,6 +1561,25 @@ cleanup:
     level.lua_vm = previous_lua;
     WC3_LuaClose(lua);
     reset_entities();
+}
+
+TEST(wc3_mapscript, lua_item_type_id_handles_null_and_spawned_item) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function CheckItemId()\n"
+        "assert(GetItemTypeId(nil) == 0)\n"
+        "local item = CreateItem(FourCC('spro'), 32, 32)\n"
+        "assert(item ~= nil, 'CreateItem returned nil')\n"
+        "assert(GetItemTypeId(item) == FourCC('spro'), tostring(GetItemTypeId(item)) .. '/' .. tostring(FourCC('spro')))\n"
+        "RemoveItem(item)\nend\n", "item-type-id.lua"));
+    bool ok = WC3_LuaCall(lua, "CheckItemId");
+    if (!ok) fprintf(stderr, "item type regression: %s\n", WC3_LuaErrorMessage(lua));
+    T_ASSERT(ok);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
 }
 
 TEST(wc3_mapscript, lua_unit_item_in_slot_matches_inventory_state) {

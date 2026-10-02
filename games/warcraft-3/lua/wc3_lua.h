@@ -20,6 +20,7 @@ typedef struct {
     void *timer;
     void *region;
     int32_t event_value;
+    char chat_text[256], chat_match[256];
     float point_x, point_y;
     bool has_point;
 } wc3LuaTriggerContext_t;

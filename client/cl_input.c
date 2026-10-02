@@ -711,7 +711,7 @@ void CL_Input(void) {
         
         switch(event.type) {
             case SDL_TEXTINPUT:
-                if (cls.key_dest == key_console) CON_TextInput(event.text.text);
+                if (cls.key_dest == key_console || cls.key_dest == key_message) CON_TextInput(event.text.text);
                 else if (CL_MenuActive() && cls.key_dest == key_menu) menu.TextInput(event.text.text);
                 else if (cls.state == ca_active && cls.key_dest == key_game) CL_WindowTextInput(event.text.text);
                 break;
@@ -720,8 +720,14 @@ void CL_Input(void) {
                     CON_ToggleConsole();
                     break;
                 }
-                if (cls.key_dest == key_console) {
+                if (cls.key_dest == key_console || cls.key_dest == key_message) {
                     CON_KeyEvent(event.key.keysym.sym, true);
+                    break;
+                }
+                if (cls.key_dest == key_game && cls.state == ca_active &&
+                    !CL_WindowTextInputActive() && !event.key.repeat &&
+                    (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER)) {
+                    CON_ToggleChat();
                     break;
                 }
                 /* SDL key-repeat is not a deliberate second press; skip it for
@@ -735,7 +741,7 @@ void CL_Input(void) {
                 break;
             case SDL_KEYUP:
                 CL_SendOrderQueueReleaseOnShiftUp(event.key.keysym.sym, event.key.keysym.mod);
-                if (cls.key_dest == key_console || event.key.keysym.sym == SDLK_BACKQUOTE) {
+                if (cls.key_dest == key_console || cls.key_dest == key_message || event.key.keysym.sym == SDLK_BACKQUOTE) {
                     CON_KeyEvent(event.key.keysym.sym, false);
                     break;
                 }
