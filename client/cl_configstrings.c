@@ -190,6 +190,30 @@ void CL_UpdateConfigString(uint32_t index, cstring_t olds) {
     else if (index > CS_FONTS && index < CS_FONTS + MAX_FONTSTYLES) CL_RegisterFontConfigString(index, true, olds);
 }
 
+static void CL_RegisterLoadingFrameMedia(uiFrame_t const *frame) {
+    uint32_t image = 0, image2 = 0;
+    if (!frame) return;
+    switch (frame->flags.type) {
+    case FT_SPRITE:
+    case FT_PORTRAIT:
+        if (frame->tex.index && frame->tex.index < MAX_MODELS)
+            CL_RegisterConfigString(CS_MODELS + frame->tex.index);
+        break;
+    case FT_TEXTURE:
+    case FT_SIMPLESTATUSBAR:
+    case FT_SEGMENTED_STATUSBAR:
+    case FT_LOADING_BAR:
+    case FT_COMMANDBUTTON:
+        image = frame->tex.index;
+        image2 = frame->tex.index2;
+        break;
+    default:
+        break;
+    }
+    if (image && image < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image);
+    if (image2 && image2 < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image2);
+}
+
 /* svc_loading_screen commits the screen after its dependencies; present before the bulk table/world arrives. */
 void CL_PrepLoading(void) {
     if (cl.refresh_prepped) return;
@@ -201,30 +225,47 @@ void CL_PrepLoading(void) {
         CL_BeginLoadingMap(cl.configstrings[CS_WORLD]);
     re.SetAssetScope(cl.configstrings[CS_ASSET_SCOPE]);
     SCR_Clear(cl.layout[LAYER_LOADING]);
-    FOR_LOOP(i, SCR_NumFrames()) {
-        uiFrame_t const *frame = SCR_Frame(i);
-        uint32_t image = 0, image2 = 0;
-        if (!frame) continue;
-        switch (frame->flags.type) {
-        case FT_SPRITE:
-        case FT_PORTRAIT:
-            (void)CL_ModelForIndex(frame->tex.index);
-            break;
-        case FT_TEXTURE:
-        case FT_SIMPLESTATUSBAR:
-        case FT_SEGMENTED_STATUSBAR:
-        case FT_LOADING_BAR:
-        case FT_COMMANDBUTTON:
-            image = frame->tex.index;
-            image2 = frame->tex.index2;
-            break;
-        default:
-            break;
-        }
-        if (image && image < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image);
-        if (image2 && image2 < MAX_IMAGES) CL_RegisterConfigString(CS_IMAGES + image2);
-    }
+    FOR_LOOP(i, SCR_NumFrames()) CL_RegisterLoadingFrameMedia(SCR_Frame(i));
     for (uint32_t i = 1; i < MAX_FONTSTYLES; i++)
         if (*cl.configstrings[CS_FONTS + i]) CL_RegisterConfigString(CS_FONTS + i);
     SCR_UpdateLoadingPlaque();
 }
+
+#ifdef BZ_TESTS
+#include "shared/test.h"
+static uint32_t cl_test_loading_model_calls;
+static int cl_test_loading_model;
+static model_t *CL_TestLoadingModel(cstring_t name) {
+    T_ASSERT(!strcmp(name, "UI\\Glues\\Loading\\LoadBar\\LoadBar.mdx"));
+    cl_test_loading_model_calls++;
+    return (model_t *)&cl_test_loading_model;
+}
+
+TEST(client_loading, sprite_media_is_ready_before_first_paint) {
+    __typeof__(cl) *saved = MemAlloc(sizeof(cl));
+    __typeof__(re.LoadModel) old_load = re.LoadModel;
+    uiFrame_t frame = {0};
+    bool old_attempted = model_attempted[3], old_pending = model_pending[3];
+    bool old_portrait_attempted = portrait_attempted[3];
+    memcpy(saved, &cl, sizeof(cl));
+    cl.models[3] = NULL;
+    cl.portraits[3] = NULL;
+    snprintf(cl.configstrings[CS_MODELS + 3], sizeof(cl.configstrings[CS_MODELS + 3]),
+             "UI\\Glues\\Loading\\LoadBar\\LoadBar.mdx");
+    frame.flags.type = FT_SPRITE;
+    frame.tex.index = 3;
+    frame.stat = UI_STAT_LOADING_PROGRESS;
+    re.LoadModel = CL_TestLoadingModel;
+    cl_test_loading_model_calls = 0;
+    CL_RegisterLoadingFrameMedia(&frame);
+    T_NOT_NULL(cl.models[3]);
+    T_EQ(cl_test_loading_model_calls, 1);
+    T_ASSERT(!model_pending[3]);
+    CL_RegisterLoadingFrameMedia(&frame);
+    T_EQ(cl_test_loading_model_calls, 1);
+    re.LoadModel = old_load;
+    memcpy(&cl, saved, sizeof(cl)); MemFree(saved);
+    model_attempted[3] = old_attempted; model_pending[3] = old_pending;
+    portrait_attempted[3] = old_portrait_attempted;
+}
+#endif

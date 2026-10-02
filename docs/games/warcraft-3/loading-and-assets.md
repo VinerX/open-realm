@@ -4,6 +4,26 @@ For measured menu/loading resource residency and reclamation priorities, see [WC
 
 ## Loading-screen ownership
 
+### First paint and rectangular DDS textures
+
+Loading-layout sprites register their model configstrings synchronously in `CL_PrepLoading`, before the
+first plaque repaint. Using the gameplay model queue here delayed the background and progress-bar model
+until later loading frames. Only resources referenced by the loading layout are admitted at this boundary.
+`client_loading.sprite_media_is_ready_before_first_paint` checks admission, pending state and duplicate reuse.
+
+The retail progress-bar border and glass use 512×64 DXT5 DDS textures with ten mip levels. The compressed
+DDS loader previously reduced either dimension to zero, skipped the remaining levels, and advertised a
+maximum level that was not uploaded. The incomplete texture sampled black. Compressed mip dimensions now
+clamp independently to one, matching the uncompressed path; an absent mip count uploads the base level.
+`renderer_texture.rectangular_dds_uploads_complete_mip_chain` checks both aspect ratios, byte offsets,
+all ten levels and base-only admission. Its isolated Windows run changed from 42/68 to 68/68 assertions.
+The complete renderer-model test target currently fails to link unrelated renderer symbols on Windows;
+the focused regression is not evidence that the full target passes.
+
+A release run of 23-Race-Legion against Warcraft III 3.0 CASC data confirmed the frame at zero progress
+and the blue fill at 75% in engine framebuffer captures. The run reached 100% in approximately 51 seconds.
+Temporary screenshot instrumentation was removed after that check.
+
 `CL_BeginLoadingMap` publishes the resolved destination and freezes a non-interactive loading plaque.
 The client remains `ca_connected` while registering assets; the first usable server frame activates it once
 `CL_PrepRefresh` has completed. `SCR_DrawCursor` hides both the native and authored cursors during loading.

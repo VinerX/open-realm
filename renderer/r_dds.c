@@ -78,19 +78,19 @@ texture_t *R_LoadTextureDDS(handle_t data, uint32_t filesize) {
             return NULL;
         }
 
+        uint32_t levels = mipMapCount > 0 ? mipMapCount : 1;
         R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-        R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipMapCount - 1);
-        R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, levels - 1);
+        R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
 
         uint32_t offset = 0, w = width, h = height;
-        for (uint32_t i = 0; i < mipMapCount; i++) {
-            if (w == 0 || h == 0) { mipMapCount--; continue; }
+        for (uint32_t i = 0; i < levels; i++) {
             uint32_t size = ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
             R_Call(glCompressedTexImage2D, GL_TEXTURE_2D, i, format, w, h, 0, size, buf + pixelOffset + offset);
             offset += size;
-            w /= 2; h /= 2;
+            w = MAX(w / 2, 1);
+            h = MAX(h / 2, 1);
         }
-        R_Call(glTexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipMapCount - 1);
     } else if (isRGB || (flags & 0x20000)) { /* RGB or luminance */
         GLint internalFormat;
         GLenum format;

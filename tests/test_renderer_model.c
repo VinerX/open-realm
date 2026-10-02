@@ -173,7 +173,19 @@ static void test_teximage(GLenum target, GLint level, GLint internal, GLsizei w,
 }
 static void test_gentex(GLsizei n, GLuint *ids) { while (n--) *ids++ = 99; }
 static void test_bindtex(GLenum target, GLuint id) { (void)target; (void)id; }
-static void test_texparam(GLenum target, GLenum name, GLint value) { (void)target; (void)name; (void)value; }
+static GLint texture_max_level;
+static void test_texparam(GLenum target, GLenum name, GLint value) {
+    (void)target;
+    if (name == GL_TEXTURE_MAX_LEVEL) texture_max_level = value;
+}
+static struct { uint32_t count; GLsizei width[16], height[16]; size_t offset[16]; void const *base; } compressed_upload;
+static void test_compressed_teximage(GLenum target, GLint level, GLenum format, GLsizei w, GLsizei h, GLint border, GLsizei size, void const *data) {
+    (void)target; (void)format; (void)border; (void)size;
+    compressed_upload.width[level] = w;
+    compressed_upload.height[level] = h;
+    compressed_upload.offset[level] = (uint8_t const *)data - (uint8_t const *)compressed_upload.base;
+    compressed_upload.count++;
+}
 static uint32_t texture_delete_count;
 static void test_deletetex(GLsizei n, GLuint const *ids) { (void)ids; texture_delete_count += n; }
 #undef glTexImage2D
@@ -193,6 +205,8 @@ static void test_deletetex(GLsizei n, GLuint const *ids) { (void)ids; texture_de
 #include "renderer/r_blp1.c"
 #include "renderer/r_blp2.c"
 #include "renderer/r_pcx.c"
+#undef glCompressedTexImage2D
+#define glCompressedTexImage2D test_compressed_teximage
 #include "renderer/r_dds.c"
 
 static struct { uint32_t calls, first, count, instances, stats_count, stats_instances; } draw_test;
@@ -1697,6 +1711,35 @@ TEST(renderer_texture, dds_channel_masks_use_the_common_upload_capabilities) {
             T_EQ(upload_pixel.a, 123);
         }
     }
+}
+
+TEST(renderer_texture, rectangular_dds_uploads_complete_mip_chain) {
+    uint32_t file[11000] = { [0] = MAKEFOURCC('D','D','S',' '), [1] = 124,
+        [3] = 64, [4] = 512, [7] = 10, [19] = 32, [20] = 4,
+        [21] = MAKEFOURCC('D','X','T','5') };
+    ri.MemAlloc = test_alloc; ri.MemFree = test_free;
+    FOR_LOOP(transpose, 2) {
+        file[3] = transpose ? 512 : 64; file[4] = transpose ? 64 : 512;
+        compressed_upload = (__typeof__(compressed_upload)){ .base = file };
+        test_free(R_LoadTextureDDS(file, sizeof(file)));
+        T_EQ(compressed_upload.count, 10u);
+        T_EQ(texture_max_level, 9);
+        uint32_t w = file[4], h = file[3], offset = 128;
+        FOR_LOOP(i, 10) {
+            T_EQ(compressed_upload.width[i], w);
+            T_EQ(compressed_upload.height[i], h);
+            T_EQ(compressed_upload.offset[i], offset);
+            offset += ((w + 3) / 4) * ((h + 3) / 4) * 16;
+            w = MAX(w / 2, 1); h = MAX(h / 2, 1);
+        }
+    }
+    file[3] = file[4] = 4; file[7] = 0;
+    compressed_upload = (__typeof__(compressed_upload)){ .base = file };
+    test_free(R_LoadTextureDDS(file, sizeof(file)));
+    T_EQ(compressed_upload.count, 1u);
+    T_EQ(texture_max_level, 0);
+    T_EQ(compressed_upload.width[0], 4);
+    T_EQ(compressed_upload.height[0], 4);
 }
 
 TEST(renderer_stats, triangles_include_instanced_amplification) {
