@@ -10,6 +10,8 @@
 #include <sys/types.h>
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
+#include <fcntl.h>
 #endif
 
 #ifndef PATHSTR
@@ -291,6 +293,13 @@ static int cmd_cat(handle_t archive, char const *file_path) {
     handle_t file;
     unsigned char buf[64 * 1024];
     uint32_t read_bytes = 0;
+
+#ifdef _WIN32
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1) {
+        fprintf(stderr, "Cannot set binary output: %s\n", strerror(errno));
+        return 1;
+    }
+#endif
 
     if (!SFileOpenFileEx(archive, file_path, SFILE_OPEN_FROM_MPQ, &file)) {
         fprintf(stderr, "Cannot open MPQ file: %s\n", file_path);
