@@ -721,6 +721,9 @@ void CL_Input(void) {
                     break;
                 }
                 if (cls.key_dest == key_console || cls.key_dest == key_message) {
+                    if (cls.key_dest == key_message && event.key.repeat &&
+                        (event.key.keysym.sym == SDLK_RETURN || event.key.keysym.sym == SDLK_KP_ENTER))
+                        break;
                     CON_KeyEvent(event.key.keysym.sym, true);
                     break;
                 }
@@ -1492,6 +1495,34 @@ TEST(client_input, hover_trace_coalesces_mouse_motion_in_input_pump) {
 
 /* Keep the SDL queue, key binding, layout hit test and command buffer in the regression path. */
 static uint32_t test_menu_mouse, test_menu_text, test_menu_keys;
+TEST(client_input, chat_survives_player_snapshot_and_enter_repeat) {
+    extern void CL_ParsePlayerInfo(sizeBuf_t *msg);
+    struct client_state *saved = MemAlloc(sizeof(cl));
+    struct client_static saved_cls = cls;
+    __typeof__(input) saved_input = input;
+    uint8_t data[4096];
+    sizeBuf_t msg;
+    player_t previous = {0};
+    SDL_Event event = { .key = { .type = SDL_KEYDOWN, .keysym.sym = SDLK_RETURN } };
+    memcpy(saved, &cl, sizeof(cl)); memset(&cl, 0, sizeof(cl));
+    cls.state = ca_active; cls.key_dest = key_game;
+    cl.playerstate.client_ui_state = CLIENT_UI_GAME;
+    input = (__typeof__(input)){0};
+    T_EQ(SDL_InitSubSystem(SDL_INIT_EVENTS), 0);
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    T_EQ(SDL_PushEvent(&event), 1); CL_Input();
+    T_EQ(cls.key_dest, key_message);
+    SZ_Init(&msg, data, sizeof(data));
+    MSG_WriteDeltaPlayerState(&msg, &previous, &cl.playerstate);
+    CL_ParsePlayerInfo(&msg);
+    T_EQ(cls.key_dest, key_message);
+    event.key.repeat = 1;
+    T_EQ(SDL_PushEvent(&event), 1); CL_Input();
+    T_EQ(cls.key_dest, key_message);
+    CON_KeyEvent(SDLK_ESCAPE, true);
+    SDL_QuitSubSystem(SDL_INIT_EVENTS);
+    cl = *saved; MemFree(saved); cls = saved_cls; input = saved_input;
+}
 static bool CL_TestMenuMouse(menuMouseEvent_t event, int x, int y, int32_t param) {
     (void)event; (void)x; (void)y; (void)param; test_menu_mouse++; return false;
 }
