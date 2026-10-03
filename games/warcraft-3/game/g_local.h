@@ -339,6 +339,9 @@ typedef enum {
     EVENT_PLAYER_VICTORY = 14,
     EVENT_PLAYER_LEAVE = 15,
     EVENT_PLAYER_CHAT = 16,
+    EVENT_PLAYER_MOUSE_DOWN = 305,
+    EVENT_PLAYER_MOUSE_UP = 306,
+    EVENT_PLAYER_MOUSE_MOVE = 307,
     EVENT_PLAYER_END_CINEMATIC = 17,
     EVENT_PLAYER_UNIT_ATTACKED = 18,
     EVENT_PLAYER_UNIT_RESCUED = 19,
@@ -2268,6 +2271,7 @@ bool G_TestMapObjectCreatedByMapScript(uint32_t id);
 #endif
 bool SP_FindEmptySpaceAround(edict_t *, uint32_t, vec2_t *, float *);
 bool G_FindUnitUnstuckPosition(edict_t *unit, vec2_t const *requested, vec2_t *out);
+void G_SetUnitPosition(edict_t *, vec2_t const *);
 bool SP_FindUnitExitPosition(edict_t *producer, edict_t *unit, vec2_t *out, float *angle);
 edict_t *SP_SpawnAtLocation(uint32_t, uint32_t, vec2_t const *);
 edict_t *SP_SpawnAtLocationNoBirth(uint32_t, uint32_t, vec2_t const *);
@@ -2939,6 +2943,7 @@ void G_ResetDeferredFrees(void);
 event_t *G_MakeEvent(EVENTTYPE);
 void G_SetEventSubject(event_t *, edict_t *);
 void G_SetPlayerEventSubject(event_t *, edict_t *);
+bool G_TerrainPathingBlocked(vec2_t const *, uint32_t, bool *);
 bool G_EventSubjectIsCurrent(event_t *);
 void G_UnitPositionChanged(edict_t *, vec2_t const *);
 void G_JassVariableChanged(cstring_t, float, float);

@@ -37,6 +37,35 @@ TEST(wc3_api, animation_enum_converters_are_registered) {
         "  call ConvertSubAnimType(17)\n"
         "endfunction\n"));
 }
+
+TEST(wc3_api, mouse_event_getters_share_queued_context) {
+    setup_test_world();
+    globals.edicts[0].client = &game.clients[0];
+    globals.edicts[0].inuse = true;
+    game.clients[0].ps.number = 0;
+    T_ASSERT(run_test_jass(
+        "type mousebuttontype extends handle\n"
+        "globals\n integer mouseCount=0\n endglobals\n"
+        "function onMouse takes nothing returns nothing\n"
+        " local location p=BlzGetTriggerPlayerMousePosition()\n"
+        " call BJassAssert(BlzGetTriggerPlayerMouseButton()==ConvertMouseButtonType(3), \"right button\")\n"
+        " call BJassAssert(BlzGetTriggerPlayerMouseX()==125.5 and BlzGetTriggerPlayerMouseY()==-72.25, \"mouse point\")\n"
+        " call BJassAssert(GetLocationX(p)==125.5 and GetLocationY(p)==-72.25, \"mouse location\")\n"
+        " call RemoveLocation(p)\n set mouseCount=mouseCount+1\n endfunction\n"
+        "function verifyMouse takes nothing returns nothing\n"
+        " call BJassAssert(mouseCount==1, \"mouse count\")\n endfunction\n"
+        "function main takes nothing returns nothing\n local trigger t=CreateTrigger()\n"
+        " call TriggerRegisterPlayerEvent(t,Player(0),ConvertPlayerEvent(305))\n"
+        " call TriggerAddAction(t,function onMouse)\n endfunction\n"));
+    cstring_t args[] = { "mouseevent", "0", "3", "125.5", "-72.25" };
+    G_ClientCommand(G_GetPlayerEntityByNumber(0), 5, args);
+    G_RunEvents();
+    jass_runevents(level.vm);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+    jass_callbyname(level.vm, "verifyMouse", true);
+    jass_runevents(level.vm);
+    T_ASSERT(!jass_rterror_pending(level.vm));
+}
 extern player_t *currentplayer;
 void unit_die(edict_t *self, edict_t *attacker);
 void unit_build(edict_t *self, uint32_t class_id);

@@ -14,6 +14,18 @@
  */
 #include "s_skills.h"
 
+void G_SetUnitPosition(edict_t *unit, vec2_t const *requested) {
+    vec2_t old_position, position;
+    if (!unit || !requested) return;
+    old_position = unit->s.origin2;
+    G_FindUnitUnstuckPosition(unit, requested, &position);
+    unit->s.origin.x = position.x;
+    unit->s.origin.y = position.y;
+    if (unit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+    gi.LinkEntity(unit);
+    G_UnitPositionChanged(unit, &old_position);
+}
+
 /* With move-time collision (block-and-slide), "blocked" now means the unit
  * could not take a step this frame because it was boxed in — common and
  * transient while a group slides around obstacles.  These thresholds are

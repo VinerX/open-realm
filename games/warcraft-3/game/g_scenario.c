@@ -79,6 +79,50 @@ static void scenario_finish(cstring_t status, cstring_t detail) {
      * still yields a complete log alongside the frame-limit line. */
 }
 
+static int scenario_chat(lua_State *L) {
+    uint32_t player = (uint32_t)luaL_checkinteger(L, 1);
+    edict_t *ent = G_GetPlayerEntityByNumber(player);
+    cstring_t args[] = { "say", luaL_checkstring(L, 2) };
+    if (!ent || !ent->client) return luaL_error(L, "scenario_chat: invalid player");
+    G_ClientCommand(ent, 2, args);
+    return 0;
+}
+
+static int scenario_mouse(lua_State *L) {
+    edict_t *ent = G_GetPlayerEntityByNumber((uint32_t)luaL_checkinteger(L, 1));
+    char button[16], x[32], y[32];
+    if (!ent || !ent->client) return luaL_error(L, "scenario_mouse: invalid player");
+    snprintf(button, sizeof(button), "%d", (int)luaL_checkinteger(L, 2));
+    snprintf(x, sizeof(x), "%.9g", luaL_checknumber(L, 3));
+    snprintf(y, sizeof(y), "%.9g", luaL_checknumber(L, 4));
+    cstring_t args[] = { "mouseevent", "0", button, x, y };
+    G_ClientCommand(ent, 5, args);
+    return 0;
+}
+
+static int scenario_unit_commands(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    gameCommandButton_t buttons[12];
+    uint8_t count;
+    if (!unit || !unit->inuse) return luaL_error(L, "scenario_unit_commands: invalid unit");
+    count = G_GetCommandButtons(unit, buttons, sizeof(buttons) / sizeof(buttons[0]));
+    lua_newtable(L);
+    lua_pushstring(L, GetClassName(unit->class_id)); lua_setfield(L, -2, "type");
+    if (unit->data.UnitAbilities) {
+        lua_pushstring(L, unit->data.UnitAbilities->abilList); lua_setfield(L, -2, "abilities");
+        lua_pushstring(L, unit->data.UnitAbilities->heroAbilList); lua_setfield(L, -2, "hero_abilities");
+    }
+    if (unit->data.UnitProfile) {
+        lua_pushstring(L, unit->data.UnitProfile->sellUnits); lua_setfield(L, -2, "sell_units");
+        lua_pushstring(L, unit->data.UnitProfile->trains); lua_setfield(L, -2, "trains");
+    }
+    FOR_LOOP(i, count) {
+        lua_pushstring(L, buttons[i].command);
+        lua_rawseti(L, -2, i + 1);
+    }
+    return 1;
+}
+
 static void scenario_load(void) {
     cstring_t path = gi.CvarString("wc3_scenario", "");
     cstring_t timeout = gi.CvarString("wc3_scenario_timeout", "");
@@ -92,6 +136,9 @@ static void scenario_load(void) {
         scenario.missing_vm = true;
         return;
     }
+    WC3_LuaRegisterNative(level.lua_vm, "scenario_chat", scenario_chat);
+    WC3_LuaRegisterNative(level.lua_vm, "scenario_mouse", scenario_mouse);
+    WC3_LuaRegisterNative(level.lua_vm, "scenario_unit_commands", scenario_unit_commands);
     snprintf(scenario.name, sizeof(scenario.name), "%s",
              gi.CvarString("wc3_scenario_name", path));
     scenario.timeout = timeout && *timeout ? (uint32_t)atoi(timeout) : SCENARIO_DEFAULT_TIMEOUT;

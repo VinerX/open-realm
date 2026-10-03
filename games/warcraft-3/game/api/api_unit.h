@@ -58,17 +58,7 @@ UNIT_POSITION_ACCESS(Y, s.origin.y);
 uint32_t SetUnitPositionLoc(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");
     vec2_t const *whichLocation = jass_checkhandle(j, 2, "location");
-    vec2_t position;
-
-    if (whichUnit && whichLocation) {
-        vec2_t old_position = whichUnit->s.origin2;
-        G_FindUnitUnstuckPosition(whichUnit, whichLocation, &position);
-        whichUnit->s.origin.x = position.x;
-        whichUnit->s.origin.y = position.y;
-        if (whichUnit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
-        gi.LinkEntity(whichUnit);
-        G_UnitPositionChanged(whichUnit, &old_position);
-    }
+    G_SetUnitPosition(whichUnit, whichLocation);
     return 0;
 }
 uint32_t GetUnitPositionLoc(jass_t *j) {
@@ -196,17 +186,7 @@ uint32_t GetUnitState(jass_t *j) {
 uint32_t SetUnitPosition(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");
     vec2_t requested = MAKE(vec2_t, jass_checknumber(j, 2), jass_checknumber(j, 3));
-    vec2_t position;
-
-    if (whichUnit) {
-        vec2_t old_position = whichUnit->s.origin2;
-        G_FindUnitUnstuckPosition(whichUnit, &requested, &position);
-        whichUnit->s.origin.x = position.x;
-        whichUnit->s.origin.y = position.y;
-        if (whichUnit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
-        gi.LinkEntity(whichUnit);
-        G_UnitPositionChanged(whichUnit, &old_position);
-    }
+    G_SetUnitPosition(whichUnit, &requested);
     return 0;
 }
 uint32_t GetUnitDefaultAcquireRange(jass_t *j) {
@@ -613,6 +593,11 @@ uint32_t BlzGetUnitAbilityCooldownRemaining(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");
     uint32_t const abilityId = (uint32_t)jass_checkinteger(j, 2);
     return jass_pushnumber(j, S_SpellCooldownRemaining(whichUnit, abilityId));
+}
+
+uint32_t BlzIsUnitInvulnerable(jass_t *j) {
+    edict_t *unit = jass_checkhandle(j, 1, "unit");
+    return jass_pushboolean(j, unit && unit->invulnerable);
 }
 
 uint32_t BlzEndUnitAbilityCooldown(jass_t *j) {

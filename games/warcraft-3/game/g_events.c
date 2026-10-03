@@ -119,6 +119,12 @@ static void G_ExecuteEvent(gameEvent_t *evt) {
     FOR_EACH_EVENT(e) {
         if (!G_EventSubjectIsCurrent(e)) continue;
         switch (e->type) {
+            case EVENT_PLAYER_MOUSE_DOWN:
+            case EVENT_PLAYER_MOUSE_UP:
+            case EVENT_PLAYER_MOUSE_MOVE:
+                if (e->type == evt->type && e->subject == subject)
+                    jass_calltriggerevent(level.vm, e->trigger, evt);
+                break;
             case EVENT_PLAYER_CHAT:
                 if (evt->type == EVENT_PLAYER_CHAT && e->subject == subject &&
                     (e->chat_exact ? !strcmp(evt->chat_text, e->chat_match) : strstr(evt->chat_text, e->chat_match) != NULL)) {
@@ -410,6 +416,14 @@ bool G_HasPendingDeathEvent(edict_t const *ent) {
 }
 
 void G_RunEvents(void) {
+    FOR_LOOP(i, game.max_clients)
+        game.clients[i].ps.stats[UI_PLAYERSTAT_MOUSE_EVENTS] = 0;
+    FOR_EACH_EVENT(evt) {
+        if (evt->type < EVENT_PLAYER_MOUSE_DOWN || evt->type > EVENT_PLAYER_MOUSE_MOVE ||
+            !evt->trigger || evt->trigger->disabled || !G_EventSubjectIsCurrent(evt) ||
+            !evt->subject || !evt->subject->client) continue;
+        evt->subject->client->ps.stats[UI_PLAYERSTAT_MOUSE_EVENTS] |= 1u << (evt->type - EVENT_PLAYER_MOUSE_DOWN);
+    }
     for (levelEvents_t *e = &level.events; e->read < e->write; e->read++) {
         gameEvent_t *evt = &e->queue[e->read % MAX_EVENT_QUEUE];
         if (evt->type == EVENT_PLAYER_VICTORY || evt->type == EVENT_PLAYER_DEFEAT) {

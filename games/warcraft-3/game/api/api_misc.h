@@ -714,6 +714,22 @@ uint32_t GetOrderedUnit(jass_t *j) {
 uint32_t GetIssuedOrderId(jass_t *j) {
     return jass_pushinteger(j, G_GetIssuedOrderId(jass_getcontext(j)->unit));
 }
+uint32_t BlzGetTriggerPlayerMouseButton(jass_t *j) {
+    API_ALLOC(uint32_t, mousebuttontype);
+    *mousebuttontype = jass_getcontext(j)->eventValue;
+    return 1;
+}
+uint32_t BlzGetTriggerPlayerMouseX(jass_t *j) {
+    return jass_pushnumber(j, jass_getcontext(j)->point.x);
+}
+uint32_t BlzGetTriggerPlayerMouseY(jass_t *j) {
+    return jass_pushnumber(j, jass_getcontext(j)->point.y);
+}
+uint32_t BlzGetTriggerPlayerMousePosition(jass_t *j) {
+    API_ALLOC(vec2_t, location);
+    *location = jass_getcontext(j)->point;
+    return 1;
+}
 uint32_t GetOrderPointX(jass_t *j) {
     vec2_t point = { 0.0f, 0.0f };
     G_GetIssuedOrderPoint(jass_getcontext(j)->unit, &point);
@@ -962,8 +978,14 @@ uint32_t IsPointBlighted(jass_t *j) {
     return jass_pushboolean(j, G_IsPointBlighted(&point));
 }
 uint32_t IsTerrainPathable(jass_t *j) {
-    (void)jass_checknumber(j, 1); (void)jass_checknumber(j, 2); (void)jass_checkhandle(j, 3, "pathingtype");
-    return jass_pushboolean(j, true);
+    vec2_t point = { jass_checknumber(j, 1), jass_checknumber(j, 2) };
+    uint32_t *type = jass_checkhandle(j, 3, "pathingtype");
+    bool blocked;
+    if (!type || !G_TerrainPathingBlocked(&point, *type, &blocked)) {
+        jass_rterror(j, "IsTerrainPathable: unsupported pathing type");
+        return 0;
+    }
+    return jass_pushboolean(j, blocked);
 }
 uint32_t SetTerrainPathable(jass_t *j) {
     (void)jass_checknumber(j, 1); (void)jass_checknumber(j, 2); (void)jass_checkhandle(j, 3, "pathingtype");

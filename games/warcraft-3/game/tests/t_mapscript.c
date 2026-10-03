@@ -22,6 +22,8 @@ extern bool jass_transpile_to_lua(jass_t *j, cstring_t source, string_t *lua_sou
 void CM_ReadMapScript(handle_t archive);
 void CM_ReadUnits(handle_t archive);
 void CM_ReadAbilities(handle_t archive);
+void CM_SetupTestWorldBounds(box2_t const *);
+void CM_SetupTestPathmap(uint32_t, uint32_t, uint8_t const *);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
 
 static cstring_t const kMinimalMapScript =
@@ -424,6 +426,131 @@ TEST(wc3_mapscript, lua_chat_events_match_player_and_preserve_text) {
     level.lua_vm = previous_lua;
     WC3_LuaClose(lua);
     reset_entities();
+}
+
+TEST(wc3_mapscript, lua_mouse_event_preserves_button_point_and_player) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    reset_entities();
+    setup_test_world();
+    FOR_LOOP(i, 2) {
+        globals.edicts[i].client = &game.clients[i];
+        globals.edicts[i].inuse = true;
+        game.clients[i].ps.number = i;
+    }
+    level.lua_vm = lua;
+    jass_sethost(&MAKE(jassHost_t, .MemAlloc = gi.MemAlloc, .MemFree = gi.MemFree,
+        .GetPlayerByNumber = G_GetPlayerByNumber, .LuaTriggerEvaluate = G_LuaTriggerEvaluateHost,
+        .LuaTriggerExecute = G_LuaTriggerExecuteHost));
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "count=0; function main() local t=CreateTrigger() "
+        "TriggerRegisterPlayerEvent(t,Player(0),ConvertPlayerEvent(305)) "
+        "TriggerAddCondition(t,Condition(function() return BlzGetTriggerPlayerMouseButton()==ConvertMouseButtonType(3) end)) "
+        "TriggerAddAction(t,function() local p=BlzGetTriggerPlayerMousePosition() "
+        "assert(GetLocationX(p)==125.5 and GetLocationY(p)==-72.25) "
+        "assert(BlzGetTriggerPlayerMouseX()==125.5 and BlzGetTriggerPlayerMouseY()==-72.25) "
+        "assert(GetTriggerPlayer()==Player(0)); RemoveLocation(p); count=count+1 end) end "
+        "function check() assert(count==1) end", "mouse-events.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "main"));
+    cstring_t args[] = { "mouseevent", "0", "3", "125.5", "-72.25" };
+    G_ClientCommand(G_GetPlayerEntityByNumber(1), 5, args);
+    G_ClientCommand(G_GetPlayerEntityByNumber(0), 5, args);
+    G_RunEvents();
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_condition_handle_preserves_map_wrapper_result) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function check()\n"
+        "local original = TriggerAddCondition\n"
+        "local function wrapped(t, c)\n"
+        "if type(c) == 'function' then c = Condition(function() pcall(c) end) end\n"
+        "return original(t, c) end\n"
+        "local t = CreateTrigger()\n"
+        "local c = Condition(function() return true end)\n"
+        "assert(type(c) == 'userdata')\n"
+        "wrapped(t, c)\n"
+        "DestroyBoolExpr(c)\n"
+        "assert(TriggerEvaluate(t))\n"
+        "assert(not pcall(original, t, c))\n"
+        "end\n", "condition-handle.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_position_location_moves_existing_unit) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    reset_entities(); setup_test_world(); level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function check() local u=CreateUnit(Player(0),FourCC('hfoo'),32,32,0) "
+        "local p=Location(96,144); SetUnitPositionLoc(u,p); RemoveLocation(p) "
+        "assert(GetUnitX(u)==96 and GetUnitY(u)==144) "
+        "SetUnitPosition(u,128,160); assert(GetUnitX(u)==128 and GetUnitY(u)==160) end", "unit-position.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous; WC3_LuaClose(lua); reset_entities();
+}
+
+TEST(wc3_mapscript, lua_terrain_pathability_reads_authored_flags) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    uint8_t cells[] = { 0, 2, 4, 8 };
+    setup_test_world();
+    CM_SetupTestWorldBounds(&(box2_t){ .min = {0, 0}, .max = {64, 64} });
+    CM_SetupTestPathmap(2, 2, cells);
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function check() "
+        "assert(not IsTerrainPathable(16,16,ConvertPathingType(1))) "
+        "assert(IsTerrainPathable(48,16,ConvertPathingType(1))) "
+        "assert(IsTerrainPathable(16,48,ConvertPathingType(2))) "
+        "assert(IsTerrainPathable(48,48,ConvertPathingType(3))) end", "pathability.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous; WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_cooldown_natives_share_spell_state) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    reset_entities(); setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function check() local u=CreateUnit(Player(0),FourCC('hfoo'),0,0,0) "
+        "local a=FourCC('AHbz'); BlzStartUnitAbilityCooldown(u,a,12) "
+        "assert(BlzGetUnitAbilityCooldownRemaining(u,a)==12) "
+        "BlzEndUnitAbilityCooldown(u,a) "
+        "assert(BlzGetUnitAbilityCooldownRemaining(u,a)==0) "
+        "SetUnitInvulnerable(u,true); assert(BlzIsUnitInvulnerable(u)) "
+        "SetUnitInvulnerable(u,false); assert(not BlzIsUnitInvulnerable(u)) end", "cooldowns.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    level.lua_vm = previous;
+    WC3_LuaClose(lua); reset_entities();
+}
+
+TEST(wc3_mapscript, lua_player_handicap_native_updates_shared_state) {
+    wc3Lua_t *previous = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function check() SetPlayerHandicap(Player(0), 1.25) "
+        "SetPlayerName(Player(0), 'Forsaken (1)') "
+        "assert(GetPlayerName(Player(0)) == 'Forsaken (1)') end",
+        "handicap.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "check"));
+    T_EQ(G_GetPlayerClientByNumber(0)->jass.handicap, 1.25f);
+    level.lua_vm = previous;
+    WC3_LuaClose(lua);
 }
 
 TEST(wc3_mapscript, lua_trigger_execute_calls_registered_lua_action) {

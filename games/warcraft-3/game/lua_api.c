@@ -6,8 +6,27 @@
 
 #include "g_camera.h"
 
+#define LUA_BOOLEXPR "WC3.boolexpr"
+
+static int LuaPushBoolExprCallback(lua_State *L, int index) {
+    if (lua_isfunction(L, index)) lua_pushvalue(L, index);
+    else {
+        luaL_checkudata(L, index, LUA_BOOLEXPR);
+        lua_getuservalue(L, index);
+        if (!lua_isfunction(L, -1)) return luaL_error(L, "destroyed boolexpr");
+    }
+    return lua_gettop(L);
+}
+
 static int LuaSetMapName(lua_State *L) {
     strlcpy(level.setup.name, luaL_checkstring(L, 1), sizeof(level.setup.name));
+    return 0;
+}
+
+static int LuaSetPlayerHandicap(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    float value = (float)luaL_checknumber(L, 2);
+    if (player) PLAYER_CLIENT(player)->jass.handicap = MAX(0, value);
     return 0;
 }
 
@@ -148,6 +167,33 @@ static int LuaSetUnitColor(lua_State *L) {
     return 0;
 }
 
+static int LuaBlzGetUnitAbilityCooldownRemaining(lua_State *L) {
+    lua_pushnumber(L, S_SpellCooldownRemaining(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2)));
+    return 1;
+}
+
+static int LuaBlzStartUnitAbilityCooldown(lua_State *L) {
+    S_SpellStartCooldownDuration(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2), (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
+static int LuaBlzEndUnitAbilityCooldown(lua_State *L) {
+    S_SpellEndCooldown(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaBlzIsUnitInvulnerable(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushboolean(L, unit && unit->invulnerable);
+    return 1;
+}
+
+static int LuaSetUnitInvulnerable(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) unit->invulnerable = lua_toboolean(L, 2);
+    return 0;
+}
+
 static int LuaSetUnitState(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     uint32_t *state = lua_touserdata(L, 2);
@@ -255,8 +301,7 @@ static int LuaTriggerAddCondition(lua_State *L) {
 
     if (!trigger || trigger->lua_vm != level.lua_vm)
         return luaL_error(L, "TriggerAddCondition: invalid Lua trigger");
-    luaL_checktype(L, 2, LUA_TFUNCTION);
-    reference = WC3_LuaRefFunction(level.lua_vm, 2);
+    reference = WC3_LuaRefFunction(level.lua_vm, LuaPushBoolExprCallback(L, 2));
     if (reference == LUA_NOREF || reference == LUA_REFNIL)
         return luaL_error(L, "TriggerAddCondition: could not retain callback");
     condition = gi.MemAlloc(sizeof(*condition));
@@ -316,8 +361,7 @@ static int LuaTriggerRegisterPlayerUnitEvent(lua_State *L) {
     G_SetPlayerEventSubject(event, PLAYER_ENT(player));
     event->trigger = trigger;
     if (!lua_isnoneornil(L, 4)) {
-        luaL_checktype(L, 4, LUA_TFUNCTION);
-        event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, 4);
+        event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, LuaPushBoolExprCallback(L, 4));
         if (event->lua_filter_ref == LUA_NOREF || event->lua_filter_ref == LUA_REFNIL) {
             event->inuse = false;
             return luaL_error(L, "TriggerRegisterPlayerUnitEvent: could not retain filter");
@@ -360,17 +404,21 @@ static void LuaReportUnsupportedNative(cstring_t name) {
     fprintf(stderr, "WC3_UNSUPPORTED_NATIVE name=%s\n", name);
 }
 
-/* Condition/Filter wrap a callback.  The Lua bridge keeps a bare Lua closure and
- * TriggerAddCondition/AddAction accept it directly, so Condition is identity and
- * DestroyBoolExpr only has to accept-and-ignore. */
 static int LuaCondition(lua_State *L) {
     luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_newuserdata(L, 1);
+    luaL_newmetatable(L, LUA_BOOLEXPR);
+    lua_setmetatable(L, -2);
     lua_pushvalue(L, 1);
+    lua_setuservalue(L, -2);
     return 1;
 }
 
 static int LuaDestroyBoolExpr(lua_State *L) {
-    (void)L;
+    if (lua_isnoneornil(L, 1)) return 0;
+    luaL_checkudata(L, 1, LUA_BOOLEXPR);
+    lua_pushnil(L);
+    lua_setuservalue(L, 1);
     return 0;
 }
 
@@ -396,8 +444,7 @@ static int LuaIsTriggerEnabled(lua_State *L) {
  * boolexpr argument.  NULL when the argument is absent or nil. */
 static bool LuaRefEventFilter(lua_State *L, int index, event_t *event) {
     if (!event || lua_isnoneornil(L, index)) return true;
-    luaL_checktype(L, index, LUA_TFUNCTION);
-    event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, index);
+    event->lua_filter_ref = WC3_LuaRefFunction(level.lua_vm, LuaPushBoolExprCallback(L, index));
     if (event->lua_filter_ref == LUA_NOREF || event->lua_filter_ref == LUA_REFNIL) {
         event->inuse = false;
         return false;
@@ -602,6 +649,28 @@ static int LuaGetEventPlayerChatStringMatched(lua_State *L) {
     return 1;
 }
 
+static int LuaBlzGetTriggerPlayerMouseButton(lua_State *L) {
+    lua_pushinteger(L, WC3_LuaGetTriggerContext(level.lua_vm).event_value);
+    return 1;
+}
+
+static int LuaBlzGetTriggerPlayerMouseX(lua_State *L) {
+    lua_pushnumber(L, WC3_LuaGetTriggerContext(level.lua_vm).point_x);
+    return 1;
+}
+
+static int LuaBlzGetTriggerPlayerMouseY(lua_State *L) {
+    lua_pushnumber(L, WC3_LuaGetTriggerContext(level.lua_vm).point_y);
+    return 1;
+}
+
+static int LuaBlzGetTriggerPlayerMousePosition(lua_State *L) {
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    vec2_t *position = lua_newuserdata(L, sizeof(*position));
+    *position = (vec2_t){ context.point_x, context.point_y };
+    return 1;
+}
+
 static int LuaGetTriggerPlayer(lua_State *L) {
     void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
     edict_t *ent = unit;
@@ -782,6 +851,17 @@ static int LuaSetUnitOwner(lua_State *L) {
             G_SetUnitColorOverride(unit, previous_color);
         }
     }
+    return 0;
+}
+
+static int LuaSetUnitPosition(lua_State *L) {
+    vec2_t position = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
+    G_SetUnitPosition(lua_touserdata(L, 1), &position);
+    return 0;
+}
+
+static int LuaSetUnitPositionLoc(lua_State *L) {
+    G_SetUnitPosition(lua_touserdata(L, 1), lua_touserdata(L, 2));
     return 0;
 }
 
@@ -1105,9 +1185,8 @@ static int LuaGroupEnumUnitsOfPlayer(lua_State *L) {
         G_EnumUnitsOfPlayer(group, player, NULL, NULL);
         return 0;
     }
-    luaL_checktype(L, 3, LUA_TFUNCTION);
     context.lua = level.lua_vm;
-    context.filter_index = lua_absindex(L, 3);
+    context.filter_index = LuaPushBoolExprCallback(L, 3);
     G_EnumUnitsOfPlayer(group, player, LuaGroupFilter, &context);
     if (WC3_LuaErrorPending(context.lua)) {
         char error[512];
@@ -1127,7 +1206,7 @@ static int LuaForceEnumPlayers(lua_State *L) {
         G_ForceEnumPlayers(force, 0, NULL, NULL);
         return 0;
     }
-    luaL_checktype(L, 2, LUA_TFUNCTION);
+    context.filter_index = LuaPushBoolExprCallback(L, 2);
     G_ForceEnumPlayers(force, 0, LuaPlayerFilter, &context);
     if (WC3_LuaErrorPending(context.lua)) {
         char error[512];
@@ -1160,6 +1239,17 @@ static int LuaRect(lua_State *L) {
     rect->min.y = (float)luaL_checknumber(L, 2);
     rect->max.x = (float)luaL_checknumber(L, 3);
     rect->max.y = (float)luaL_checknumber(L, 4);
+    return 1;
+}
+
+static int LuaIsTerrainPathable(lua_State *L) {
+    vec2_t point = { (float)luaL_checknumber(L, 1), (float)luaL_checknumber(L, 2) };
+    uint32_t *handle = lua_touserdata(L, 3);
+    uint32_t type = handle ? *handle : (uint32_t)luaL_checkinteger(L, 3);
+    bool blocked;
+    if (!G_TerrainPathingBlocked(&point, type, &blocked))
+        return luaL_error(L, "IsTerrainPathable: unsupported pathing type %u", type);
+    lua_pushboolean(L, blocked);
     return 1;
 }
 
@@ -2032,9 +2122,7 @@ static int LuaSetUnitTypeSlots(lua_State *L) {
 }
 
 static int LuaFilter(lua_State *L) {
-    luaL_checktype(L, 1, LUA_TFUNCTION);
-    lua_pushvalue(L, 1);
-    return 1;
+    return LuaCondition(L);
 }
 
 static int LuaGetFilterUnit(lua_State *L) {
@@ -2178,7 +2266,7 @@ static int LuaGroupEnumUnitsInRect(lua_State *L) {
     if (!G_JassGroupValid(group) || !rect)
         return luaL_error(L, "GroupEnumUnitsInRect: invalid group or rect");
     context.lua = level.lua_vm;
-    context.filter_index = lua_absindex(L, 3);
+    context.filter_index = lua_isnoneornil(L, 3) ? 0 : LuaPushBoolExprCallback(L, 3);
     FOR_LOOP(i, globals.num_edicts) {
         edict_t *ent = &globals.edicts[i];
         if (!(ent->svflags & SVF_MONSTER) || G_IsDeferredFree(ent)) continue;
@@ -2204,7 +2292,7 @@ static int LuaGroupEnumUnitsInRange(lua_State *L) {
     if (!G_JassGroupValid(group))
         return luaL_error(L, "GroupEnumUnitsInRange: invalid group");
     context.lua = level.lua_vm;
-    context.filter_index = lua_absindex(L, 5);
+    context.filter_index = lua_isnoneornil(L, 5) ? 0 : LuaPushBoolExprCallback(L, 5);
     FOR_LOOP(i, globals.num_edicts) {
         edict_t *ent = &globals.edicts[i];
         if (!(ent->svflags & SVF_MONSTER) || G_IsDeferredFree(ent)) continue;
@@ -2536,6 +2624,17 @@ static int LuaGetPlayerColor(lua_State *L) {
     return 1;
 }
 
+static int LuaSetPlayerName(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    cstring_t name = luaL_checkstring(L, 2);
+    if (player) {
+        gameClient_t *client = PLAYER_CLIENT(player);
+        strlcpy(client->jass.name, name, sizeof(client->jass.name));
+        client->ps.name = client->jass.name;
+    }
+    return 0;
+}
+
 static int LuaGetPlayerName(lua_State *L) {
     player_t *player = lua_touserdata(L, 1);
     gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
@@ -2737,6 +2836,11 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzCreateUnitWithSkin", LuaBlzCreateUnitWithSkin);
     WC3_LuaRegisterNative(L, "SetUnitColor", LuaSetUnitColor);
     WC3_LuaRegisterNative(L, "SetUnitState", LuaSetUnitState);
+    WC3_LuaRegisterNative(L, "BlzGetUnitAbilityCooldownRemaining", LuaBlzGetUnitAbilityCooldownRemaining);
+    WC3_LuaRegisterNative(L, "BlzStartUnitAbilityCooldown", LuaBlzStartUnitAbilityCooldown);
+    WC3_LuaRegisterNative(L, "BlzEndUnitAbilityCooldown", LuaBlzEndUnitAbilityCooldown);
+    WC3_LuaRegisterNative(L, "BlzIsUnitInvulnerable", LuaBlzIsUnitInvulnerable);
+    WC3_LuaRegisterNative(L, "SetUnitInvulnerable", LuaSetUnitInvulnerable);
     WC3_LuaRegisterNative(L, "WaygateSetDestination", LuaWaygateSetDestination);
     WC3_LuaRegisterNative(L, "WaygateActivate", LuaWaygateActivate);
     WC3_LuaRegisterNative(L, "GetRectCenterX", LuaGetRectCenterX);
@@ -2784,6 +2888,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "RemoveUnit", LuaRemoveUnit);
     WC3_LuaRegisterNative(L, "SetUnitOwner", LuaSetUnitOwner);
     WC3_LuaRegisterNative(L, "GetUnitX", LuaGetUnitX);
+    WC3_LuaRegisterNative(L, "SetUnitPosition", LuaSetUnitPosition);
+    WC3_LuaRegisterNative(L, "SetUnitPositionLoc", LuaSetUnitPositionLoc);
     WC3_LuaRegisterNative(L, "GetUnitY", LuaGetUnitY);
     WC3_LuaRegisterNative(L, "GetUnitTypeId", LuaGetUnitTypeId);
     WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
@@ -2801,6 +2907,10 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetSpellTargetY", LuaGetSpellTargetY);
     WC3_LuaRegisterNative(L, "GetSpellTargetLoc", LuaGetSpellTargetLoc);
     WC3_LuaRegisterNative(L, "GetTriggerPlayer", LuaGetTriggerPlayer);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerPlayerMouseButton", LuaBlzGetTriggerPlayerMouseButton);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerPlayerMouseX", LuaBlzGetTriggerPlayerMouseX);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerPlayerMouseY", LuaBlzGetTriggerPlayerMouseY);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerPlayerMousePosition", LuaBlzGetTriggerPlayerMousePosition);
     WC3_LuaRegisterNative(L, "GetEventPlayerChatString", LuaGetEventPlayerChatString);
     WC3_LuaRegisterNative(L, "GetEventPlayerChatStringMatched", LuaGetEventPlayerChatStringMatched);
     WC3_LuaRegisterNative(L, "GetLocalPlayer", LuaGetLocalPlayer);
@@ -2809,6 +2919,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetPlayerState", LuaGetPlayerState);
     WC3_LuaRegisterNative(L, "GetPlayerColor", LuaGetPlayerColor);
     WC3_LuaRegisterNative(L, "GetPlayerName", LuaGetPlayerName);
+    WC3_LuaRegisterNative(L, "SetPlayerName", LuaSetPlayerName);
+    WC3_LuaRegisterNative(L, "SetPlayerHandicap", LuaSetPlayerHandicap);
     WC3_LuaRegisterNative(L, "GetPlayerTechCount", LuaGetPlayerTechCount);
     WC3_LuaRegisterNative(L, "GetHeroStr", LuaGetHeroStr);
     WC3_LuaRegisterNative(L, "GetHeroAgi", LuaGetHeroAgi);
@@ -2846,6 +2958,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzGroupUnitAt", LuaBlzGroupUnitAt);
     WC3_LuaRegisterNative(L, "Rect", LuaRect);
     WC3_LuaRegisterNative(L, "Location", LuaLocation);
+    WC3_LuaRegisterNative(L, "IsTerrainPathable", LuaIsTerrainPathable);
     WC3_LuaRegisterNative(L, "GetUnitLoc", LuaGetUnitLoc);
     WC3_LuaRegisterNative(L, "AddWeatherEffect", LuaAddWeatherEffect);
     WC3_LuaRegisterNative(L, "RemoveWeatherEffect", LuaRemoveWeatherEffect);
@@ -3030,18 +3143,17 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
         "BlzFrameSetAllPoints", "BlzFrameSetEnable", "BlzFrameSetScale", "BlzFrameSetVisible",
         "BlzFrameSetLevel", "BlzFrameSetTexture", "BlzFrameSetTooltip", "BlzFrameSetTextAlignment",
         "BlzFrameClearAllPoints", "BlzFrameClick", "BlzFrameGetChild",
-        "BlzGetTriggerPlayerMouseButton", "BlzGetTriggerPlayerMousePosition",
         "BlzEnableSelections", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
-        "BlzGetUnitAbilityCooldownRemaining", "BlzGetUnitArmor", "BlzGetUnitBaseDamage",
+        "BlzGetUnitArmor", "BlzGetUnitBaseDamage",
         "BlzGetUnitBooleanField", "BlzGetUnitMaxHP", "BlzGetUnitMaxMana", "BlzGetUnitRealField",
         "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
-        "BlzIsUnitInvulnerable", "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
+        "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
         "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime", "BlzSetUnitArmor",
         "BlzSetUnitBaseDamage", "BlzSetUnitIntegerFieldBJ", "BlzSetUnitMaxHP", "BlzSetUnitMaxMana",
         "BlzSetUnitName", "BlzSetUnitRealFieldBJ", "BlzSetUnitStringFieldBJ",
         "BlzSetUnitWeaponBooleanFieldBJ", "BlzSetUnitWeaponIntegerFieldBJ",
-        "BlzStartUnitAbilityCooldown", "BlzEndUnitAbilityCooldown", "BlzUnitCancelTimedLife",
+        "BlzUnitCancelTimedLife",
         "BlzUnitDisableAbility", "BlzUnitHideAbility", "BlzUnitInterruptAttack",
     };
     for (uint32_t i = 0; i < sizeof(blz_stubs) / sizeof(blz_stubs[0]); ++i) {

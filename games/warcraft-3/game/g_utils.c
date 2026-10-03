@@ -1,5 +1,12 @@
 #include "g_local.h"
 
+bool G_TerrainPathingBlocked(vec2_t const *point, uint32_t type, bool *blocked) {
+    uint8_t flags;
+    if (type < 1 || type > 3) return false;
+    *blocked = !CM_GetPathingFlagsAt(point, &flags) || (flags & (1u << type)) != 0;
+    return true;
+}
+
 typedef struct {
     edict_t *ent;
     uint32_t spawn_time;

@@ -79,8 +79,8 @@
     {
       "name": "BlzEndUnitAbilityCooldown",
       "references": 11,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzEndUnitAbilityCooldown"
     },
     {
       "name": "BlzFrameClearAllPoints",
@@ -199,14 +199,14 @@
     {
       "name": "BlzGetTriggerPlayerMouseButton",
       "references": 1,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzGetTriggerPlayerMouseButton"
     },
     {
       "name": "BlzGetTriggerPlayerMousePosition",
       "references": 1,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzGetTriggerPlayerMousePosition"
     },
     {
       "name": "BlzGetTriggerSyncData",
@@ -223,8 +223,8 @@
     {
       "name": "BlzGetUnitAbilityCooldownRemaining",
       "references": 16,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzGetUnitAbilityCooldownRemaining"
     },
     {
       "name": "BlzGetUnitArmor",
@@ -295,8 +295,8 @@
     {
       "name": "BlzIsUnitInvulnerable",
       "references": 2,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzIsUnitInvulnerable"
     },
     {
       "name": "BlzLoadTOCFile",
@@ -373,8 +373,8 @@
     {
       "name": "BlzStartUnitAbilityCooldown",
       "references": 60,
-      "status": "stub",
-      "binding": "LuaBlzUnsupported"
+      "status": "binding_present",
+      "binding": "LuaBlzStartUnitAbilityCooldown"
     },
     {
       "name": "BlzTriggerRegisterPlayerSyncEvent",
@@ -1471,8 +1471,8 @@
     {
       "name": "IsTerrainPathable",
       "references": 19,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaIsTerrainPathable"
     },
     {
       "name": "IsTriggerEnabled",
@@ -1915,8 +1915,8 @@
     {
       "name": "SetPlayerHandicap",
       "references": 1,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaSetPlayerHandicap"
     },
     {
       "name": "SetPlayerHandicapDamage",
@@ -1927,8 +1927,8 @@
     {
       "name": "SetPlayerName",
       "references": 33,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaSetPlayerName"
     },
     {
       "name": "SetPlayerRacePreference",
@@ -2113,8 +2113,8 @@
     {
       "name": "SetUnitInvulnerable",
       "references": 2,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaSetUnitInvulnerable"
     },
     {
       "name": "SetUnitLookAt",
@@ -2143,14 +2143,14 @@
     {
       "name": "SetUnitPosition",
       "references": 8,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaSetUnitPosition"
     },
     {
       "name": "SetUnitPositionLoc",
       "references": 22,
-      "status": "unregistered",
-      "binding": null
+      "status": "binding_present",
+      "binding": "LuaSetUnitPositionLoc"
     },
     {
       "name": "SetUnitState",

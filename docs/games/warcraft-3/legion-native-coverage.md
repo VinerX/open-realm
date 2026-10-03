@@ -18,7 +18,7 @@ complete native coverage or full playability.
 
 [legion-native-inventory.json](legion-native-inventory.json) records static
 references in the extracted 508 Lua, matched against `HiveWE/data/tools/common.j`.
-It contains 405 native names: 189 bindings, 54 reporting stubs, 158 unregistered
+It contains 405 native names: 201 bindings, 48 reporting stubs, 152 unregistered
 names and four no-op preload operations at this checkpoint. These are binding
 categories, not behavior verification. References include aliases; transitive
 `Blizzard.j` calls and dynamically constructed names require additional analysis
@@ -51,6 +51,62 @@ Do not return fabricated success from a missing native.
   hierarchy; do not invent aliases just to get past the guard.
 
 ## Chat contract
+
+`Condition` and `Filter` return typed Lua userdata retaining a callback. Returning
+the function itself caused the map's `TriggerAddCondition` wrapper to wrap it
+again with `safeCall`, which discards the successful return value. Every such
+condition evaluated false. Consumers now unwrap the handle and retain their own
+callback reference; destroying the handle does not invalidate a registered
+condition. Reusing a destroyed handle reports an error.
+
+The real 508 `-ai1` scenario reached the action after this repair, then exposed
+missing `SetPlayerHandicap` and `SetPlayerName`. Both now bind to the same player
+state used by JASS. The scenario passed at step 202 with no callback errors;
+this establishes command delivery, not complete AI gameplay.
+
+Retail chat codes currently supported: `greedisgood`, `keysersoze`, `leafittome`,
+`iseedeadpeople`, `warpten`, `allyourbasearebelongtous`, `somebodysetusupthebomb`.
+They require single-player setup or `sv_cheats`; other stock cheats remain gaps.
+Unknown text continues through ordinary map chat events.
+
+## Race selector gaps
+
+The lobby creates `n04G` (mode selection); `CreateRaceCircles` creates `h0HJ`
+after the lobby expires. UnitAbilities previously inherited only the base SLK
+row, losing authored `uabi`/`uhab` lists. Stable map-local merges now apply these
+lists through the existing metadata schema, including original-object edits and
+custom-object inheritance.
+
+Right-click teleport is `Trig_CircleMove_Code`, registered through
+`TriggerRegisterPlayerMouseEventBJ`. It reads `BlzGetTriggerPlayerMouseButton`
+and `BlzGetTriggerPlayerMousePosition`. Mouse down/up/move now use a subscribed
+world-input command, the ordinary queued event point/value context, and shared
+Lua/JASS getters. The server snapshots the active subscriptions in a reserved
+player stat; UI-captured input is excluded and motion is coalesced per input pass.
+Mouse enums compare their payload in JASS, matching other converted enums.
+
+`IsTerrainPathable` was absent in Lua and returned unconditional true in JASS.
+Both now query real pathing cells for walk/fly/build blocking. Other pathing
+types report an explicit error until their native semantics are implemented.
+Cooldown start/end/remaining and unit invulnerability now use existing shared
+gameplay state rather than reporting stubs.
+`SetUnitPosition` and `SetUnitPositionLoc` share the Move-owned relocation helper
+with JASS, retaining collision placement, entity linking, fog invalidation and
+region-transition notifications. The real mouse scenario exposed the missing
+location setter after the pathability query was repaired.
+The real 508 mouse scenario passed at step 202: it creates the race selector,
+sends a right-button event through `G_ClientCommand`, and verifies that the
+map's own registered handler moved it to the chosen walkable destination with
+no callback errors. This is server/map behavior proof; the client relay has its
+own focused test, and a visible UI interaction still needs a fresh user run.
+
+The selector still loses command art: `FindConfigValue` reads text profiles,
+not map-local W3A art overrides. The real selector list now contains 14 authored
+abilities, but missing `Art` keeps their command buttons absent. This is a
+separate presentation-data gap; restoring the list alone does not restore menus.
+Custom frame support and player tech-state capacity exhaustion also remain gaps.
+
+## Chat transport
 
 Enter opens a client text composer, Enter sends, Escape cancels. The client
 forwards one reliable `say <text>` string directly, without executing its text

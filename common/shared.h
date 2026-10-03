@@ -533,7 +533,12 @@ typedef enum {
     UI_PLAYERSTAT_SELECTION_TIMED_STATUS, /* 0..USHRT_MAX; selected-unit timed-status remaining fraction */
     UI_PLAYERSTAT_ENV_VARIANT, /* presentation variant for environment-bound UI; 0 is normal */
     UI_PLAYERSTAT_GAME_VARIANT, /* opaque game-owned local presentation variant; shared/client code assigns no semantics */
+    UI_PLAYERSTAT_MOUSE_EVENTS, /* subscribed world mouse events: down/up/move bits */
 } UIPLAYERSTAT;
+
+#define GAME_MOUSE_DOWN 0
+#define GAME_MOUSE_UP 1
+#define GAME_MOUSE_MOVE 2
 
 typedef enum {
     /* uiFrame_t.stat is NFT_BYTE on the wire. Keep generic special bindings

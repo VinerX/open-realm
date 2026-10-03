@@ -314,6 +314,15 @@ static bool CL_TouchGestureOwnsMouse(SDL_Event const *event) {
     return false;
 }
 
+static void CL_SendGameMouseEvent(uint32_t kind, uint32_t button, int x, int y) {
+    vec3_t point;
+    if (!(cl.playerstate.stats[UI_PLAYERSTAT_MOUSE_EVENTS] & (1u << kind)) ||
+        !CL_GameplayInputReady() || CL_MouseOverGameplayUIAt(x, y) ||
+        !re.TraceLocation(&cl.viewDef, x, y, &point)) return;
+    MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
+    SZ_Printf(&cls.netchan.message, "mouseevent %u %u %.9g %.9g", kind, button, point.x, point.y);
+}
+
 static void CL_SendSmartPointCommand(float x, float y) {
     MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
     SZ_Printf(&cls.netchan.message, CL_OrderQueueModifierDown()
@@ -761,6 +770,7 @@ void CL_Input(void) {
                 if (cls.state != ca_active) break;
                 if (CL_WindowMouseEvent(MENU_MOUSE_DOWN, event.button.x, event.button.y, event.button.button)) break;
                 if (SCR_LayoutMouseEvent(MENU_MOUSE_DOWN, event.button.x, event.button.y, event.button.button)) break;
+                CL_SendGameMouseEvent(GAME_MOUSE_DOWN, event.button.button, event.button.x, event.button.y);
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     mouse.event = UI_LEFT_MOUSE_DOWN;
                 } else if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -778,6 +788,7 @@ void CL_Input(void) {
                 if (cls.state != ca_active) break;
                 if (CL_WindowMouseEvent(MENU_MOUSE_UP, event.button.x, event.button.y, event.button.button)) break;
                 if (SCR_LayoutMouseEvent(MENU_MOUSE_UP, event.button.x, event.button.y, event.button.button)) break;
+                CL_SendGameMouseEvent(GAME_MOUSE_UP, event.button.button, event.button.x, event.button.y);
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     mouse.event = UI_LEFT_MOUSE_UP;
                 } else if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -826,7 +837,10 @@ void CL_Input(void) {
         }
     }
     CL_FlushPan();
-    if (hover_update_pending) CL_UpdateHover((float)hover_motion.x, (float)hover_motion.y);
+    if (hover_update_pending) {
+        CL_UpdateHover((float)hover_motion.x, (float)hover_motion.y);
+        CL_SendGameMouseEvent(GAME_MOUSE_MOVE, 0, hover_motion.x, hover_motion.y);
+    }
     CL_InputFrame();
 }
 
@@ -1294,6 +1308,35 @@ TEST(client_input, focus_loss_releases_game_order_queue) {
     SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT); SDL_QuitSubSystem(SDL_INIT_EVENTS);
     cl = *old_cl; MemFree(old_cl); cls = old_cls; input = old_input; mouse = old_mouse;
     SDL_SetModState(old_mod);
+}
+
+TEST(client_input, subscribed_mouse_events_preserve_world_coordinates) {
+    uint8_t data[256];
+    __typeof__(cl) *saved_cl = MemAlloc(sizeof(cl));
+    __typeof__(cls) saved_cls = cls;
+    refExport_t saved_re = re;
+    __typeof__(input) saved_input = input;
+    char command[128];
+    memcpy(saved_cl, &cl, sizeof(cl)); memset(&cl, 0, sizeof(cl));
+    cls.state = ca_active; cls.key_dest = key_game;
+    cl.playerstate.client_ui_state = CLIENT_UI_GAME;
+    input.focus = true;
+    re.TraceLocation = CL_TestSmartLocation;
+    re.GetWindowSize = CL_TestWindowSize;
+    SZ_Init(&cls.netchan.message, data, sizeof(data));
+    CL_SendGameMouseEvent(GAME_MOUSE_DOWN, 3, 10, 20);
+    T_EQ(cls.netchan.message.cursize, 0);
+    cl.playerstate.stats[UI_PLAYERSTAT_MOUSE_EVENTS] = 1u << GAME_MOUSE_DOWN;
+    CL_SendGameMouseEvent(GAME_MOUSE_DOWN, 3, 10, 20);
+    T_EQ(MSG_ReadByte(&cls.netchan.message), clc_stringcmd);
+    MSG_ReadString(&cls.netchan.message, command);
+    T_STREQ(command, "mouseevent 0 3 123 456");
+    T_EQ(cls.netchan.message.readcount, cls.netchan.message.cursize);
+    SZ_Init(&cls.netchan.message, data, sizeof(data));
+    cls.key_dest = key_message;
+    CL_SendGameMouseEvent(GAME_MOUSE_DOWN, 3, 10, 20);
+    T_EQ(cls.netchan.message.cursize, 0);
+    cl = *saved_cl; MemFree(saved_cl); cls = saved_cls; re = saved_re; input = saved_input;
 }
 
 TEST(client_input, smart_entity_click_preserves_ground_point) {

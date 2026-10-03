@@ -2796,6 +2796,64 @@ static void CMD_UICanvas(edict_t *ent, uint32_t argc, cstring_t argv[]) {
     ent->client->canvas = (UICANVASCLASS)value;
 }
 
+static bool G_RetailChatCheat(edict_t *ent, cstring_t text) {
+    char code[64], value[256] = "";
+    enum { GOLD, LUMBER, RESOURCES, REVEAL, BUILD, WIN, LOSE } action;
+    gameClient_t *client = ent ? ent->client : NULL;
+    bool enabled;
+    if (!client || sscanf(text, "%63s %255s", code, value) < 1) return false;
+    if (!strcasecmp(code, "greedisgood")) action = RESOURCES;
+    else if (!strcasecmp(code, "keysersoze")) action = GOLD;
+    else if (!strcasecmp(code, "leafittome")) action = LUMBER;
+    else if (!strcasecmp(code, "iseedeadpeople")) action = REVEAL;
+    else if (!strcasecmp(code, "warpten")) action = BUILD;
+    else if (!strcasecmp(code, "allyourbasearebelongtous")) action = WIN;
+    else if (!strcasecmp(code, "somebodysetusupthebomb")) action = LOSE;
+    else return false;
+    if (!G_IsSinglePlayer() && !G_CheatsEnabled()) {
+        G_CheatPrintf(ent, "WC3: chat cheats require single player or sv_cheats 1");
+        return true;
+    }
+    switch (action) {
+    case GOLD: case LUMBER: case RESOURCES:
+        G_GivePlayerResources(ent, action == GOLD ? "gold" : action == LUMBER ? "lumber" : "res",
+                              *value ? value : "500");
+        break;
+    case REVEAL:
+        enabled = !(client->ps.rdflags & RDF_NOFOG);
+        SET_FLAG(client->ps.rdflags, RDF_NOFOG, enabled);
+        SET_FLAG(client->ps.rdflags, RDF_NOFOGMASK, enabled);
+        G_CheatPrintf(ent, "WC3: reveal %s", enabled ? "on" : "off");
+        break;
+    case BUILD:
+        client->cheat_instant_build = !client->cheat_instant_build;
+        G_CheatPrintf(ent, "WC3: instant build %s", client->cheat_instant_build ? "on" : "off");
+        break;
+    case WIN: case LOSE:
+        G_RemovePlayerWithResult(client->ps.number, action == WIN ? 0 : 1);
+        break;
+    }
+    return true;
+}
+
+static void CMD_MouseEvent(edict_t *ent, uint32_t argc, cstring_t argv[]) {
+    char *end;
+    long kind, button;
+    vec2_t point;
+    if (!ent || !ent->client || argc != 5) return;
+    kind = strtol(argv[1], &end, 10);
+    if (!argv[1][0] || *end || kind < GAME_MOUSE_DOWN || kind > GAME_MOUSE_MOVE) return;
+    button = strtol(argv[2], &end, 10);
+    if (!argv[2][0] || *end || button < 0 || button > 3 || (kind != GAME_MOUSE_MOVE && !button)) return;
+    point.x = strtof(argv[3], &end);
+    if (!argv[3][0] || *end || !isfinite(point.x)) return;
+    point.y = strtof(argv[4], &end);
+    if (!argv[4][0] || *end || !isfinite(point.y)) return;
+    G_PublishEventWithPoint(&(gameEventPointParams_t){
+        .edict = ent, .type = EVENT_PLAYER_MOUSE_DOWN + kind, .value = button, .point = &point
+    });
+}
+
 static void CMD_Say(edict_t *ent, uint32_t argc, cstring_t argv[]) {
     char text[256] = "";
     size_t length = 0;
@@ -2810,6 +2868,7 @@ static void CMD_Say(edict_t *ent, uint32_t argc, cstring_t argv[]) {
         length += n;
     }
     if (!length) return;
+    if (G_RetailChatCheat(ent, text)) return;
     gameEvent_t *event = G_PublishEvent(ent, EVENT_PLAYER_CHAT);
     if (event) memcpy(event->chat_text, text, length + 1);
     FOR_LOOP(i, game.max_clients) {
@@ -2821,6 +2880,7 @@ static void CMD_Say(edict_t *ent, uint32_t argc, cstring_t argv[]) {
 
 clientCommand_t clientCommands[] = {
     { "say", CMD_Say },
+    { "mouseevent", CMD_MouseEvent },
     { "give", CMD_Give },
     { "god", CMD_God },
     { "kill", CMD_Kill },

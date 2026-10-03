@@ -300,6 +300,26 @@ TEST(wc3_game, give_resource_cheats_target_issuing_player_without_selection) {
     gi.CvarString = old_cvar;
 }
 
+TEST(wc3_game, retail_chat_resource_and_reveal_codes) {
+    cstring_t (*old_cvar)(cstring_t, cstring_t) = gi.CvarString;
+    edict_t *player = globals.edicts;
+    gameClient_t *client = &game.clients[0];
+    cstring_t resources[] = { "say", "GrEeDiSgOoD 1000" };
+    cstring_t reveal[] = { "say", "iseedeadpeople" };
+    setup_test_world();
+    gi.CvarString = give_resources_cheat_cvar;
+    player->client = client; client->ps.number = 0;
+    G_ClientCommand(player, 2, resources);
+    T_EQ(client->ps.stats[PLAYERSTATE_RESOURCE_GOLD], 1000);
+    T_EQ(client->ps.stats[PLAYERSTATE_RESOURCE_LUMBER], 1000);
+    G_ClientCommand(player, 2, reveal);
+    T_ASSERT(client->ps.rdflags & RDF_NOFOG);
+    T_ASSERT(client->ps.rdflags & RDF_NOFOGMASK);
+    G_ClientCommand(player, 2, reveal);
+    T_ASSERT(!(client->ps.rdflags & RDF_NOFOG));
+    gi.CvarString = old_cvar;
+}
+
 TEST(wc3_game, hero_max_cheat_uses_max_level_xp_and_restores_level_skill_budget) {
     cstring_t (*old_cvar)(cstring_t, cstring_t) = gi.CvarString;
     gameClient_t *client = &game.clients[0];
