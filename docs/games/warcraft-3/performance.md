@@ -36,6 +36,34 @@ metadata implementation (Unsummon approach and Windows `/tmp` save/load paths).
 The full `make test` target remains blocked by `tests/test_net.c` including
 `arpa/inet.h` on Windows. These limits are separate from this performance fix.
 
+### Follow-up: defer learned-ability alias resolution
+
+A dedicated 800-frame Legion profile attributed most sustained simulation work
+to `G_RunEntities`, rather than Lua timers. The global ability-update dispatch
+visited about 6,093 units per step. `G_UnitAbilityLevel` entered
+`G_HeroSkillLevel`, which resolved the requested ability's alias even when all
+learned slots were empty. That needlessly searched the map's ability overrides.
+
+The lookup now resolves the requested alias only after finding a learned slot
+with a nonzero rank. It still checks every slot, preserves learned-alias rank
+precedence, and falls through to the existing added/removed/authored membership
+path. No per-unit cache or new runtime state was added.
+
+The regression failed three query-count assertions before the change and passes
+108/108 afterward. It covers 96 empty-slot queries, an added custom ability, a
+rank in the last learned slot, an unrelated ability, removal and null/zero inputs.
+The counters exist only under `BZ_TESTS`. RoC and TFT each pass 714/714 SLK
+assertions, 93/93 Hero assertions and 7/7 learning assertions. The wider spell
+suite retains the same nine baseline failures; `make test` still hits the Windows
+`arpa/inet.h` blocker.
+
+Temporary stage timers lived only in generated files under `build/sim-profile`.
+`legion-phases-before.log` and `legion-phases.log` completed all 800 frames.
+For frames 640-800, median `G_RunEntities` duration was 62.75 ms before and
+63.30 ms after. The deterministic query-count reduction is established, but
+these runs do **not** establish an end-to-end simulation or FPS improvement.
+Further profiling inside entity physics, statuses and thinking remains needed.
+
 ## October 2: 23-Race aura scans and deferred media loading
 
 ### Follow-up: scoped assets reuse the mounted map

@@ -1978,7 +1978,16 @@ abilityLevel_t const *G_AbilityLevel(uint32_t id, uint32_t level) {
     return row->level + level - 1;
 }
 AbilityBuffData_t const *G_AbilityBuffData(uint32_t id) { static AbilityBuffData_t zero; AbilityBuffData_t *row = FS_SLKLookup(&ability_buff_idx, id); return row ? row : &zero; }
+#ifdef BZ_TESTS
+static uint32_t test_ability_code_queries;
+void G_TestResetAbilityCodeQueries(void) { test_ability_code_queries = 0; }
+uint32_t G_TestAbilityCodeQueries(void) { return test_ability_code_queries; }
+#endif
+
 uint32_t G_AbilityCode(uint32_t id) {
+#ifdef BZ_TESTS
+    test_ability_code_queries++;
+#endif
     if (!id) return 0;
     uint32_t code = G_AbilityData(id)->code;
     return code ? code : id;

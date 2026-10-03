@@ -16,6 +16,40 @@
 void setup_test_world(void);
 void reset_entities(void);
 edict_t *alloc_test_unit(uint32_t class_id, float x, float y);
+void G_TestResetAbilityCodeQueries(void);
+uint32_t G_TestAbilityCodeQueries(void);
+
+TEST(wc3_slk, ability_level_resolves_aliases_only_for_learned_slots) {
+    uint32_t const code = MAKEFOURCC('A','H','h','b');
+    uint32_t const custom = MAKEFOURCC('A','0','H','Z');
+    unitData_t ability = { .originalUnitID = code, .newUnitID = custom };
+    mapInfo_t info = { .num_userCreatedAbilities = 1, .userCreatedAbilities = &ability };
+    edict_t *unit;
+
+    setup_test_world();
+    unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0);
+    G_SetMapAbilityOverrides(&info);
+    G_TestResetAbilityCodeQueries();
+    FOR_LOOP(i, 96) T_EQ(G_UnitAbilityLevel(unit, code), 0);
+    T_EQ(G_TestAbilityCodeQueries(), 0);
+
+    T_ASSERT(G_ActorAddSkill(unit, custom));
+    G_TestResetAbilityCodeQueries();
+    T_EQ(G_UnitAbilityLevel(unit, custom), 1);
+    T_EQ(G_TestAbilityCodeQueries(), 0);
+    unit->heroabilities[MAX_HERO_ABILITIES - 1] = (heroability_t){ .code = custom, .level = 3 };
+    T_EQ(G_UnitAbilityLevel(unit, code), 3);
+    T_EQ(G_UnitAbilityLevel(unit, custom), 3);
+    T_EQ(G_UnitAbilityLevel(unit, MAKEFOURCC('A','H','t','b')), 0);
+    memset(unit->heroabilities, 0, sizeof(unit->heroabilities));
+    T_ASSERT(G_ActorRemoveSkill(unit, custom));
+    G_TestResetAbilityCodeQueries();
+    T_EQ(G_UnitAbilityLevel(unit, custom), 0);
+    T_EQ(G_UnitAbilityLevel(NULL, code), 0);
+    T_EQ(G_UnitAbilityLevel(unit, 0), 0);
+    T_EQ(G_TestAbilityCodeQueries(), 0);
+    G_SetMapAbilityOverrides(NULL);
+}
 
 TEST(wc3_slk, map_game_data_set_matches_w3i_and_melee_fallback) {
     mapInfo_t info = { 0 };
