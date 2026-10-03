@@ -1978,7 +1978,11 @@ abilityLevel_t const *G_AbilityLevel(uint32_t id, uint32_t level) {
     return row->level + level - 1;
 }
 AbilityBuffData_t const *G_AbilityBuffData(uint32_t id) { static AbilityBuffData_t zero; AbilityBuffData_t *row = FS_SLKLookup(&ability_buff_idx, id); return row ? row : &zero; }
-uint32_t G_AbilityCode(uint32_t id) { uint32_t code = G_AbilityData(id)->code; return code ? code : id; }
+uint32_t G_AbilityCode(uint32_t id) {
+    if (!id) return 0;
+    uint32_t code = G_AbilityData(id)->code;
+    return code ? code : id;
+}
 uint32_t G_AbilityCodeName(cstring_t name) { return G_AbilityCode(FS_SLKKey(name)); }
 
 /* Tooltip markup names authored AbilityData columns, so reflect through the

@@ -2,6 +2,40 @@
 
 For process footprint, allocation profiling, and RAM reduction priorities, see [WC3 memory](memory.md).
 
+## October 3: empty ability rawcodes in true-sight scans
+
+Legion's visibility pass became slow when permanent invisibility activated at
+simulation frame 621. `S_UnitIsDetectedByPlayer` scans the edict pool, and its
+Sentry Ward predicate resolves `summon_ability` through `G_AbilityCode`. Ordinary
+objects have rawcode zero. Resolving that sentinel searched all map-authored
+ability overrides, multiplying the world scan by the custom ability table size.
+
+`G_AbilityCode(0)` now returns zero before querying ability data. Nonzero rawcodes
+still use the same authored alias resolution. Detection, shared vision, range,
+and world lifecycle rules are unchanged; no detector cache was introduced.
+
+Bounded release builds with temporary phase timers used
+`23_Race_Legion_v1_6_508.w3x` and the same 37,828-entity snapshot pass. Across
+frames 621-660, visibility duration fell from 1,490-1,682 ms (median 1,529 ms) to
+29-61 ms (median 40 ms). For 100 detector searches, the detector loop fell from
+about 6,600-6,700 ms to 60-80 ms while visiting the same 3,782,900 edicts.
+Logs are local artifacts under `build/perf-trace/`: `legion-detection-split.log`
+and `legion-null-ability-fixed.log`. Temporary timers were removed from source.
+
+The instrumented run improved from roughly 0.5-0.6 FPS to 5-8 FPS after the
+transition. Simulation still averaged around 60-80 ms per step, and detector
+queries still scan the world. These measurements establish the specific lookup
+fix; they do not establish final rendering performance or scenery completeness.
+
+The rebuilt normal release, with phase timers removed, also reached the affected
+phase at roughly 6-8 FPS (`build/perf-release/legion-null-ability-clean.log`).
+Focused detection/invisibility cases passed 70/70 assertions per edition, and
+SLK/custom-alias cases passed 606/606 per edition. The wider spell suite returned
+4,634/4,643 in both RoC and TFT; the same nine failures reproduce with the original
+metadata implementation (Unsummon approach and Windows `/tmp` save/load paths).
+The full `make test` target remains blocked by `tests/test_net.c` including
+`arpa/inet.h` on Windows. These limits are separate from this performance fix.
+
 ## October 2: 23-Race aura scans and deferred media loading
 
 ### Follow-up: scoped assets reuse the mounted map
