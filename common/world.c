@@ -895,6 +895,7 @@ static void CM_ReadObjectData(handle_t archive, cstring_t filename,
     *original = CM_ReadObjectOverrides(file, version, num_original, has_level_pointer, filename);
     if (*num_original == UINT32_MAX) {
         fprintf(stderr, "CM_ReadObjectData: failed reading original table in %s\n", filename);
+        *num_original = 0;
         SFileCloseFile(file);
         return;
     }
@@ -922,10 +923,64 @@ void CM_ReadItems(handle_t archive) {
                       &world.info.num_userCreatedItems, &world.info.userCreatedItems, false);
 }
 
+static void CM_MergeObjectSkin(unitData_t *skin, uint32_t *count, unitData_t **objects,
+                               uint32_t other_count, unitData_t *other) {
+    uint32_t id = skin->newUnitID ? skin->newUnitID : skin->originalUnitID;
+    unitData_t *target = NULL;
+    FOR_LOOP(i, *count) {
+        unitData_t *row = *objects + i;
+        if ((row->newUnitID ? row->newUnitID : row->originalUnitID) == id) target = row;
+    }
+    FOR_LOOP(i, other_count) {
+        unitData_t *row = other + i;
+        if ((row->newUnitID ? row->newUnitID : row->originalUnitID) == id) target = row;
+    }
+    if (target) {
+        uint32_t mods = target->numbeOfModifications + skin->numbeOfModifications;
+        unitModification_t *merged;
+        if (mods > UINT16_MAX) {
+            fprintf(stderr, "CM_MergeObjectSkin: too many modifications for %.4s\n", (char *)&id);
+            return;
+        }
+        if (!skin->numbeOfModifications) return;
+        merged = MemAlloc(mods * sizeof(*merged));
+        if (target->numbeOfModifications)
+            memcpy(merged, target->modifications, target->numbeOfModifications * sizeof(*merged));
+        memcpy(merged + target->numbeOfModifications, skin->modifications,
+               skin->numbeOfModifications * sizeof(*merged));
+        SAFE_DELETE(target->modifications, MemFree);
+        target->modifications = merged;
+        target->numbeOfModifications = (uint16_t)mods;
+        MemFree(skin->modifications);
+    } else {
+        unitData_t *merged = MemAlloc((*count + 1) * sizeof(*merged));
+        if (*count) memcpy(merged, *objects, *count * sizeof(*merged));
+        merged[(*count)++] = *skin;
+        SAFE_DELETE(*objects, MemFree);
+        *objects = merged;
+    }
+    skin->modifications = NULL;
+    skin->numbeOfModifications = 0;
+}
+
 void CM_ReadAbilities(handle_t archive) {
+    uint32_t original_count, custom_count;
+    unitData_t *original, *custom;
     CM_ReadObjectData(archive, "war3map.w3a",
                       &world.info.num_originalAbilities, &world.info.originalAbilities,
                       &world.info.num_userCreatedAbilities, &world.info.userCreatedAbilities, true);
+    CM_ReadObjectData(archive, "war3mapSkin.w3a", &original_count, &original,
+                      &custom_count, &custom, true);
+    FOR_LOOP(i, original_count)
+        CM_MergeObjectSkin(original + i, &world.info.num_originalAbilities,
+                           &world.info.originalAbilities, world.info.num_userCreatedAbilities,
+                           world.info.userCreatedAbilities);
+    FOR_LOOP(i, custom_count)
+        CM_MergeObjectSkin(custom + i, &world.info.num_userCreatedAbilities,
+                           &world.info.userCreatedAbilities, world.info.num_originalAbilities,
+                           world.info.originalAbilities);
+    CM_FreeObjectOverrides(original_count, original);
+    CM_FreeObjectOverrides(custom_count, custom);
 }
 
 string_t FS_ReadArchiveFileIntoString(handle_t archive, cstring_t filename) {

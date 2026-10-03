@@ -100,10 +100,20 @@ map's own registered handler moved it to the chosen walkable destination with
 no callback errors. This is server/map behavior proof; the client relay has its
 own focused test, and a visible UI interaction still needs a fresh user run.
 
-The selector still loses command art: `FindConfigValue` reads text profiles,
-not map-local W3A art overrides. The real selector list now contains 14 authored
-abilities, but missing `Art` keeps their command buttons absent. This is a
-separate presentation-data gap; restoring the list alone does not restore menus.
+The selector's command art is authored in `war3mapSkin.w3a`. The archive loader
+previously ignored that member, and `FindConfigValue` only read text profiles.
+The loader now merges the skin modifications into the same object rows, retaining
+gameplay fields and original/custom identity. Map ability rows retain authored
+`Art`, `ResearchArt` and `Unart`, including empty values and custom inheritance.
+An archive regression checks that a v3 skin row augments the existing custom
+ability and reaches profile lookup; a separate SLK regression checks inheritance
+and reset. Lua map-script tests pass 299/299 and SLK tests 606/606 in both editions.
+This restores data lookup; it does not establish visual or spell-selection parity.
+The real 508 scenario passes at step 202 with no initialization errors: the race
+selector now exposes 11 commands (previously zero), and the initial mode selector
+exposes three. The scenario also confirms the ordinary `-ai1` chat callback.
+Channel (`ANcl`) still uses an ad-hoc command procedure rather than the shared
+spell lifecycle, so restoring its button art is not proof of working race casts.
 Custom frame support and player tech-state capacity exhaustion also remain gaps.
 
 ## Chat transport

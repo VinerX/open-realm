@@ -914,6 +914,8 @@ typedef struct {
     uint32_t id, num_levels;
     AbilityData_t row;
     abilityLevel_t *extra_levels;
+    cstring_t art, research_art, unart;
+    uint32_t parent_id;
 } mapAbilityOverride_t;
 
 static mapUnitBalanceOverride_t *map_unit_balance_overrides;
@@ -1688,6 +1690,15 @@ static void ApplyMapAbilityMod(mapAbilityOverride_t *override, unitModification_
     /* Named AbilityMetaData fields first — their dataPointer is often 0 and
      * must not be mistaken for DataA. */
     switch (mod->modID) {
+    case MAKEFOURCC('a','a','r','t'):
+        if (UnitModificationString(mod)) override->art = mod->data;
+        return;
+    case MAKEFOURCC('a','r','a','r'):
+        if (UnitModificationString(mod)) override->research_art = mod->data;
+        return;
+    case MAKEFOURCC('a','u','a','r'):
+        if (UnitModificationString(mod)) override->unart = mod->data;
+        return;
     case MAKEFOURCC('a','l','e','v'):
         if (mod->type == mod_int) override->row.levels = (int32_t)*(uint32_t const *)mod->data;
         return;
@@ -1781,6 +1792,13 @@ static void AddMapAbilityOverride(unitData_t const *ability, uint32_t target_id,
         fprintf(stderr, "G_SetMapAbilityOverrides: no AbilityData base for %.4s (original %.4s)\n", id, parent);
     }
     override->id = target_id;
+    override->parent_id = base_id;
+    if (base_override) {
+        override->art = base_override->art;
+        override->research_art = base_override->research_art;
+        override->unart = base_override->unart;
+        override->parent_id = base_override->parent_id;
+    }
     override->num_levels = num_levels;
     if (base) FOR_LOOP(i, num_levels - 4) {
         abilityLevel_t const *level = base_override
@@ -2272,6 +2290,19 @@ void ShutdownUnitData(void) {
 
 cstring_t FindConfigValue(cstring_t category, cstring_t field) {
     cstring_t value;
+    char parent[5] = { 0 };
+
+    if (strlen(category) == 4 &&
+        (!strcmp(field, "Art") || !strcmp(field, "ResearchArt") || !strcmp(field, "Unart"))) {
+        mapAbilityOverride_t const *override = FindMapAbilityOverride(FS_SLKKey(category));
+        if (override) {
+            value = !strcmp(field, "Art") ? override->art :
+                !strcmp(field, "ResearchArt") ? override->research_art : override->unart;
+            if (value) return value;
+            memcpy(parent, &override->parent_id, 4);
+            category = parent;
+        }
+    }
 
     if (!strncmp(category, "Cmd", 3)) {
         if (commandFuncConfig) {

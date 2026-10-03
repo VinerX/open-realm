@@ -15,6 +15,7 @@ function scenario_step(frame)
     local info = scenario_unit_commands(picker)
     print('WC3_RACE_CARD type=' .. info.type .. ' abilities=' .. tostring(info.abilities) .. ' commands=' .. table.concat(info, ',') .. ' sell=' .. tostring(info.sell_units) .. ' trains=' .. tostring(info.trains))
     RemoveUnit(picker)
+    if #info == 0 then return 'FAIL: race selector command card is empty' end
     scenario_chat(0, '-ai1')
     sent = true
     return nil

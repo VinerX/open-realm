@@ -1181,6 +1181,11 @@ TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
         MAKEFOURCC('A','H','b','z'), MAKEFOURCC('A','0','0','1'), 1, 0, 1,
         MAKEFOURCC('a','l','e','v'), mod_int, 1, 0, 4, MAKEFOURCC('A','0','0','1')
     };
+    uint32_t skin[] = {
+        3, 0, 1,
+        MAKEFOURCC('A','H','b','z'), MAKEFOURCC('A','0','0','1'), 1, 0, 1,
+        MAKEFOURCC('a','a','r','t'), mod_string, 0, 0, MAKEFOURCC('a','r','t',0), 0
+    };
     handle_t archive = NULL;
 
     unlink(path);
@@ -1188,6 +1193,7 @@ TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
     if (!archive) return;
     T_ASSERT(SFileAddFileFromBuffer(archive, "war3map.w3u", units, sizeof(units)));
     T_ASSERT(SFileAddFileFromBuffer(archive, "war3map.w3a", abilities, sizeof(abilities)));
+    T_ASSERT(SFileAddFileFromBuffer(archive, "war3mapSkin.w3a", skin, sizeof(skin)));
     SFileCloseArchive(archive);
     T_ASSERT(SFileOpenArchive(path, 0, 0, &archive));
     if (!archive) { unlink(path); return; }
@@ -1207,6 +1213,13 @@ TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
     T_EQ(*(uint32_t *)world.info.originalAbilities[0].modifications[0].data, 3);
     T_EQ(world.info.userCreatedAbilities[0].modifications[0].level, 1);
     T_EQ(*(uint32_t *)world.info.userCreatedAbilities[0].modifications[0].data, 4);
+    T_EQ(world.info.num_userCreatedAbilities, 1);
+    T_EQ(world.info.userCreatedAbilities[0].numbeOfModifications, 2);
+    if (world.info.userCreatedAbilities[0].numbeOfModifications == 2)
+        T_STREQ(world.info.userCreatedAbilities[0].modifications[1].data, "art");
+    G_SetMapAbilityOverrides(&world.info);
+    T_STREQ(FindConfigValue("A001", "Art"), "art");
+    G_SetMapAbilityOverrides(NULL);
     gi.MemFree(world.info.originalUnits[0].modifications[0].data);
     gi.MemFree(world.info.originalUnits[0].modifications);
     gi.MemFree(world.info.originalUnits);
@@ -1217,6 +1230,8 @@ TEST(wc3_mapscript, reforged_v3_object_data_reads_set_headers) {
     gi.MemFree(world.info.originalAbilities[0].modifications);
     gi.MemFree(world.info.originalAbilities);
     gi.MemFree(world.info.userCreatedAbilities[0].modifications[0].data);
+    if (world.info.userCreatedAbilities[0].numbeOfModifications == 2)
+        gi.MemFree(world.info.userCreatedAbilities[0].modifications[1].data);
     gi.MemFree(world.info.userCreatedAbilities[0].modifications);
     gi.MemFree(world.info.userCreatedAbilities);
     world.info.originalUnits = world.info.userCreatedUnits = NULL;

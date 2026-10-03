@@ -207,6 +207,30 @@ TEST(wc3_slk, ini_duplicate_key_keeps_last_assignment) {
     Stb_IniCacheFree(&cache);
 }
 
+TEST(wc3_slk, map_w3a_command_art_overrides_inherits_and_resets) {
+    uint32_t parent = MAKEFOURCC('A','H','h','b');
+    unitModification_t mods[] = {
+        { .modID = MAKEFOURCC('a','a','r','t'), .type = mod_string, .data = "war3mapImported\\RaceIcon.blp" },
+        { .modID = MAKEFOURCC('a','r','a','r'), .type = mod_string, .data = "war3mapImported\\LearnIcon.blp" },
+        { .modID = MAKEFOURCC('a','u','a','r'), .type = mod_string, .data = "" },
+    };
+    unitData_t original = { .originalUnitID = parent, .numbeOfModifications = 3, .modifications = mods };
+    unitData_t custom = { .originalUnitID = parent, .newUnitID = MAKEFOURCC('A','0','H','Z') };
+    mapInfo_t mapinfo = {
+        .num_originalAbilities = 1, .originalAbilities = &original,
+        .num_userCreatedAbilities = 1, .userCreatedAbilities = &custom
+    };
+    cstring_t stock = FindConfigValue("AHhb", "Art");
+    G_SetMapAbilityOverrides(&mapinfo);
+    T_STREQ(FindConfigValue("AHhb", "Art"), "war3mapImported\\RaceIcon.blp");
+    T_STREQ(FindConfigValue("A0HZ", "Art"), "war3mapImported\\RaceIcon.blp");
+    T_STREQ(FindConfigValue("A0HZ", "ResearchArt"), "war3mapImported\\LearnIcon.blp");
+    T_STREQ(FindConfigValue("A0HZ", "Unart"), "");
+    G_SetMapAbilityOverrides(NULL);
+    T_ASSERT(FindConfigValue("AHhb", "Art") == stock);
+    T_NULL(FindConfigValue("A0HZ", "Art"));
+}
+
 TEST(wc3_slk, map_w3a_applies_levels_and_data_a) {
     uint32_t const id = MAKEFOURCC('A','H','h','b');
     float data_a = 123.0f;
