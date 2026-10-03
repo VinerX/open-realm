@@ -844,6 +844,31 @@ TEST(wc3_slk, reforged_doodad_art_columns_come_from_ini_overlay) {
     Stb_IniCacheFree(&overlay);
 }
 
+TEST(wc3_slk, map_unit_ability_lists_override_and_inherit) {
+    uint32_t base_id = MAKEFOURCC('h','h','o','u');
+    uint32_t custom_id = MAKEFOURCC('h','0','H','J');
+    unitModification_t mods[] = {
+        { .modID = MAKEFOURCC('u','a','b','i'), .type = mod_abilityList, .data = "A1C4,A0UK" },
+        { .modID = MAKEFOURCC('u','h','a','b'), .type = mod_heroAbilityList, .data = "AHbz" },
+    };
+    unitData_t original = { .originalUnitID = base_id, .numbeOfModifications = 2, .modifications = mods };
+    unitData_t custom = { .originalUnitID = base_id, .newUnitID = custom_id };
+    mapInfo_t mapinfo = {
+        .num_originalUnits = 1, .originalUnits = &original,
+        .num_userCreatedUnits = 1, .userCreatedUnits = &custom
+    };
+    mapInfo_t const *saved = level.mapinfo;
+    edict_t unit = { .class_id = custom_id };
+    level.mapinfo = &mapinfo;
+    G_SetMapUnitOverrides(&mapinfo);
+    T_STREQ(G_UnitAbil(base_id)->abilList, "A1C4,A0UK");
+    T_STREQ(G_UnitAbil(custom_id)->abilList, "A1C4,A0UK");
+    G_BindEntityData(&unit);
+    T_STREQ(unit.data.UnitAbilities->heroAbilList, "AHbz");
+    G_SetMapUnitOverrides(NULL);
+    level.mapinfo = saved;
+}
+
 TEST(wc3_slk, map_unit_balance_overrides_stock_fields_and_custom_inheritance) {
     uint32_t const base_id = MAKEFOURCC('n','m','e','r');
     uint32_t const custom_id = MAKEFOURCC('x','m','e','r');
