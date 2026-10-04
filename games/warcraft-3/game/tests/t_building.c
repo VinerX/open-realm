@@ -1826,6 +1826,41 @@ TEST(wc3_building, command_button_number_draws_bottom_right_overlay) {
     gi.ImageIndex = old_image_index;
 }
 
+TEST(wc3_building, legion_tech_state_preserves_large_player_catalog) {
+    enum { LEGION_TECH_COUNT = 408 };
+    gameClient_t *client;
+    uint32_t retained = 0;
+
+    setup_test_world();
+    client = &game.clients[0];
+    memset(client->tech, 0, sizeof(client->tech));
+    FOR_LOOP(i, LEGION_TECH_COUNT) {
+        uint32_t const id = 0x44000000u + i + 1;
+        G_SetPlayerTechMaxAllowed(client, id, i % 3);
+        G_SetPlayerTechResearched(client, id, 1);
+        G_AddPlayerTechInProgress(client, id, 1);
+    }
+    FOR_LOOP(i, LEGION_TECH_COUNT) {
+        uint32_t const id = 0x44000000u + i + 1;
+        if (G_GetPlayerTechMaxAllowed(client, id) == i % 3 &&
+            G_GetPlayerTechResearchedLevel(client, id) == 1 &&
+            G_GetPlayerTechInProgress(client, id) == 1) retained++;
+    }
+    T_EQ(retained, LEGION_TECH_COUNT);
+    T_ASSERT(WriteGame("build/tests/openwarcraft3-legion-tech-state.bin"));
+    memset(client->tech, 0, sizeof(client->tech));
+    T_ASSERT(ReadGame("build/tests/openwarcraft3-legion-tech-state.bin"));
+    retained = 0;
+    FOR_LOOP(i, LEGION_TECH_COUNT) {
+        uint32_t const id = 0x44000000u + i + 1;
+        if (G_GetPlayerTechMaxAllowed(client, id) == i % 3 &&
+            G_GetPlayerTechResearchedLevel(client, id) == 1 &&
+            G_GetPlayerTechInProgress(client, id) == 1) retained++;
+    }
+    T_EQ(retained, LEGION_TECH_COUNT);
+    remove("build/tests/openwarcraft3-legion-tech-state.bin");
+}
+
 TEST(wc3_building, tech_state_default_values_do_not_consume_slots) {
     gameClient_t *client = &game.clients[0];
 

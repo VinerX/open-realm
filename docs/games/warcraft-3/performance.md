@@ -2,6 +2,35 @@
 
 For process footprint, allocation profiling, and RAM reduction priorities, see [WC3 memory](memory.md).
 
+## October 4: Legion technology-state overflow
+
+The bounded dedicated runs also exposed a correctness failure: every playable
+slot exhausted its 256-entry technology table during Lua initialization.
+`legion-qpc.log` under `build/sim-profile` contains 152 distinct rejected IDs for
+player 0 and 143 for each of players 1-23, in addition to the occupied entries.
+The fixed table now holds 512 entries; this is an engine capacity, not a claimed
+retail limit. Save format 49 records the enlarged client state and rejects older
+layouts. The regression checks 408 independent restrictions, researched levels
+and training reservations, including a save/load round trip.
+
+RoC and TFT each pass 1,063 assertions for catalog preservation, full-table
+behavior and prior-save rejection, plus 116 research/training/upgrade assertions.
+This is an initialization fix; a rendering FPS gain has not been established.
+The rebuilt normal release completed 800 dedicated Legion frames in 85.81 seconds
+with exit code zero and no technology-overflow diagnostics
+(`build/sim-profile/legion-tech-clean.log`). This run still reports unsupported
+Lua natives, including `TriggerSleepAction`, several Frame API calls and
+`TriggerRegisterUnitStateEvent`; successful process completion does not establish
+full map-script or custom-UI compatibility.
+
+Detailed timers using both CRT `clock()` and `QueryPerformanceCounter` reproduced
+the sustained entity cost. A separate million-call timer check measured about
+30 ns for `clock()` and 41 ns for the counter, so timer overhead does not explain
+the tens of milliseconds in those profiles. The move-callback split finds roughly
+140-190 calls consuming 197-255 ms in a 20-frame window, whereas 111,480 empty
+scenery callbacks consume about 4-5 ms. Identify the expensive callback before
+changing scenery animation or broad AI scheduling.
+
 ## October 4: scenery admission to unit ability updates
 
 `monster_think` also advances destructable animations. Its shared ability-update

@@ -399,7 +399,7 @@ Construction and Repair now share the behavior described above. The following cl
 - string-form `IssueBuildOrder` remains a stub. `IssueBuildOrderById` and building rawcodes passed to the numeric point-order natives reuse `G_IssueBuildOrder()`; canonical movement/spell numeric IDs continue through the existing order table;
 - Repair implements the stock high-confidence `structure` / `mechanical`, ground/air, Friend, Ancient/Non-Ancient subset, but complete generic target-mask semantics and destructible Repair remain; destructibles need their own repair-time/cost data path rather than being treated as `UnitBalance` targets;
 - Auto Repair uses the same expanded validator and can choose allied completed structures or authored damaged mechanical units. Canonical numeric orders `repair=852024`, `repairon=852025`, and `repairoff=852026` are present in the order table for the `...OrderById` natives; broader generic autocast policies remain future work. The command-card transport uses the normalized multi-selection `autocast <rawcode>` command;
-- the per-player technology table is intentionally bounded at `MAX_PLAYER_TECH_STATE`; exhaustion is reported as a warning and does not overwrite an existing entry;
+- the per-player technology table is intentionally bounded at `MAX_PLAYER_TECH_STATE` (512 entries). Legion's initialization exceeds the former 256 entries; exhaustion is reported as a warning and does not overwrite an existing entry;
 - `GetPlayerTechResearched` / `GetPlayerTechCount` currently have exact-rawcode semantics for both `specificonly` values because technology-equivalence groups are not represented yet.
 
 ## Verification

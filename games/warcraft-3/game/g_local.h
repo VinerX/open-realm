@@ -68,7 +68,7 @@ typedef struct {
 #define PLAYER_TEXT_BACKUP 16
 #define PLAYER_TEXT_MASK (PLAYER_TEXT_BACKUP - 1)
 #define MAX_START_PRIO 16 // slots; one possible priority entry per WC3 player start location
-#define MAX_PLAYER_TECH_STATE 256 // slots; NightElfX02 scripts 137 distinct techs for one player, exceeding the former 128; game-local only, not a network contract
+#define MAX_PLAYER_TECH_STATE 512 // slots; Legion initializes at least 408 distinct techs per player; game-local, not a network contract
 
 #define FILTER_EDICTS(ENT, CONDITION) \
 for (edict_t *ENT = globals.edicts; \
