@@ -8,6 +8,18 @@
 
 #define LUA_BOOLEXPR "WC3.boolexpr"
 
+static int LuaPow(lua_State *L) {
+    double const base = luaL_checknumber(L, 1);
+    double const exponent = luaL_checknumber(L, 2);
+    lua_pushnumber(L, pow(base, exponent));
+    return 1;
+}
+
+static int LuaSquareRoot(lua_State *L) {
+    lua_pushnumber(L, sqrt(luaL_checknumber(L, 1)));
+    return 1;
+}
+
 static int LuaPushBoolExprCallback(lua_State *L, int index) {
     if (lua_isfunction(L, index)) lua_pushvalue(L, index);
     else {
@@ -1110,6 +1122,18 @@ static int LuaGetTriggerUnit(lua_State *L) {
     return 1;
 }
 
+static int LuaGetDyingUnit(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetKillingUnit(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
 static int LuaGetAttacker(lua_State *L) {
     void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
     if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
@@ -2158,6 +2182,23 @@ static int LuaGroupAddUnit(lua_State *L) {
     return 1;
 }
 
+static int LuaIsUnitInGroup(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    ggroup_t *group = lua_touserdata(L, 2);
+    bool found = false;
+
+    if (unit && G_JassGroupValid(group)) {
+        FOR_LOOP(i, group->num_units) {
+            if (group->units[i] == unit) {
+                found = true;
+                break;
+            }
+        }
+    }
+    lua_pushboolean(L, found);
+    return 1;
+}
+
 static int LuaGroupRemoveUnit(lua_State *L) {
     ggroup_t *group = lua_touserdata(L, 1);
     edict_t *unit = lua_touserdata(L, 2);
@@ -2832,6 +2873,8 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
 
 void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     G_RegisterLuaMapConfigNatives(L);
+    WC3_LuaRegisterNative(L, "Pow", LuaPow);
+    WC3_LuaRegisterNative(L, "SquareRoot", LuaSquareRoot);
     WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
     WC3_LuaRegisterNative(L, "BlzCreateUnitWithSkin", LuaBlzCreateUnitWithSkin);
     WC3_LuaRegisterNative(L, "SetUnitColor", LuaSetUnitColor);
@@ -2946,6 +2989,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
     WC3_LuaRegisterNative(L, "TriggerSleepAction", LuaTriggerSleepAction);
     WC3_LuaRegisterNative(L, "GetTriggerUnit", LuaGetTriggerUnit);
+    WC3_LuaRegisterNative(L, "GetDyingUnit", LuaGetDyingUnit);
+    WC3_LuaRegisterNative(L, "GetKillingUnit", LuaGetKillingUnit);
     WC3_LuaRegisterNative(L, "GetAttacker", LuaGetAttacker);
     WC3_LuaRegisterNative(L, "GetEventDamage", LuaGetEventDamage);
     WC3_LuaRegisterNative(L, "GetEventDamageSource", LuaGetEventDamageSource);
@@ -3092,6 +3137,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetEnumUnit", LuaGetEnumUnit);
     WC3_LuaRegisterNative(L, "GetEnumPlayer", LuaGetEnumPlayer);
     WC3_LuaRegisterNative(L, "GroupAddUnit", LuaGroupAddUnit);
+    WC3_LuaRegisterNative(L, "IsUnitInGroup", LuaIsUnitInGroup);
     WC3_LuaRegisterNative(L, "GroupRemoveUnit", LuaGroupRemoveUnit);
     WC3_LuaRegisterNative(L, "GroupClear", LuaGroupClear);
     WC3_LuaRegisterNative(L, "FirstOfGroup", LuaFirstOfGroup);

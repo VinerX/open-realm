@@ -1451,6 +1451,35 @@ TEST(wc3_mapscript, lua_for_group_removes_every_member) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_group_membership_tracks_add_remove_clear_destroy) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunGroupMembershipTest()\n"
+        " local g = CreateGroup()\n"
+        " local u = CreateUnit(Player(0), FourCC('hfoo'), 0, 0, 0)\n"
+        " assert(not IsUnitInGroup(u, g))\n"
+        " assert(not IsUnitInGroup(nil, g))\n"
+        " assert(not IsUnitInGroup(u, nil))\n"
+        " GroupAddUnit(g, u); assert(IsUnitInGroup(u, g))\n"
+        " GroupRemoveUnit(g, u); assert(not IsUnitInGroup(u, g))\n"
+        " GroupAddUnit(g, u); GroupClear(g); assert(not IsUnitInGroup(u, g))\n"
+        " GroupAddUnit(g, u); DestroyGroup(g); assert(not IsUnitInGroup(u, g))\n"
+        " RemoveUnit(u)\n"
+        "end\n", "lua-group-membership-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunGroupMembershipTest"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_for_group_exposes_enum_unit) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua;
@@ -1631,6 +1660,25 @@ TEST(wc3_mapscript, lua_rect_edges_and_create_unit_at_loc_match_jass) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_distance_math_natives_match_jass) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double value = 0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunDistanceMathTest()\n"
+        " assert(Pow(-3, 2) == 9)\n"
+        " assert(Pow(4, -1) == 0.25)\n"
+        " assert(Pow(7, 0) == 1)\n"
+        " assert(SquareRoot(0) == 0)\n"
+        " return SquareRoot(Pow(3, 2) + Pow(4, 2))\n"
+        "end\n", "lua-distance-math-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunDistanceMathTest", &value));
+    T_FEQ(value, 5.0, 0.0001);
+    WC3_LuaClose(lua);
+}
+
 TEST(wc3_mapscript, lua_order_id_matches_jass_engine_lookup) {
     wc3Lua_t *lua = WC3_LuaNewState();
     double value = 0.0;
@@ -1670,6 +1718,44 @@ TEST(wc3_mapscript, lua_get_attacker_uses_shared_trigger_unit_context) {
     T_EQ(value, 1.0);
     WC3_LuaSetTriggerContext(lua, &previous_context);
 cleanup:
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
+TEST(wc3_mapscript, lua_death_units_use_shared_trigger_context) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    wc3LuaTriggerContext_t previous_context, context = { 0 };
+    double result = 0;
+    edict_t *unit, *killer;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    unit = G_Spawn();
+    T_NOT_NULL(unit);
+    if (!unit) goto cleanup_dying_unit;
+    killer = G_Spawn();
+    T_NOT_NULL(killer);
+    if (!killer) goto cleanup_dying_unit;
+    context.unit = unit;
+    context.source = killer;
+    previous_context = WC3_LuaGetTriggerContext(lua);
+    WC3_LuaSetTriggerContext(lua, &context);
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunDeathUnitsTest()\n"
+        " assert(GetDyingUnit() ~= nil)\n"
+        " assert(GetKillingUnit() ~= nil)\n"
+        " return GetDyingUnit() ~= GetKillingUnit() and 1 or 0\n"
+        "end\n",
+        "lua-get-dying-unit-test.lua"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunDeathUnitsTest", &result));
+    T_FEQ(result, 1.0, 0.0001);
+    WC3_LuaSetTriggerContext(lua, &previous_context);
+cleanup_dying_unit:
     level.lua_vm = previous_lua;
     WC3_LuaClose(lua);
     reset_entities();
