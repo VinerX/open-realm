@@ -2,6 +2,37 @@
 
 For process footprint, allocation profiling, and RAM reduction priorities, see [WC3 memory](memory.md).
 
+## October 4: scenery admission to unit ability updates
+
+`monster_think` also advances destructable animations. Its shared ability-update
+dispatch consequently visited static scenery even though these entities own no
+unit abilities. `S_RunAbilityUpdates` now rejects `SVF_STATIC_SCENERY` before
+calling registered unit procedures; animation, health compression, damage,
+pathing and destructable lifecycle remain on their existing paths.
+
+The regression drives eight real `G_RunEntity` updates on a destructable and
+checks animation advancement, unchanged life, compressed health and zero unit
+ability-level queries. It also checks that an ordinary worker still dispatches
+abilities. The query-count assertion fails before the admission check and all
+six assertions pass after it. RoC and TFT each pass 43/43 doodad assertions,
+236/236 destructable assertions and 145/145 lumber assertions. The broad spell
+suite retains the same nine baseline failures.
+
+Separate generated diagnostic DLLs completed 800 Legion frames with a 180-second
+process limit. `legion-entity-before.log` and `legion-entity-scenery-gate.log` under
+`build/sim-profile` recorded median entity-update durations of 64.0 and 63.4 ms
+for frames 640-800. This does not establish a sustained FPS gain.
+
+The follow-up callback profile (`legion-phases.log` in that directory) identifies
+`monster_think` as the dominant handler: its last 20-frame window has 122,800
+calls, 111,480 on static scenery. Aggregate ability, animation and move-callback
+times are 135, 129 and 244 ms respectively (about 6.8, 6.5 and 12.2 ms per frame).
+Step physics costs less than 1 ms per frame in the sampled scene. Remaining
+investigation should separate ordinary units' move/idle callbacks and animation
+transitions; these measurements do not justify changing terrain heights.
+All phase timers and callback-name probes remain in ignored generated files,
+not production source or the normal release DLL.
+
 ## October 3: empty ability rawcodes in true-sight scans
 
 Legion's visibility pass became slow when permanent invisibility activated at

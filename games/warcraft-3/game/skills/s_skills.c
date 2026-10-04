@@ -753,6 +753,7 @@ ability_t const *FindAbilityByOrder(cstring_t order) {
 
 /* Persistent effects can outlive their active order; the callback owns its per-unit state checks. */
 void S_RunAbilityUpdates(edict_t *ent) {
+    if (ent->svflags & SVF_STATIC_SCENERY) return;
     FOR_LOOP(i, num_updates)
         ability_updates[i](ent, A_UPDATE, NULL);
     S_UpdateUnitPassiveEffects(ent);

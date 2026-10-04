@@ -4,6 +4,38 @@
 #include "common/stb_slk.h"
 
 bool run_test_jass(cstring_t src);
+void setup_test_world(void);
+edict_t *alloc_test_unit(uint32_t class_id, float x, float y);
+void G_TestResetUnitAbilityLevelQueries(void);
+uint32_t G_TestUnitAbilityLevelQueries(void);
+
+TEST(wc3_doodad, destructable_animation_does_not_dispatch_unit_abilities) {
+    static animation_t const stand = { .name = "Stand", .interval = { 1000, 10000 } };
+    edict_t *tree, *unit;
+
+    setup_test_world();
+    tree = alloc_test_unit(MAKEFOURCC('L','T','l','t'), 0, 0);
+    tree->destructable.initialized = true;
+    tree->svflags |= SVF_STATIC_SCENERY;
+    tree->health.value = tree->health.max_value = 100;
+    SP_monster_tree(tree);
+    tree->animation = &stand;
+    tree->s.frame = stand.interval[0];
+    G_TestResetUnitAbilityLevelQueries();
+    FOR_LOOP(i, 8) G_RunEntity(tree);
+    T_ASSERT(tree->s.frame > stand.interval[0]);
+    T_ASSERT(tree->s.frame < stand.interval[1]);
+    T_FEQ(tree->health.value, 100, 0.001f);
+    T_EQ(tree->s.stats[ENT_HEALTH], compress_stat(&tree->health));
+    T_EQ(G_TestUnitAbilityLevelQueries(), 0);
+
+    unit = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 64, 0);
+    unit->health.value = unit->health.max_value = 100;
+    unit->think = monster_think;
+    G_TestResetUnitAbilityLevelQueries();
+    G_RunEntity(unit);
+    T_ASSERT(G_TestUnitAbilityLevelQueries() > 0);
+}
 
 static Doodads_t doodad_row = { .id = MAKEFOURCC('L', 'O', 'o', '2') };
 static DestructableData_t not_destructable;
