@@ -226,6 +226,71 @@ TEST(wc3_mapscript, lua_runtime_registers_neutral_passive_native) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, lua_runtime_registers_map_ai_natives) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "assert(type(UnitSetConstructionProgress) == 'function')\n"
+        "assert(type(GetUnitName) == 'function' and type(UnitShareVision) == 'function')\n"
+        "assert(type(GetHandleId) == 'function' and GetHandleId(Player(0)) == GetHandleId(Player(0)))\n"
+        "assert(type(ForceEnumAllies) == 'function' and type(DestroyFogModifier) == 'function')\n"
+        "assert(type(IssuePointOrderLoc) == 'function' and type(IssueImmediateOrderById) == 'function')\n"
+        "assert(type(MathRound) == 'function' and MathRound(-1.5) == -1 and MathRound(1.5) == 2)\n"
+        "assert(type(IsUnitIdType) == 'function' and type(IsPlayerEnemy) == 'function')\n"
+        "assert(type(GroupPointOrder) == 'function' and type(IssueBuildOrderById) == 'function')\n"
+        "assert(type(WaygateIsActive) == 'function')\n"
+        "assert(type(AddUnitAnimationProperties) == 'function' and type(IsUnitHidden) == 'function' and type(ShowUnit) == 'function')\n"
+        "assert(type(GetConstructingStructure) == 'function' and type(GetHeroLevel) == 'function' and type(GetPlayerAlliance) == 'function')\n"
+        "assert(type(GetRevivableUnit) == 'function' and type(GetSoldUnit) == 'function' and type(GetTrainedUnit) == 'function')\n"
+        "assert(type(GetUnitDefaultMoveSpeed) == 'function' and type(GetUnitFoodMade) == 'function' and type(GetUnitLevel) == 'function')\n"
+        "assert(type(GroupEnumUnitsInRangeOfLocCounted) == 'function' and type(GroupEnumUnitsSelected) == 'function')\n"
+        "assert(type(IsPlayerAlly) == 'function' and type(IssueNeutralImmediateOrderById) == 'function' and type(IssueTargetOrder) == 'function')\n"
+        "assert(type(MoveRectTo) == 'function' and type(OrderId2String) == 'function' and type(ReviveHero) == 'function')\n"
+        "assert(type(S2I) == 'function' and type(SelectHeroSkill) == 'function' and type(SetUnitMoveSpeed) == 'function')\n"
+        "assert(type(WaygateGetDestinationX) == 'function' and type(WaygateGetDestinationY) == 'function')\n"
+        "assert(type(GetLearnedSkill) == 'function' and type(GetLearnedSkillLevel) == 'function')\n"
+        "assert(math.abs(Cos(0)-1) < 0.000001 and math.abs(Sin(0)) < 0.000001 and math.abs(Atan(1)-0.7853981633974483) < 0.000001)\n"
+        "assert(math.abs(Atan2(1, 0)-1.5707963267948966) < 0.000001)\n"
+        "assert(not IsUnitIdType(FourCC('hfoo'), 15))\n"
+        "local force = CreateForce(); ForceEnumAllies(force, Player(0), nil); DestroyForce(force)\n"
+        "local mb = CreateMultiboard()\n"
+        "MultiboardSetRowCount(mb, 2); MultiboardSetColumnCount(mb, 2)\n"
+        "local item = MultiboardGetItem(mb, 1, 1)\n"
+        "MultiboardSetItemValue(item, 'AI'); MultiboardSetItemWidth(item, 0.12)\n"
+        "MultiboardReleaseItem(item); MultiboardSetItemsStyle(mb, true, false)\n"
+        "DestroyMultiboard(mb)\n",
+        "construction-progress-test.lua"));
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, lua_trigger_context_exposes_learned_skill_and_event_id) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    wc3LuaTriggerContext_t context = {
+        .event_value = MAKEFOURCC('A','H','h','b'),
+        .event_id = EVENT_UNIT_HERO_SKILL,
+    };
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function CheckSkillEvent()\n"
+        "  assert(GetLearnedSkill() == FourCC('AHhb'), tostring(GetLearnedSkill()))\n"
+        "  assert(GetLearnedSkillLevel() == 0)\n"
+        "  assert(GetTriggerEventId() == 79)\n"
+        "end\n",
+        "lua-skill-event-context-test.lua"));
+    WC3_LuaSetTriggerContext(lua, &context);
+    T_ASSERT(WC3_LuaCall(lua, "CheckSkillEvent"));
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_set_player_alliance_uses_shared_state) {
     player_t *source = G_GetPlayerByNumber(0);
     player_t *other = G_GetPlayerByNumber(1);

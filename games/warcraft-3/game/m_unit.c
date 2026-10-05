@@ -1655,6 +1655,8 @@ bool G_HeroLearnSkill(edict_t *ent, uint32_t abilcode) {
     if (!G_HeroModifySkillPoints(ent, -1)) {
         return false;
     }
+    G_PublishEventWithValue(ent, EVENT_UNIT_HERO_SKILL, NULL, (int32_t)abilcode);
+    G_PublishEventWithValue(ent, EVENT_PLAYER_HERO_SKILL, NULL, (int32_t)abilcode);
     return true;
 }
 

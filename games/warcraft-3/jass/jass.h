@@ -73,7 +73,9 @@ struct jass_context {
     trigger_t *trigger;
     edict_t *unit;
     edict_t *source;
+    edict_t *soldUnit;
     int32_t eventValue;
+    int32_t eventId;
     char chat_text[256], chat_match[256];
     vec2_t point;
     uint8_t hasPoint;

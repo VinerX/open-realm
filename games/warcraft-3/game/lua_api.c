@@ -3,10 +3,14 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include <stdlib.h>
 
 #include "g_camera.h"
 
 #define LUA_BOOLEXPR "WC3.boolexpr"
+
+static edict_t *lua_enum_destructable;
+static edict_t *lua_enum_item;
 
 static int LuaPow(lua_State *L) {
     double const base = luaL_checknumber(L, 1);
@@ -17,6 +21,34 @@ static int LuaPow(lua_State *L) {
 
 static int LuaSquareRoot(lua_State *L) {
     lua_pushnumber(L, sqrt(luaL_checknumber(L, 1)));
+    return 1;
+}
+
+static int LuaSin(lua_State *L) {
+    lua_pushnumber(L, sin(luaL_checknumber(L, 1)));
+    return 1;
+}
+
+static int LuaCos(lua_State *L) {
+    lua_pushnumber(L, cos(luaL_checknumber(L, 1)));
+    return 1;
+}
+
+static int LuaAtan(lua_State *L) {
+    lua_pushnumber(L, atan(luaL_checknumber(L, 1)));
+    return 1;
+}
+
+static int LuaAtan2(lua_State *L) {
+    double y = luaL_checknumber(L, 1);
+    double x = luaL_checknumber(L, 2);
+    lua_pushnumber(L, atan2(y, x));
+    return 1;
+}
+
+static int LuaMathRound(lua_State *L) {
+    double value = luaL_checknumber(L, 1);
+    lua_pushinteger(L, (lua_Integer)floor(value + 0.5));
     return 1;
 }
 
@@ -206,6 +238,14 @@ static int LuaSetUnitInvulnerable(lua_State *L) {
     return 0;
 }
 
+static int LuaUnitShareVision(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    if (unit && player)
+        G_SetUnitSharedVision(unit, PLAYER_NUM(player), lua_toboolean(L, 3));
+    return 0;
+}
+
 static int LuaSetUnitState(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     uint32_t *state = lua_touserdata(L, 2);
@@ -221,6 +261,12 @@ static int LuaSetUnitState(lua_State *L) {
     return 0;
 }
 
+static int LuaUnitSetConstructionProgress(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    G_SetConstructionProgress(unit, (int)luaL_checkinteger(L, 2));
+    return 0;
+}
+
 static int LuaWaygateSetDestination(lua_State *L) {
     edict_t *waygate = lua_touserdata(L, 1);
     vec2_t destination = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
@@ -232,6 +278,25 @@ static int LuaWaygateActivate(lua_State *L) {
     edict_t *waygate = lua_touserdata(L, 1);
     S_WaygateSetActive(waygate, lua_toboolean(L, 2));
     return 0;
+}
+
+static int LuaWaygateIsActive(lua_State *L) {
+    lua_pushboolean(L, S_WaygateIsActive(lua_touserdata(L, 1)));
+    return 1;
+}
+
+static int LuaWaygateGetDestinationX(lua_State *L) {
+    vec2_t destination = {0};
+    S_WaygateGetDestination(lua_touserdata(L, 1), &destination);
+    lua_pushnumber(L, destination.x);
+    return 1;
+}
+
+static int LuaWaygateGetDestinationY(lua_State *L) {
+    vec2_t destination = {0};
+    S_WaygateGetDestination(lua_touserdata(L, 1), &destination);
+    lua_pushnumber(L, destination.y);
+    return 1;
 }
 
 static int LuaGetRectCenterX(lua_State *L) {
@@ -799,6 +864,21 @@ static int LuaIsUnitType(lua_State *L) {
     return 1;
 }
 
+static int LuaIsUnitIdType(lua_State *L) {
+    uint32_t unit_id = (uint32_t)luaL_checkinteger(L, 1);
+    uint32_t *type = lua_touserdata(L, 2);
+    uint32_t which_type = type ? *type : (uint32_t)luaL_checkinteger(L, 2);
+    cstring_t authored = G_UnitBalance(unit_id)->type;
+    bool matches = false;
+    if (which_type == 15 && authored) {
+        PARSE_LIST(authored, item, parse_segment) {
+            if (!strcasecmp(item, "mechanical")) { matches = true; break; }
+        }
+    }
+    lua_pushboolean(L, matches);
+    return 1;
+}
+
 static int LuaUnitAddType(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     uint32_t *type = lua_touserdata(L, 2);
@@ -889,9 +969,663 @@ static int LuaGetUnitY(lua_State *L) {
     return 1;
 }
 
+static int LuaGetUnitFacing(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit ? RAD2DEG(unit->s.angle) : 0.0f);
+    return 1;
+}
+
+static int LuaSetUnitFacing(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) unit->s.angle = DEG2RAD((float)luaL_checknumber(L, 2));
+    return 0;
+}
+
+static int LuaGetUnitFlyHeight(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit ? unit->unitinfo.FlyHeight : 0.0f);
+    return 1;
+}
+
+static int LuaGetUnitDefaultFlyHeight(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit && unit->data.UnitData ? unit->data.UnitData->moveHeight : 0.0f);
+    return 1;
+}
+
+static int LuaSetUnitFlyHeight(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    float height = (float)luaL_checknumber(L, 2);
+    (void)luaL_checknumber(L, 3);
+    if (unit) {
+        unit->unitinfo.FlyHeight = height;
+        M_CheckGround(unit);
+        if (unit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+        gi.LinkEntity(unit);
+    }
+    return 0;
+}
+
+static int LuaGetUnitMoveSpeed(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit ? unit->unitinfo.MoveSpeed : 0.0f);
+    return 1;
+}
+
+static int LuaGetUnitDefaultMoveSpeed(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushnumber(L, unit && unit->data.UnitBalance ? unit->data.UnitBalance->speed : 0.0f);
+    return 1;
+}
+
+
+static int LuaSetUnitMoveSpeed(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) unit->unitinfo.MoveSpeed = (float)luaL_checknumber(L, 2);
+    return 0;
+}
+
+static int LuaGetUnitFoodMade(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushinteger(L, unit && unit->data.UnitBalance ? unit->data.UnitBalance->foodMade : 0);
+    return 1;
+}
+
+static int LuaGetUnitLevel(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    int32_t level_value = !unit ? 0 : G_UnitIsHero(unit) ? (int32_t)unit->hero.level :
+        unit->data.UnitBalance ? unit->data.UnitBalance->level : 0;
+    lua_pushinteger(L, level_value);
+    return 1;
+}
+
+static int LuaGetHeroLevel(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.level : 0);
+    return 1;
+}
+
+static int LuaGetHeroXP(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.xp : 0);
+    return 1;
+}
+
+static int LuaGetHeroSkillPoints(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    lua_pushinteger(L, hero ? (lua_Integer)hero->hero.skillpoints : 0);
+    return 1;
+}
+
+static int LuaSelectHeroSkill(lua_State *L) {
+    G_HeroLearnSkill(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaReviveHero(lua_State *L) {
+    edict_t *hero = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2), y = (float)luaL_checknumber(L, 3);
+    (void)lua_toboolean(L, 4);
+    lua_pushboolean(L, G_ReviveHero(hero, x, y));
+    return 1;
+}
+
+static int LuaGetUnitRallyPoint(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    vec2_t *point = lua_newuserdata(L, sizeof(*point));
+    *point = MAKE(vec2_t, 0.0f, 0.0f);
+    if (unit) G_ResolveRallyTarget(unit, point, NULL);
+    return 1;
+}
+
+static int LuaGetUnitRallyDestructable(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *target = NULL;
+    if (unit && G_ResolveRallyTarget(unit, NULL, &target) == RALLY_TARGET_ENTITY &&
+        target && G_IsDestructable(target)) lua_pushlightuserdata(L, target);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetResourceAmount(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushinteger(L, unit ? unit->resources : 0);
+    return 1;
+}
+
+static int LuaSetResourceAmount(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) S_GoldMineSetResourceAmount(unit, MAX(0, (int32_t)luaL_checkinteger(L, 2)));
+    return 0;
+}
+
+static int LuaGetWidgetLife(lua_State *L) {
+    edict_t *widget = lua_touserdata(L, 1);
+    lua_pushnumber(L, widget ? widget->health.value : 0.0f);
+    return 1;
+}
+
+static int LuaGetWidgetX(lua_State *L) {
+    edict_t *widget = lua_touserdata(L, 1);
+    lua_pushnumber(L, widget ? widget->s.origin.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetWidgetY(lua_State *L) {
+    edict_t *widget = lua_touserdata(L, 1);
+    lua_pushnumber(L, widget ? widget->s.origin.y : 0.0f);
+    return 1;
+}
+
+static int LuaGetDestructableTypeId(lua_State *L) {
+    edict_t *destructable = lua_touserdata(L, 1);
+    lua_pushinteger(L, destructable ? (lua_Integer)destructable->class_id : 0);
+    return 1;
+}
+
+static int LuaGetDestructableX(lua_State *L) {
+    edict_t *destructable = lua_touserdata(L, 1);
+    lua_pushnumber(L, destructable ? destructable->s.origin.x : 0.0f);
+    return 1;
+}
+
+static int LuaGetDestructableY(lua_State *L) {
+    edict_t *destructable = lua_touserdata(L, 1);
+    lua_pushnumber(L, destructable ? destructable->s.origin.y : 0.0f);
+    return 1;
+}
+
+static int LuaGetDestructableLife(lua_State *L) {
+    edict_t *destructable = lua_touserdata(L, 1);
+    lua_pushnumber(L, destructable ? destructable->health.value : 0.0f);
+    return 1;
+}
+
+static int LuaGetEnumDestructable(lua_State *L) {
+    void *destructable = WC3_LuaGetTriggerContext(level.lua_vm).enum_destructable;
+    if (destructable) lua_pushlightuserdata(L, destructable);
+    else if (lua_enum_destructable) lua_pushlightuserdata(L, lua_enum_destructable);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetUnitRallyUnit(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *target = NULL;
+    rallyTargetType_t type = unit ? G_ResolveRallyTarget(unit, NULL, &target) : RALLY_TARGET_NONE;
+    if ((type == RALLY_TARGET_SELF || type == RALLY_TARGET_ENTITY) && target)
+        lua_pushlightuserdata(L, target);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaIsUnitSelected(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    lua_pushboolean(L, unit && player && (unit->selected & (1u << PLAYER_NUM(player))));
+    return 1;
+}
+
+static int LuaIsUnitAlly(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *other = lua_touserdata(L, 2);
+    player_t *owner = unit ? G_GetPlayerByNumber(unit->s.player) : NULL;
+    lua_pushboolean(L, owner && other && G_GetPlayerAlliance(owner, other, ALLIANCE_PASSIVE));
+    return 1;
+}
+
+static int LuaIsUnitEnemy(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *other = lua_touserdata(L, 2);
+    player_t *owner = unit ? G_GetPlayerByNumber(unit->s.player) : NULL;
+    lua_pushboolean(L, owner && other && !G_GetPlayerAlliance(owner, other, ALLIANCE_PASSIVE));
+    return 1;
+}
+
+static int LuaIsItemOwned(lua_State *L) {
+    edict_t *item = lua_touserdata(L, 1);
+    lua_pushboolean(L, item && item->item.carrier && !item->item.in_world);
+    return 1;
+}
+
+static int LuaGetUnitTargetType(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t *type_handle = lua_touserdata(L, 2);
+    uint32_t type = type_handle ? *type_handle : (uint32_t)luaL_checkinteger(L, 2);
+    cstring_t wanted = type == 15 ? "mechanical" : NULL;
+    bool matches = false;
+    cstring_t authored = unit && unit->data.UnitBalance ? unit->data.UnitBalance->type : NULL;
+    if (!authored && unit && unit->data.UnitData) authored = unit->data.UnitData->unitClassification;
+    if (wanted && authored) {
+        PARSE_LIST(authored, item, parse_segment)
+            if (!strcasecmp(item, wanted)) { matches = true; break; }
+    }
+    lua_pushboolean(L, matches);
+    return 1;
+}
+
+
+static int LuaGetUnitTargetPlayerRelation(lua_State *L, bool enemy) {
+    edict_t *unit = lua_touserdata(L, 1);
+    player_t *other = lua_touserdata(L, 2);
+    player_t *owner = unit ? G_GetPlayerByNumber(unit->s.player) : NULL;
+    bool ally = owner && other && G_GetPlayerAlliance(owner, other, ALLIANCE_PASSIVE);
+    lua_pushboolean(L, owner && other && (enemy ? !ally : ally));
+    return 1;
+}
+
+static int LuaGetPlayerAllianceType(lua_State *L) {
+    player_t *source = lua_touserdata(L, 1), *other = lua_touserdata(L, 2);
+    uint32_t *setting = lua_touserdata(L, 3);
+    uint32_t type = setting ? *setting : (uint32_t)luaL_checkinteger(L, 3);
+    lua_pushboolean(L, source && other && type <= ALLIANCE_SHARED_VISION_FORCED &&
+        G_GetPlayerAlliance(source, other, (PLAYERALLIANCE)type));
+    return 1;
+}
+
+static int LuaSetUnitAnimationByIndex(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    (void)luaL_checkinteger(L, 2);
+    if (unit) LuaReportUnsupportedNative("SetUnitAnimationByIndex");
+    return 0;
+}
+
+static int LuaEnumDestructablesInRect(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    int reference;
+    if (!rect) return 0;
+    if (lua_isnoneornil(L, 3)) reference = LUA_NOREF;
+    else {
+        luaL_checktype(L, 3, LUA_TFUNCTION);
+        reference = WC3_LuaRefFunction(level.lua_vm, 3);
+        if (reference == LUA_NOREF || reference == LUA_REFNIL)
+            return luaL_error(L, "EnumDestructablesInRect: could not retain callback");
+    }
+    for (uint32_t i = 0; i < globals.num_edicts; ++i) {
+        edict_t *ent = &globals.edicts[i];
+        if (!G_IsDestructable(ent) || G_IsDeferredFree(ent) ||
+            !Box2_containsPoint(rect, &ent->s.origin2)) continue;
+        lua_enum_destructable = ent;
+        if (reference != LUA_NOREF && !WC3_LuaCallRef(level.lua_vm, reference)) {
+            char error[512];
+            strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+            WC3_LuaClearError(level.lua_vm);
+            lua_enum_destructable = NULL;
+            WC3_LuaUnrefFunction(level.lua_vm, reference);
+            return luaL_error(L, "EnumDestructablesInRect: callback: %s", error);
+        }
+    }
+    lua_enum_destructable = NULL;
+    if (reference != LUA_NOREF) WC3_LuaUnrefFunction(level.lua_vm, reference);
+    return 0;
+}
+
+static int LuaGetEnumItem(lua_State *L) {
+    if (lua_enum_item) lua_pushlightuserdata(L, lua_enum_item);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaEnumItemsInRect(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    int reference;
+    if (!rect) return 0;
+    if (lua_isnoneornil(L, 3)) reference = LUA_NOREF;
+    else {
+        luaL_checktype(L, 3, LUA_TFUNCTION);
+        reference = WC3_LuaRefFunction(level.lua_vm, 3);
+        if (reference == LUA_NOREF || reference == LUA_REFNIL)
+            return luaL_error(L, "EnumItemsInRect: could not retain callback");
+    }
+    for (uint32_t i = 0; i < globals.num_edicts; ++i) {
+        edict_t *item = &globals.edicts[i];
+        if (!G_IsItem(item) || !item->item.in_world || G_IsDeferredFree(item) ||
+            !Box2_containsPoint(rect, &item->s.origin2)) continue;
+        lua_enum_item = item;
+        if (reference != LUA_NOREF && !WC3_LuaCallRef(level.lua_vm, reference)) {
+            char error[512];
+            strlcpy(error, WC3_LuaErrorMessage(level.lua_vm), sizeof(error));
+            WC3_LuaClearError(level.lua_vm);
+            lua_enum_item = NULL;
+            WC3_LuaUnrefFunction(level.lua_vm, reference);
+            return luaL_error(L, "EnumItemsInRect: callback: %s", error);
+        }
+    }
+    lua_enum_item = NULL;
+    if (reference != LUA_NOREF) WC3_LuaUnrefFunction(level.lua_vm, reference);
+    return 0;
+}
+
+static int LuaGetFilterDestructable(lua_State *L) {
+    void *candidate = WC3_LuaFilterUnit(level.lua_vm);
+    if (candidate) lua_pushlightuserdata(L, candidate); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetEventContextUnit(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetEventContextValue(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)WC3_LuaGetTriggerContext(level.lua_vm).event_value);
+    return 1;
+}
+
+static int LuaGetLearningUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetLevelingUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetRevivableUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetRevivingUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetConstructingStructure(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetConstructedStructure(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetTrainedUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+
+static int LuaGetLearnedSkill(lua_State *L) {
+    (void)L;
+    lua_pushinteger(L, (lua_Integer)WC3_LuaGetTriggerContext(level.lua_vm).event_value);
+    return 1;
+}
+
+static int LuaGetLearnedSkillLevel(lua_State *L) {
+    (void)L;
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    edict_t *hero = context.unit;
+    lua_pushinteger(L, hero ? (lua_Integer)G_UnitAbilityLevel(hero, (uint32_t)context.event_value) : 0);
+    return 1;
+}
+
+static int LuaGetTrainedUnitTypeId(lua_State *L) {
+    edict_t *unit = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (!unit) unit = WC3_LuaGetTriggerContext(level.lua_vm).unit;
+    lua_pushinteger(L, unit ? (lua_Integer)unit->class_id : 0);
+    return 1;
+}
+
+static int LuaGetEventUnitFromSource(lua_State *L) {
+    void *unit = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (unit) lua_pushlightuserdata(L, unit); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetChangingUnit(lua_State *L) {
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    if (context.event_id == EVENT_PLAYER_UNIT_CHANGE_OWNER || context.event_id == EVENT_UNIT_CHANGE_OWNER)
+        return LuaGetEventContextUnit(L);
+    lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetTrainedUnitType(lua_State *L) { return LuaGetTrainedUnitTypeId(L); }
+static int LuaGetOrderedUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+
+static int LuaGetChangingUnitPrevOwner(lua_State *L) {
+    int32_t value = WC3_LuaGetTriggerContext(level.lua_vm).event_value;
+    player_t *player = value > 0 ? G_GetPlayerByNumber((uint32_t)(value - 1)) : NULL;
+    if (player) lua_pushlightuserdata(L, player); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetTriggerEventId(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)WC3_LuaGetTriggerContext(level.lua_vm).event_id);
+    return 1;
+}
+
+static int LuaGetSoldUnit(lua_State *L) {
+    edict_t *sold = WC3_LuaGetTriggerContext(level.lua_vm).soldUnit;
+    if (sold && (sold->svflags & SVF_MONSTER)) lua_pushlightuserdata(L, sold);
+    else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetResearched(lua_State *L) { return LuaGetEventContextValue(L); }
+static int LuaGetUnitEventTarget(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetEnteringUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetEventTargetUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+
+static int LuaGetManipulatedItem(lua_State *L) {
+    edict_t *item = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (item && G_IsItem(item)) lua_pushlightuserdata(L, item); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaGetSummoningUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+static int LuaGetSummonedUnit(lua_State *L) { return LuaGetEventTargetUnit(L); }
+static int LuaGetSellingUnit(lua_State *L) { return LuaGetEventContextUnit(L); }
+
+static int LuaGetOrderTargetUnit(lua_State *L) {
+    edict_t *target = WC3_LuaGetTriggerContext(level.lua_vm).source;
+    if (target && (target->svflags & SVF_MONSTER)) lua_pushlightuserdata(L, target);
+    else lua_pushnil(L);
+    return 1;
+}
+
+typedef struct {
+    wc3Lua_t *lua;
+    int filter_index;
+} luaGroupFilter_t;
+
+static bool LuaGroupFilter(edict_t *unit, void *opaque);
+
+
+
+
+
+
+
+static int LuaIsPlayerAlly(lua_State *L) {
+    player_t *source = lua_touserdata(L, 1), *other = lua_touserdata(L, 2);
+    lua_pushboolean(L, source && other && G_GetPlayerAlliance(source, other, ALLIANCE_PASSIVE));
+    return 1;
+}
+
+
+
+
+
+static int LuaIssueTargetOrder(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    edict_t *target = lua_touserdata(L, 3);
+    lua_pushboolean(L, unit_issuetargetorder(unit, order, target));
+    return 1;
+}
+
+static int LuaIssueNeutralImmediateOrderById(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    edict_t *shop = lua_touserdata(L, 2);
+    uint32_t unit_id = (uint32_t)luaL_checkinteger(L, 3);
+    gameClient_t *client = player ? G_GetPlayerClientByNumber(PLAYER_NUM(player)) : NULL;
+    edict_t *player_entity = client ? G_GetPlayerEntityByNumber(PLAYER_NUM(player)) : NULL;
+    lua_pushboolean(L, client && player_entity && G_ShopPurchaseUnit(player_entity, shop, unit_id));
+    return 1;
+}
+
+static int LuaGetPlayerAlliance(lua_State *L) {
+    player_t *source = lua_touserdata(L, 1), *other = lua_touserdata(L, 2);
+    uint32_t *setting = lua_touserdata(L, 3);
+    uint32_t type = setting ? *setting : (uint32_t)luaL_checkinteger(L, 3);
+    lua_pushboolean(L, source && other && type <= ALLIANCE_SHARED_VISION_FORCED &&
+        G_GetPlayerAlliance(source, other, (PLAYERALLIANCE)type));
+    return 1;
+}
+
+static int LuaOrderId2String(lua_State *L) {
+    lua_pushstring(L, G_OrderId2String((uint32_t)luaL_checkinteger(L, 1)));
+    return 1;
+}
+
+static int LuaIsUnitInRangeOfLocationCounted(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    vec2_t *location = lua_touserdata(L, 2);
+    float radius = (float)luaL_checknumber(L, 3);
+    int32_t count = (int32_t)luaL_checkinteger(L, 5), accepted = 0;
+    luaGroupFilter_t filter = { level.lua_vm, 0 };
+    if (!G_JassGroupValid(group) || !location) return 0;
+    if (!lua_isnoneornil(L, 4)) filter.filter_index = LuaPushBoolExprCallback(L, 4);
+    for (uint32_t i = 0; i < globals.num_edicts && accepted < count; ++i) {
+        edict_t *unit = &globals.edicts[i];
+        if (!IS_UNIT(unit) || G_IsDeferredFree(unit) ||
+            Vector2_distance(&unit->s.origin2, location) > radius) continue;
+        if (filter.filter_index && !LuaGroupFilter(unit, &filter)) {
+            if (WC3_LuaErrorPending(filter.lua)) return luaL_error(L, "GroupEnumUnitsInRangeOfLocCounted: %s", WC3_LuaErrorMessage(filter.lua));
+            continue;
+        }
+        G_AddUnitToGroup(group, unit);
+        accepted++;
+    }
+    return 0;
+}
+
+static int LuaGroupEnumUnitsSelected(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    luaGroupFilter_t filter = { level.lua_vm, 0 };
+    if (!G_JassGroupValid(group) || !player) return 0;
+    if (!lua_isnoneornil(L, 3)) filter.filter_index = LuaPushBoolExprCallback(L, 3);
+    for (uint32_t i = 0; i < globals.num_edicts; ++i) {
+        edict_t *unit = &globals.edicts[i];
+        if (!IS_UNIT(unit) || G_IsDeferredFree(unit) ||
+            !(unit->selected & (1u << PLAYER_NUM(player)))) continue;
+        if (filter.filter_index && !LuaGroupFilter(unit, &filter)) continue;
+        G_AddUnitToGroup(group, unit);
+    }
+    return 0;
+}
+
+static int LuaGroupEnumUnitsInRangeCounted(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    float x = (float)luaL_checknumber(L, 2), y = (float)luaL_checknumber(L, 3);
+    float radius = (float)luaL_checknumber(L, 4);
+    int32_t limit = (int32_t)luaL_checkinteger(L, 6), accepted = 0;
+    luaGroupFilter_t filter = { level.lua_vm, 0 };
+    if (!G_JassGroupValid(group)) return 0;
+    if (!lua_isnoneornil(L, 5)) filter.filter_index = LuaPushBoolExprCallback(L, 5);
+    for (uint32_t i = 0; i < globals.num_edicts && accepted < limit; ++i) {
+        edict_t *unit = &globals.edicts[i];
+        if (!IS_UNIT(unit) || G_IsDeferredFree(unit) ||
+            Vector2_distance(&unit->s.origin2, &MAKE(vec2_t, x, y)) > radius) continue;
+        if (filter.filter_index && !LuaGroupFilter(unit, &filter)) {
+            if (WC3_LuaErrorPending(filter.lua))
+                return luaL_error(L, "GroupEnumUnitsInRangeCounted: %s", WC3_LuaErrorMessage(filter.lua));
+            continue;
+        }
+        G_AddUnitToGroup(group, unit);
+        accepted++;
+    }
+    return 0;
+}
+
+static int LuaGroupEnumUnitsInRangeOfLoc(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    vec2_t *location = lua_touserdata(L, 2);
+    float radius = (float)luaL_checknumber(L, 3);
+    luaGroupFilter_t filter = { level.lua_vm, 0 };
+    if (!G_JassGroupValid(group) || !location) return 0;
+    if (!lua_isnoneornil(L, 4)) filter.filter_index = LuaPushBoolExprCallback(L, 4);
+    for (uint32_t i = 0; i < globals.num_edicts; ++i) {
+        edict_t *unit = &globals.edicts[i];
+        if (!IS_UNIT(unit) || G_IsDeferredFree(unit) ||
+            Vector2_distance(&unit->s.origin2, location) > radius) continue;
+        if (filter.filter_index && !LuaGroupFilter(unit, &filter)) {
+            if (WC3_LuaErrorPending(filter.lua))
+                return luaL_error(L, "GroupEnumUnitsInRangeOfLoc: %s", WC3_LuaErrorMessage(filter.lua));
+            continue;
+        }
+        G_AddUnitToGroup(group, unit);
+    }
+    return 0;
+}
+
+static int LuaGroupEnumUnitsInRangeOfLocCounted(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    vec2_t *location = lua_touserdata(L, 2);
+    float radius = (float)luaL_checknumber(L, 3);
+    int32_t limit = (int32_t)luaL_checkinteger(L, 5), accepted = 0;
+    luaGroupFilter_t filter = { level.lua_vm, 0 };
+    if (!G_JassGroupValid(group) || !location) return 0;
+    if (!lua_isnoneornil(L, 4)) filter.filter_index = LuaPushBoolExprCallback(L, 4);
+    for (uint32_t i = 0; i < globals.num_edicts && accepted < limit; ++i) {
+        edict_t *unit = &globals.edicts[i];
+        if (!IS_UNIT(unit) || G_IsDeferredFree(unit) ||
+            Vector2_distance(&unit->s.origin2, location) > radius) continue;
+        if (filter.filter_index && !LuaGroupFilter(unit, &filter)) {
+            if (WC3_LuaErrorPending(filter.lua))
+                return luaL_error(L, "GroupEnumUnitsInRangeOfLocCounted: %s", WC3_LuaErrorMessage(filter.lua));
+            continue;
+        }
+        G_AddUnitToGroup(group, unit);
+        accepted++;
+    }
+    return 0;
+}
+
+static int LuaSetUnitAnimation(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) G_SetUnitAnimation(unit, luaL_checkstring(L, 2));
+    return 0;
+}
+static int LuaSetUnitAnimationWithRarity(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t name = luaL_checkstring(L, 2);
+    uint32_t *rarity = lua_touserdata(L, 3);
+    animation_t const *animation;
+    if (!unit) return 0;
+    animation = G_GetAnimationVariant(unit->s.model, name, rarity && *rarity == 1);
+    G_SetUnitAnimation(unit, name);
+    if (animation) {
+        unit->animation = animation;
+        unit->s.frame = animation->interval[0];
+        unit->animation_override = true;
+    }
+    return 0;
+}
+
+static int LuaAddUnitAnimationProperties(lua_State *L) {
+    G_AddUnitAnimationProperties(lua_touserdata(L, 1), luaL_checkstring(L, 2), lua_toboolean(L, 3));
+    return 0;
+}
+
+static int LuaPauseUnit(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    if (unit) unit->paused = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaIsUnitHidden(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    lua_pushboolean(L, unit && (unit->s.renderfx & RF_HIDDEN));
+    return 1;
+}
+
+static int LuaShowUnit(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    bool show = lua_toboolean(L, 2);
+    if (!unit || (show && !G_UnitIsWorldActive(unit))) return 0;
+    {
+        bool was_hidden = !!(unit->s.renderfx & RF_HIDDEN);
+        if (show) unit->s.renderfx &= ~RF_HIDDEN; else unit->s.renderfx |= RF_HIDDEN;
+        if (was_hidden != !!(unit->s.renderfx & RF_HIDDEN)) {
+            if (unit->s.flags & EF_FOW_BLOCKER) G_FowMarkBlockersDirty();
+            G_InvalidateUnitShortcuts(G_GetPlayerClientByNumber(unit->s.player));
+        }
+    }
+    return 0;
+}
+
 static int LuaGetUnitTypeId(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     lua_pushinteger(L, unit ? (lua_Integer)unit->class_id : 0);
+    return 1;
+}
+
+static int LuaGetUnitName(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t name = unit ? G_UnitName(unit->class_id) : NULL;
+    lua_pushstring(L, name ? name : "");
+    return 1;
+}
+
+static int LuaGetHandleId(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)G_JassHandleId(lua_touserdata(L, 1)));
     return 1;
 }
 
@@ -937,11 +1671,47 @@ static int LuaIssueImmediateOrder(lua_State *L) {
     return 1;
 }
 
+static int LuaIssueImmediateOrderById(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t order = (uint32_t)luaL_checkinteger(L, 2);
+    lua_pushboolean(L, unit_issueimmediateorder(unit, G_OrderId2String(order)));
+    return 1;
+}
+
+static int LuaIssueBuildOrderById(lua_State *L) {
+    edict_t *worker = lua_touserdata(L, 1);
+    uint32_t unit_id = (uint32_t)luaL_checkinteger(L, 2);
+    vec2_t point = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
+    lua_pushboolean(L, G_IssueBuildOrder(worker, unit_id, &point));
+    return 1;
+}
+
 static int LuaIssuePointOrder(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     cstring_t order = luaL_checkstring(L, 2);
     vec2_t point = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
     lua_pushboolean(L, unit_issueorder(unit, order, &point));
+    return 1;
+}
+
+static int LuaGroupPointOrder(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    vec2_t point = { (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4) };
+    bool accepted = false;
+    if (G_JassGroupValid(group)) {
+        FOR_LOOP(i, group->num_units)
+            if (unit_issueorder(group->units[i], order, &point)) accepted = true;
+    }
+    lua_pushboolean(L, accepted);
+    return 1;
+}
+
+static int LuaIssuePointOrderLoc(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    vec2_t *location = lua_touserdata(L, 3);
+    lua_pushboolean(L, unit && location && unit_issueorder(unit, order, location));
     return 1;
 }
 
@@ -1058,6 +1828,8 @@ static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t con
         .timer = context ? context->timer : NULL,
         .region = context ? context->region : NULL,
         .event_value = context ? context->value : 0,
+        .event_id = context ? context->event_id : 0,
+        .soldUnit = context ? context->sold_unit : NULL,
         .point_x = context ? context->point_x : 0.0f,
         .point_y = context ? context->point_y : 0.0f,
         .has_point = context ? context->has_point : false,
@@ -1178,11 +1950,6 @@ static int LuaGetExpiredTimer(lua_State *L) {
     return 1;
 }
 
-typedef struct {
-    wc3Lua_t *lua;
-    int filter_index;
-} luaGroupFilter_t;
-
 static bool LuaEvaluateCandidate(void *candidate, void *opaque) {
     luaGroupFilter_t *context = opaque;
     bool accepted = false;
@@ -1237,6 +2004,30 @@ static int LuaForceEnumPlayers(lua_State *L) {
         strlcpy(error, WC3_LuaErrorMessage(context.lua), sizeof(error));
         WC3_LuaClearError(context.lua);
         return luaL_error(L, "ForceEnumPlayers: %s", error);
+    }
+    return 0;
+}
+
+static int LuaForceEnumAllies(lua_State *L) {
+    uint32_t *force = lua_touserdata(L, 1);
+    player_t *source = lua_touserdata(L, 2);
+    luaGroupFilter_t context = { level.lua_vm, lua_absindex(L, 3) };
+
+    if (!force || !source) return 0;
+    if (lua_isnoneornil(L, 3)) context.filter_index = 0;
+    else context.filter_index = LuaPushBoolExprCallback(L, 3);
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) {
+        player_t *candidate = G_GetPlayerByNumber(i);
+        bool accepted = candidate && G_GetPlayerAlliance(source, candidate, ALLIANCE_PASSIVE);
+        if (accepted && context.filter_index)
+            accepted = LuaEvaluateCandidate(candidate, &context);
+        if (accepted) *force |= 1u << i;
+        if (WC3_LuaErrorPending(context.lua)) {
+            char error[512];
+            strlcpy(error, WC3_LuaErrorMessage(context.lua), sizeof(error));
+            WC3_LuaClearError(context.lua);
+            return luaL_error(L, "ForceEnumAllies: %s", error);
+        }
     }
     return 0;
 }
@@ -2087,6 +2878,14 @@ static int LuaSetPlayerAlliance(lua_State *L) {
     return 0;
 }
 
+static int LuaIsPlayerEnemy(lua_State *L) {
+    player_t *source = lua_touserdata(L, 1);
+    player_t *other = lua_touserdata(L, 2);
+    lua_pushboolean(L, source && other &&
+        !G_GetPlayerAlliance(source, other, ALLIANCE_PASSIVE));
+    return 1;
+}
+
 static int LuaSetPlayerState(lua_State *L) {
     G_SetPlayerState(lua_touserdata(L, 1),
         (uint32_t)luaL_checkinteger(L, 2), (int32_t)luaL_checkinteger(L, 3));
@@ -2101,6 +2900,113 @@ static int LuaGetPlayerTechResearched(lua_State *L) {
         G_GetPlayerTechResearchedLevel(PLAYER_CLIENT(player), tech) > 0);
     return 1;
 }
+
+static int LuaGroupImmediateOrder(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    bool accepted = false;
+    if (G_JassGroupValid(group)) FOR_LOOP(i, group->num_units)
+        if (unit_issueimmediateorder(group->units[i], order)) accepted = true;
+    lua_pushboolean(L, accepted);
+    return 1;
+}
+
+static int LuaGroupPointOrderLoc(lua_State *L) {
+    ggroup_t *group = lua_touserdata(L, 1);
+    cstring_t order = luaL_checkstring(L, 2);
+    vec2_t *point = lua_touserdata(L, 3);
+    bool accepted = false;
+    if (G_JassGroupValid(group) && point) FOR_LOOP(i, group->num_units)
+        if (unit_issueorder(group->units[i], order, point)) accepted = true;
+    lua_pushboolean(L, accepted);
+    return 1;
+}
+
+static int LuaS2I(lua_State *L) {
+    lua_pushinteger(L, (lua_Integer)atoi(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+static int LuaS2R(lua_State *L) {
+    lua_pushnumber(L, (lua_Number)atof(luaL_checkstring(L, 1)));
+    return 1;
+}
+
+static int LuaR2SW(lua_State *L) {
+    char buffer[64];
+    int width = (int)luaL_checkinteger(L, 2), precision = (int)luaL_checkinteger(L, 3);
+    if (width < 0 || width > 32) width = 0;
+    if (precision < 0 || precision > 16) precision = 6;
+    snprintf(buffer, sizeof(buffer), "%*.*f", width, precision, (double)luaL_checknumber(L, 1));
+    lua_pushstring(L, buffer);
+    return 1;
+}
+
+static int LuaAddUnitToStock(lua_State *L) {
+    G_AddUnitStock(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2),
+                   (int32_t)luaL_checkinteger(L, 3), (int32_t)luaL_checkinteger(L, 4));
+    return 0;
+}
+
+static int LuaAddUnitToAllStock(lua_State *L) {
+    G_AddUnitStockAll((uint32_t)luaL_checkinteger(L, 1),
+                      (int32_t)luaL_checkinteger(L, 2), (int32_t)luaL_checkinteger(L, 3));
+    return 0;
+}
+
+static int LuaRemoveUnitFromStock(lua_State *L) {
+    G_RemoveUnitStock(lua_touserdata(L, 1), (uint32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaUnitAddItem(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *item = lua_touserdata(L, 2);
+    lua_pushboolean(L, unit && item &&
+        (G_ItemAbilityScriptedReattach(unit, item) || G_PickupItem(unit, item)));
+    return 1;
+}
+
+static int LuaUnitAddItemById(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t id = (uint32_t)luaL_checkinteger(L, 2);
+    edict_t *item = unit ? SP_SpawnAtLocation(id, unit->s.player, &unit->s.origin2) : NULL;
+    if (item && G_PickupItem(unit, item)) lua_pushlightuserdata(L, item);
+    else { if (item) G_RemoveItem(item); lua_pushnil(L); }
+    return 1;
+}
+
+static int LuaUnitAddItemToSlotById(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t id = (uint32_t)luaL_checkinteger(L, 2);
+    int32_t slot = (int32_t)luaL_checkinteger(L, 3);
+    if (!unit || slot < 0 || (uint32_t)slot >= G_InventoryCapacity(unit)) { lua_pushboolean(L, false); return 1; }
+    edict_t *item = SP_SpawnAtLocation(id, unit->s.player, &unit->s.origin2);
+    bool added = item && G_AddItemToSlot(unit, item, (uint32_t)slot);
+    if (!added && item) G_RemoveItem(item);
+    lua_pushboolean(L, added);
+    return 1;
+}
+
+static int LuaUnitRemoveItem(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *item = lua_touserdata(L, 2);
+    if (!unit || !item) return 0;
+    FOR_LOOP(i, MAX_INVENTORY) {
+        if (unit->inventory[i] != item) continue;
+        if (!G_ItemAbilityScriptedRemove(unit, item)) G_DropItemAtScripted(unit, i, &unit->s.origin2);
+        break;
+    }
+    return 0;
+}
+
+static int LuaUnitHasItem(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *item = lua_touserdata(L, 2);
+    bool found = false;
+    if (unit && item) FOR_LOOP(i, MAX_INVENTORY) if (unit->inventory[i] == item) { found = true; break; }
+    lua_pushboolean(L, found);
+    return 1;
+}
+
+
 
 static int LuaSetPlayerTechResearched(lua_State *L) {
     player_t *player = lua_touserdata(L, 1);
@@ -2456,6 +3362,47 @@ static int LuaGetLocationY(lua_State *L) {
     return 1;
 }
 
+static int LuaIssueTargetOrderById(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1), *target = lua_touserdata(L, 3);
+    uint32_t order = (uint32_t)luaL_checkinteger(L, 2);
+    cstring_t name = G_OrderId2String(order);
+    bool accepted;
+    if (order == BZ_WC3_UNIT_HAUNTED_GOLD_MINE && target && target->class_id == BZ_WC3_UNIT_GOLD_MINE)
+        accepted = unit && G_IssueBuildOrder(unit, order, &target->s.origin2);
+    else accepted = unit_issuetargetorder(unit, name, target);
+    lua_pushboolean(L, accepted);
+    return 1;
+}
+
+
+static int LuaSetDestructableLife(lua_State *L) {
+    G_SetDestructableLife(lua_touserdata(L, 1), (float)luaL_checknumber(L, 2));
+    return 0;
+}
+
+
+static int LuaKillDestructable(lua_State *L) {
+    G_KillDestructable(lua_touserdata(L, 1), NULL);
+    return 0;
+}
+
+static int LuaGetBuyingUnit(lua_State *L) { return LuaGetEventUnitFromSource(L); }
+
+static int LuaGetLocationZ(lua_State *L) {
+    vec2_t *location = lua_touserdata(L, 1);
+    lua_pushnumber(L, location ? CM_GetHeightAtPoint(location->x, location->y) : 0.0f);
+    return 1;
+}
+
+static int LuaMoveLocation(lua_State *L) {
+    vec2_t *location = lua_touserdata(L, 1);
+    if (location) {
+        location->x = (float)luaL_checknumber(L, 2);
+        location->y = (float)luaL_checknumber(L, 3);
+    }
+    return 0;
+}
+
 static int LuaRemoveLocation(lua_State *L) {
     (void)L;
     return 0;
@@ -2463,6 +3410,24 @@ static int LuaRemoveLocation(lua_State *L) {
 
 static int LuaRemoveRect(lua_State *L) {
     (void)L;
+    return 0;
+}
+
+static int LuaSetRect(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    if (rect) {
+        rect->min.x = (float)luaL_checknumber(L, 2);
+        rect->min.y = (float)luaL_checknumber(L, 3);
+        rect->max.x = (float)luaL_checknumber(L, 4);
+        rect->max.y = (float)luaL_checknumber(L, 5);
+    }
+    return 0;
+}
+
+static int LuaMoveRectTo(lua_State *L) {
+    box2_t *rect = lua_touserdata(L, 1);
+    vec2_t center = { (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3) };
+    if (rect) Box2_moveTo(rect, &center);
     return 0;
 }
 
@@ -2715,6 +3680,190 @@ static int LuaGetHeroInt(lua_State *L) {
     return 1;
 }
 
+static int LuaGetItemLevel(lua_State *L) {
+    edict_t *item = lua_touserdata(L, 1);
+    ItemData_t const *data = item ? item->data.ItemData : NULL;
+    lua_pushinteger(L, data ? data->level : item ? G_ItemData(item->class_id)->level : 0);
+    return 1;
+}
+
+static int LuaCreateLeaderboard(lua_State *L) {
+    leaderboard_t *board = G_AllocLeaderboard();
+    if (!board) return luaL_error(L, "CreateLeaderboard: registry full");
+    lua_pushlightuserdata(L, board);
+    return 1;
+}
+
+static int LuaLeaderboardDisplay(lua_State *L) {
+    G_SetLeaderboardDisplayed(lua_touserdata(L, 1), currentplayer, lua_toboolean(L, 2));
+    return 0;
+}
+
+static int LuaLeaderboardGetLabelText(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    lua_pushstring(L, board && board->inuse ? board->label : "");
+    return 1;
+}
+
+static int LuaPlayerGetLeaderboard(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    leaderboard_t *board = player ? G_PlayerLeaderboard(PLAYER_NUM(player)) : NULL;
+    if (board) lua_pushlightuserdata(L, board); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaPlayerSetLeaderboard(lua_State *L) {
+    player_t *player = lua_touserdata(L, 1);
+    leaderboard_t *board = lua_touserdata(L, 2);
+    if (player) G_SetPlayerLeaderboard(PLAYER_NUM(player), board);
+    return 0;
+}
+
+static int LuaLeaderboardSetLabel(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    if (board && board->inuse) {
+        strlcpy(board->label, G_LevelString(luaL_checkstring(L, 2)), sizeof(board->label));
+        G_MarkLeaderboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaLeaderboardSetSizeByItemCount(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    if (board && board->inuse) {
+        board->size_by_item_count = MAX(0, (int32_t)luaL_checkinteger(L, 2));
+        G_MarkLeaderboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaLeaderboardAddItem(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    cstring_t label = luaL_checkstring(L, 2);
+    int32_t value = (int32_t)luaL_checkinteger(L, 3);
+    player_t *player = lua_touserdata(L, 4);
+    if (!board || !board->inuse || board->item_count >= MAX_LEADERBOARD_ITEMS) return 0;
+    struct gleaderboarditem_s *item = &board->items[board->item_count++];
+    memset(item, 0, sizeof(*item));
+    strlcpy(item->label, G_LevelString(label), sizeof(item->label));
+    item->value = value;
+    item->player = player ? (int32_t)PLAYER_NUM(player) : -1;
+    item->show_label = item->show_value = item->show_icon = true;
+    G_MarkLeaderboardDirty(board);
+    return 0;
+}
+
+static int LuaLeaderboardSetItemValue(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    int32_t index = (int32_t)luaL_checkinteger(L, 2);
+    int32_t value = (int32_t)luaL_checkinteger(L, 3);
+    if (board && board->inuse && index >= 0 && (uint32_t)index < board->item_count) {
+        board->items[index].value = value;
+        G_MarkLeaderboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaLeaderboardGetItemValue(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    int32_t index = (int32_t)luaL_checkinteger(L, 2);
+    lua_pushinteger(L, board && board->inuse && index >= 0 && (uint32_t)index < board->item_count
+        ? board->items[index].value : 0);
+    return 1;
+}
+
+static int LuaDestroyLeaderboard(lua_State *L) {
+    G_FreeLeaderboard(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaCreateTextTag(lua_State *L) {
+    texttag_t *tag = G_AllocTextTag();
+    if (tag) lua_pushlightuserdata(L, tag); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaDestroyTextTag(lua_State *L) { G_FreeTextTag(lua_touserdata(L, 1)); return 0; }
+
+static int LuaSetTextTagFadepoint(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    if (tag && tag->inuse) tag->fadepoint = (float)luaL_checknumber(L, 2);
+    return 0;
+}
+
+static int LuaSetTextTagLifespan(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    if (tag && tag->inuse) tag->lifespan = (float)luaL_checknumber(L, 2);
+    return 0;
+}
+
+static int LuaSetTextTagPermanent(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    if (tag && tag->inuse) tag->permanent = lua_toboolean(L, 2);
+    return 0;
+}
+
+static int LuaSetTextTagVelocity(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    if (tag && tag->inuse) {
+        tag->xvel = (float)luaL_checknumber(L, 2);
+        tag->yvel = (float)luaL_checknumber(L, 3);
+    }
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+static int LuaLeaderboardGetPlayerIndex(lua_State *L) {
+    leaderboard_t *board = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    if (board && board->inuse && player) {
+        FOR_LOOP(i, board->item_count) {
+            if (board->items[i].player == (int32_t)PLAYER_NUM(player)) { lua_pushinteger(L, i); return 1; }
+        }
+    }
+    lua_pushinteger(L, -1);
+    return 1;
+}
+
+
+
+
+
+
+
+static int LuaSetTextTagText(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    if (tag && tag->inuse) {
+        strlcpy(tag->text, G_LevelString(luaL_checkstring(L, 2)), sizeof(tag->text));
+        tag->height = (float)luaL_checknumber(L, 3);
+    }
+    return 0;
+}
+
+static int LuaSetTextTagPosUnit(lua_State *L) {
+    texttag_t *tag = lua_touserdata(L, 1);
+    edict_t *unit = lua_touserdata(L, 2);
+    if (tag && tag->inuse) {
+        tag->unit = unit;
+        tag->height_offset = (float)luaL_checknumber(L, 3);
+        if (unit) { tag->x = unit->s.origin.x; tag->y = unit->s.origin.y; }
+    }
+    return 0;
+}
+
+static int LuaIsLeaderboardDisplayed(lua_State *L) {
+    lua_pushboolean(L, G_IsLeaderboardDisplayed(lua_touserdata(L, 1), currentplayer));
+    return 1;
+}
+
 static int LuaCreateQuest(lua_State *L) {
     quest_t *quest = G_MakeQuest();
     if (quest) lua_pushlightuserdata(L, quest); else lua_pushnil(L);
@@ -2847,6 +3996,94 @@ static int LuaFogModifierStop(lua_State *L) {
     return 0;
 }
 
+static int LuaDestroyFogModifier(lua_State *L) {
+    G_FogModifierStop(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaCreateMultiboard(lua_State *L) {
+    multiboard_t *board = G_AllocMultiboard();
+    if (!board) return luaL_error(L, "CreateMultiboard: multiboard registry is full");
+    lua_pushlightuserdata(L, board);
+    return 1;
+}
+
+static int LuaDestroyMultiboard(lua_State *L) {
+    G_FreeMultiboard(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaMultiboardSetRowCount(lua_State *L) {
+    G_MultiboardSetRowCount(lua_touserdata(L, 1), (int32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaMultiboardSetColumnCount(lua_State *L) {
+    G_MultiboardSetColumnCount(lua_touserdata(L, 1), (int32_t)luaL_checkinteger(L, 2));
+    return 0;
+}
+
+static int LuaMultiboardSetTitleText(lua_State *L) {
+    multiboard_t *board = lua_touserdata(L, 1);
+    if (board && board->inuse) {
+        strlcpy(board->title, G_LevelString(luaL_checkstring(L, 2)), sizeof(board->title));
+        G_MarkMultiboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaMultiboardGetItem(lua_State *L) {
+    multiboardItem_t *item = G_MultiboardGetItem(lua_touserdata(L, 1),
+        (int32_t)luaL_checkinteger(L, 2), (int32_t)luaL_checkinteger(L, 3));
+    if (!item) return luaL_error(L, "MultiboardGetItem: invalid cell or item registry full");
+    lua_pushlightuserdata(L, item);
+    return 1;
+}
+
+static int LuaMultiboardReleaseItem(lua_State *L) {
+    G_MultiboardReleaseItem(lua_touserdata(L, 1));
+    return 0;
+}
+
+static int LuaMultiboardSetItemValue(lua_State *L) {
+    multiboardItem_t *item = lua_touserdata(L, 1);
+    multiboard_t *board = G_MultiboardItemBoard(item);
+    struct gmultiboardcell_s *cell = board ? G_MultiboardCell(board, item->row, item->col) : NULL;
+    if (cell) {
+        strlcpy(cell->value, G_LevelString(luaL_checkstring(L, 2)), sizeof(cell->value));
+        G_MarkMultiboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaMultiboardSetItemWidth(lua_State *L) {
+    multiboardItem_t *item = lua_touserdata(L, 1);
+    multiboard_t *board = G_MultiboardItemBoard(item);
+    struct gmultiboardcell_s *cell = board ? G_MultiboardCell(board, item->row, item->col) : NULL;
+    if (cell) {
+        cell->width = (float)luaL_checknumber(L, 2);
+        G_MarkMultiboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaMultiboardSetItemsStyle(lua_State *L) {
+    multiboard_t *board = lua_touserdata(L, 1);
+    if (board && board->inuse) {
+        FOR_LOOP(i, MAX_MULTIBOARD_CELLS) {
+            board->cells[i].show_value = lua_toboolean(L, 2);
+            board->cells[i].show_icon = lua_toboolean(L, 3);
+        }
+        G_MarkMultiboardDirty(board);
+    }
+    return 0;
+}
+
+static int LuaMultiboardDisplay(lua_State *L) {
+    G_SetMultiboardDisplayed(lua_touserdata(L, 1), currentplayer, lua_toboolean(L, 2));
+    return 0;
+}
+
 static int LuaConvertEnum(lua_State *L) {
     lua_pushinteger(L, luaL_checkinteger(L, 1));
     return 1;
@@ -2873,19 +4110,133 @@ void G_RegisterLuaMapConfigNatives(wc3Lua_t *L) {
 
 void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     G_RegisterLuaMapConfigNatives(L);
+    WC3_LuaRegisterNative(L, "GetUnitDefaultMoveSpeed", LuaGetUnitDefaultMoveSpeed);
+    WC3_LuaRegisterNative(L, "GetUnitMoveSpeed", LuaGetUnitMoveSpeed);
+    WC3_LuaRegisterNative(L, "SetUnitMoveSpeed", LuaSetUnitMoveSpeed);
+    WC3_LuaRegisterNative(L, "GetUnitFacing", LuaGetUnitFacing);
+    WC3_LuaRegisterNative(L, "SetUnitFacing", LuaSetUnitFacing);
+    WC3_LuaRegisterNative(L, "GetUnitFlyHeight", LuaGetUnitFlyHeight);
+    WC3_LuaRegisterNative(L, "GetUnitDefaultFlyHeight", LuaGetUnitDefaultFlyHeight);
+    WC3_LuaRegisterNative(L, "SetUnitFlyHeight", LuaSetUnitFlyHeight);
+    WC3_LuaRegisterNative(L, "GetUnitFoodMade", LuaGetUnitFoodMade);
+    WC3_LuaRegisterNative(L, "GetUnitLevel", LuaGetUnitLevel);
+    WC3_LuaRegisterNative(L, "GetHeroLevel", LuaGetHeroLevel);
+    WC3_LuaRegisterNative(L, "GetHeroXP", LuaGetHeroXP);
+    WC3_LuaRegisterNative(L, "GetHeroSkillPoints", LuaGetHeroSkillPoints);
+    WC3_LuaRegisterNative(L, "SelectHeroSkill", LuaSelectHeroSkill);
+    WC3_LuaRegisterNative(L, "ReviveHero", LuaReviveHero);
+    WC3_LuaRegisterNative(L, "GetUnitRallyPoint", LuaGetUnitRallyPoint);
+    WC3_LuaRegisterNative(L, "GetUnitRallyUnit", LuaGetUnitRallyUnit);
+    WC3_LuaRegisterNative(L, "GetUnitRallyDestructable", LuaGetUnitRallyDestructable);
+    WC3_LuaRegisterNative(L, "GetResourceAmount", LuaGetResourceAmount);
+    WC3_LuaRegisterNative(L, "SetResourceAmount", LuaSetResourceAmount);
+    WC3_LuaRegisterNative(L, "GetWidgetLife", LuaGetWidgetLife);
+    WC3_LuaRegisterNative(L, "GetWidgetX", LuaGetWidgetX);
+    WC3_LuaRegisterNative(L, "GetWidgetY", LuaGetWidgetY);
+    WC3_LuaRegisterNative(L, "GetDestructableTypeId", LuaGetDestructableTypeId);
+    WC3_LuaRegisterNative(L, "GetDestructableX", LuaGetDestructableX);
+    WC3_LuaRegisterNative(L, "GetDestructableY", LuaGetDestructableY);
+    WC3_LuaRegisterNative(L, "GetDestructableLife", LuaGetDestructableLife);
+    WC3_LuaRegisterNative(L, "SetDestructableLife", LuaSetDestructableLife);
+    WC3_LuaRegisterNative(L, "KillDestructable", LuaKillDestructable);
+    WC3_LuaRegisterNative(L, "GetItemLevel", LuaGetItemLevel);
+    WC3_LuaRegisterNative(L, "IsUnitSelected", LuaIsUnitSelected);
+    WC3_LuaRegisterNative(L, "IsUnitAlly", LuaIsUnitAlly);
+    WC3_LuaRegisterNative(L, "IsUnitEnemy", LuaIsUnitEnemy);
+    WC3_LuaRegisterNative(L, "IsItemOwned", LuaIsItemOwned);
+    WC3_LuaRegisterNative(L, "IsPlayerAlly", LuaIsPlayerAlly);
+    WC3_LuaRegisterNative(L, "GetPlayerAlliance", LuaGetPlayerAlliance);
+    WC3_LuaRegisterNative(L, "GetTriggerEventId", LuaGetTriggerEventId);
+    WC3_LuaRegisterNative(L, "GetEventTargetUnit", LuaGetEventTargetUnit);
+    WC3_LuaRegisterNative(L, "GetOrderedUnit", LuaGetOrderedUnit);
+    WC3_LuaRegisterNative(L, "GetOrderTargetUnit", LuaGetOrderTargetUnit);
+    WC3_LuaRegisterNative(L, "GetConstructingStructure", LuaGetConstructingStructure);
+    WC3_LuaRegisterNative(L, "GetConstructedStructure", LuaGetConstructedStructure);
+    WC3_LuaRegisterNative(L, "GetRevivableUnit", LuaGetRevivableUnit);
+    WC3_LuaRegisterNative(L, "GetRevivingUnit", LuaGetRevivingUnit);
+    WC3_LuaRegisterNative(L, "GetLearningUnit", LuaGetLearningUnit);
+    WC3_LuaRegisterNative(L, "GetLevelingUnit", LuaGetLevelingUnit);
+    WC3_LuaRegisterNative(L, "GetLearnedSkill", LuaGetLearnedSkill);
+    WC3_LuaRegisterNative(L, "GetLearnedSkillLevel", LuaGetLearnedSkillLevel);
+    WC3_LuaRegisterNative(L, "GetTrainedUnit", LuaGetTrainedUnit);
+    WC3_LuaRegisterNative(L, "GetTrainedUnitType", LuaGetTrainedUnitType);
+    WC3_LuaRegisterNative(L, "GetSummoningUnit", LuaGetSummoningUnit);
+    WC3_LuaRegisterNative(L, "GetSummonedUnit", LuaGetSummonedUnit);
+    WC3_LuaRegisterNative(L, "GetSellingUnit", LuaGetSellingUnit);
+    WC3_LuaRegisterNative(L, "GetBuyingUnit", LuaGetBuyingUnit);
+    WC3_LuaRegisterNative(L, "GetSoldUnit", LuaGetSoldUnit);
+    WC3_LuaRegisterNative(L, "GetManipulatedItem", LuaGetManipulatedItem);
+    WC3_LuaRegisterNative(L, "GetResearched", LuaGetResearched);
+    WC3_LuaRegisterNative(L, "GetChangingUnit", LuaGetChangingUnit);
+    WC3_LuaRegisterNative(L, "GetChangingUnitPrevOwner", LuaGetChangingUnitPrevOwner);
+    WC3_LuaRegisterNative(L, "GetEnumDestructable", LuaGetEnumDestructable);
+    WC3_LuaRegisterNative(L, "GetFilterDestructable", LuaGetFilterDestructable);
+    WC3_LuaRegisterNative(L, "GetEnumItem", LuaGetEnumItem);
+    WC3_LuaRegisterNative(L, "EnumDestructablesInRect", LuaEnumDestructablesInRect);
+    WC3_LuaRegisterNative(L, "EnumItemsInRect", LuaEnumItemsInRect);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsSelected", LuaGroupEnumUnitsSelected);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsInRangeCounted", LuaGroupEnumUnitsInRangeCounted);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsInRangeOfLoc", LuaGroupEnumUnitsInRangeOfLoc);
+    WC3_LuaRegisterNative(L, "GroupEnumUnitsInRangeOfLocCounted", LuaGroupEnumUnitsInRangeOfLocCounted);
+    WC3_LuaRegisterNative(L, "GroupImmediateOrder", LuaGroupImmediateOrder);
+    WC3_LuaRegisterNative(L, "GroupPointOrderLoc", LuaGroupPointOrderLoc);
+    WC3_LuaRegisterNative(L, "IssueTargetOrder", LuaIssueTargetOrder);
+    WC3_LuaRegisterNative(L, "IssueNeutralImmediateOrderById", LuaIssueNeutralImmediateOrderById);
+    WC3_LuaRegisterNative(L, "OrderId2String", LuaOrderId2String);
+    WC3_LuaRegisterNative(L, "S2I", LuaS2I);
+    WC3_LuaRegisterNative(L, "S2R", LuaS2R);
+    WC3_LuaRegisterNative(L, "R2SW", LuaR2SW);
+    WC3_LuaRegisterNative(L, "MoveRectTo", LuaMoveRectTo);
+    WC3_LuaRegisterNative(L, "SetRect", LuaSetRect);
+    WC3_LuaRegisterNative(L, "MoveLocation", LuaMoveLocation);
+    WC3_LuaRegisterNative(L, "GetLocationZ", LuaGetLocationZ);
+    WC3_LuaRegisterNative(L, "AddUnitToStock", LuaAddUnitToStock);
+    WC3_LuaRegisterNative(L, "AddUnitToAllStock", LuaAddUnitToAllStock);
+    WC3_LuaRegisterNative(L, "RemoveUnitFromStock", LuaRemoveUnitFromStock);
+    WC3_LuaRegisterNative(L, "CreateLeaderboard", LuaCreateLeaderboard);
+    WC3_LuaRegisterNative(L, "DestroyLeaderboard", LuaDestroyLeaderboard);
+    WC3_LuaRegisterNative(L, "LeaderboardDisplay", LuaLeaderboardDisplay);
+    WC3_LuaRegisterNative(L, "LeaderboardGetLabelText", LuaLeaderboardGetLabelText);
+    WC3_LuaRegisterNative(L, "PlayerSetLeaderboard", LuaPlayerSetLeaderboard);
+    WC3_LuaRegisterNative(L, "PlayerGetLeaderboard", LuaPlayerGetLeaderboard);
+    WC3_LuaRegisterNative(L, "LeaderboardSetLabel", LuaLeaderboardSetLabel);
+    WC3_LuaRegisterNative(L, "LeaderboardSetSizeByItemCount", LuaLeaderboardSetSizeByItemCount);
+    WC3_LuaRegisterNative(L, "LeaderboardAddItem", LuaLeaderboardAddItem);
+    WC3_LuaRegisterNative(L, "LeaderboardSetItemValue", LuaLeaderboardSetItemValue);
+    WC3_LuaRegisterNative(L, "LeaderboardGetPlayerIndex", LuaLeaderboardGetPlayerIndex);
+    WC3_LuaRegisterNative(L, "LeaderboardGetItemValue", LuaLeaderboardGetItemValue);
+    WC3_LuaRegisterNative(L, "IsLeaderboardDisplayed", LuaIsLeaderboardDisplayed);
+    WC3_LuaRegisterNative(L, "CreateTextTag", LuaCreateTextTag);
+    WC3_LuaRegisterNative(L, "DestroyTextTag", LuaDestroyTextTag);
+    WC3_LuaRegisterNative(L, "SetTextTagFadepoint", LuaSetTextTagFadepoint);
+    WC3_LuaRegisterNative(L, "SetTextTagLifespan", LuaSetTextTagLifespan);
+    WC3_LuaRegisterNative(L, "SetTextTagPermanent", LuaSetTextTagPermanent);
+    WC3_LuaRegisterNative(L, "SetTextTagVelocity", LuaSetTextTagVelocity);
+    WC3_LuaRegisterNative(L, "SetTextTagText", LuaSetTextTagText);
+    WC3_LuaRegisterNative(L, "SetTextTagPosUnit", LuaSetTextTagPosUnit);
     WC3_LuaRegisterNative(L, "Pow", LuaPow);
     WC3_LuaRegisterNative(L, "SquareRoot", LuaSquareRoot);
+    WC3_LuaRegisterNative(L, "Sin", LuaSin);
+    WC3_LuaRegisterNative(L, "Cos", LuaCos);
+    WC3_LuaRegisterNative(L, "Atan", LuaAtan);
+    WC3_LuaRegisterNative(L, "Atan2", LuaAtan2);
+    WC3_LuaRegisterNative(L, "MathRound", LuaMathRound);
     WC3_LuaRegisterNative(L, "CreateGroup", LuaCreateGroup);
     WC3_LuaRegisterNative(L, "BlzCreateUnitWithSkin", LuaBlzCreateUnitWithSkin);
     WC3_LuaRegisterNative(L, "SetUnitColor", LuaSetUnitColor);
     WC3_LuaRegisterNative(L, "SetUnitState", LuaSetUnitState);
+    WC3_LuaRegisterNative(L, "UnitSetConstructionProgress", LuaUnitSetConstructionProgress);
     WC3_LuaRegisterNative(L, "BlzGetUnitAbilityCooldownRemaining", LuaBlzGetUnitAbilityCooldownRemaining);
     WC3_LuaRegisterNative(L, "BlzStartUnitAbilityCooldown", LuaBlzStartUnitAbilityCooldown);
     WC3_LuaRegisterNative(L, "BlzEndUnitAbilityCooldown", LuaBlzEndUnitAbilityCooldown);
     WC3_LuaRegisterNative(L, "BlzIsUnitInvulnerable", LuaBlzIsUnitInvulnerable);
     WC3_LuaRegisterNative(L, "SetUnitInvulnerable", LuaSetUnitInvulnerable);
+    WC3_LuaRegisterNative(L, "UnitShareVision", LuaUnitShareVision);
     WC3_LuaRegisterNative(L, "WaygateSetDestination", LuaWaygateSetDestination);
     WC3_LuaRegisterNative(L, "WaygateActivate", LuaWaygateActivate);
+    WC3_LuaRegisterNative(L, "WaygateIsActive", LuaWaygateIsActive);
+    WC3_LuaRegisterNative(L, "WaygateGetDestinationX", LuaWaygateGetDestinationX);
+    WC3_LuaRegisterNative(L, "WaygateGetDestinationY", LuaWaygateGetDestinationY);
     WC3_LuaRegisterNative(L, "GetRectCenterX", LuaGetRectCenterX);
     WC3_LuaRegisterNative(L, "GetRectCenterY", LuaGetRectCenterY);
     WC3_LuaRegisterNative(L, "GetRectMinX", LuaGetRectMinX);
@@ -2924,6 +4275,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "IncUnitAbilityLevel", LuaIncUnitAbilityLevel);
     WC3_LuaRegisterNative(L, "SetPlayerAbilityAvailable", LuaSetPlayerAbilityAvailable);
     WC3_LuaRegisterNative(L, "IsUnitType", LuaIsUnitType);
+    WC3_LuaRegisterNative(L, "IsUnitIdType", LuaIsUnitIdType);
     WC3_LuaRegisterNative(L, "UnitAddType", LuaUnitAddType);
     WC3_LuaRegisterNative(L, "UnitRemoveType", LuaUnitRemoveType);
     WC3_LuaRegisterNative(L, "UnitDamageTarget", LuaUnitDamageTarget);
@@ -2934,14 +4286,23 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetUnitPosition", LuaSetUnitPosition);
     WC3_LuaRegisterNative(L, "SetUnitPositionLoc", LuaSetUnitPositionLoc);
     WC3_LuaRegisterNative(L, "GetUnitY", LuaGetUnitY);
+    WC3_LuaRegisterNative(L, "AddUnitAnimationProperties", LuaAddUnitAnimationProperties);
+    WC3_LuaRegisterNative(L, "IsUnitHidden", LuaIsUnitHidden);
+    WC3_LuaRegisterNative(L, "ShowUnit", LuaShowUnit);
     WC3_LuaRegisterNative(L, "GetUnitTypeId", LuaGetUnitTypeId);
+    WC3_LuaRegisterNative(L, "GetUnitName", LuaGetUnitName);
+    WC3_LuaRegisterNative(L, "GetHandleId", LuaGetHandleId);
     WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
     WC3_LuaRegisterNative(L, "GetUnitState", LuaGetUnitState);
     WC3_LuaRegisterNative(L, "GetUnitUserData", LuaGetUnitUserData);
     WC3_LuaRegisterNative(L, "SetUnitUserData", LuaSetUnitUserData);
     WC3_LuaRegisterNative(L, "GetUnitCurrentOrder", LuaGetUnitCurrentOrder);
     WC3_LuaRegisterNative(L, "IssueImmediateOrder", LuaIssueImmediateOrder);
+    WC3_LuaRegisterNative(L, "IssueImmediateOrderById", LuaIssueImmediateOrderById);
+    WC3_LuaRegisterNative(L, "IssueBuildOrderById", LuaIssueBuildOrderById);
     WC3_LuaRegisterNative(L, "IssuePointOrder", LuaIssuePointOrder);
+    WC3_LuaRegisterNative(L, "GroupPointOrder", LuaGroupPointOrder);
+    WC3_LuaRegisterNative(L, "IssuePointOrderLoc", LuaIssuePointOrderLoc);
     WC3_LuaRegisterNative(L, "OrderId", LuaOrderId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityId", LuaGetSpellAbilityId);
     WC3_LuaRegisterNative(L, "GetSpellAbilityUnit", LuaGetSpellAbilityUnit);
@@ -2985,6 +4346,18 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "CreateFogModifierRect", LuaCreateFogModifierRect);
     WC3_LuaRegisterNative(L, "FogModifierStart", LuaFogModifierStart);
     WC3_LuaRegisterNative(L, "FogModifierStop", LuaFogModifierStop);
+    WC3_LuaRegisterNative(L, "DestroyFogModifier", LuaDestroyFogModifier);
+    WC3_LuaRegisterNative(L, "CreateMultiboard", LuaCreateMultiboard);
+    WC3_LuaRegisterNative(L, "DestroyMultiboard", LuaDestroyMultiboard);
+    WC3_LuaRegisterNative(L, "MultiboardSetRowCount", LuaMultiboardSetRowCount);
+    WC3_LuaRegisterNative(L, "MultiboardSetColumnCount", LuaMultiboardSetColumnCount);
+    WC3_LuaRegisterNative(L, "MultiboardSetTitleText", LuaMultiboardSetTitleText);
+    WC3_LuaRegisterNative(L, "MultiboardGetItem", LuaMultiboardGetItem);
+    WC3_LuaRegisterNative(L, "MultiboardReleaseItem", LuaMultiboardReleaseItem);
+    WC3_LuaRegisterNative(L, "MultiboardSetItemValue", LuaMultiboardSetItemValue);
+    WC3_LuaRegisterNative(L, "MultiboardSetItemWidth", LuaMultiboardSetItemWidth);
+    WC3_LuaRegisterNative(L, "MultiboardSetItemsStyle", LuaMultiboardSetItemsStyle);
+    WC3_LuaRegisterNative(L, "MultiboardDisplay", LuaMultiboardDisplay);
     WC3_LuaRegisterNative(L, "TriggerEvaluate", LuaTriggerEvaluate);
     WC3_LuaRegisterNative(L, "TriggerExecute", LuaTriggerExecute);
     WC3_LuaRegisterNative(L, "TriggerSleepAction", LuaTriggerSleepAction);
@@ -3107,6 +4480,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "ForceClear", LuaForceClear);
     WC3_LuaRegisterNative(L, "IsPlayerInForce", LuaIsPlayerInForce);
     WC3_LuaRegisterNative(L, "ForceEnumPlayers", LuaForceEnumPlayers);
+    WC3_LuaRegisterNative(L, "ForceEnumAllies", LuaForceEnumAllies);
     WC3_LuaRegisterNative(L, "CreateRegion", LuaCreateRegion);
     WC3_LuaRegisterNative(L, "StringHash", LuaStringHash);
     WC3_LuaRegisterNative(L, "GetPlayerNeutralPassive", LuaGetPlayerNeutralPassive);
@@ -3122,6 +4496,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "VersionCompatible", LuaVersionCompatible);
     WC3_LuaRegisterNative(L, "VersionSupported", LuaVersionSupported);
     WC3_LuaRegisterNative(L, "SetPlayerAlliance", LuaSetPlayerAlliance);
+    WC3_LuaRegisterNative(L, "IsPlayerEnemy", LuaIsPlayerEnemy);
     WC3_LuaRegisterNative(L, "SetPlayerState", LuaSetPlayerState);
     WC3_LuaRegisterNative(L, "GetPlayerTechResearched", LuaGetPlayerTechResearched);
     WC3_LuaRegisterNative(L, "SetPlayerTechResearched", LuaSetPlayerTechResearched);

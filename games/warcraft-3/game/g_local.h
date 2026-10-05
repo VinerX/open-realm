@@ -871,6 +871,7 @@ typedef struct gameevent_s {
     int32_t value; /* scalar JASS callback payload (for example spell/research rawcode) */
     vec2_t point;
     bool has_point;
+    edict_t *sold_unit;
     event_t *responseTo;
     char chat_text[256];
 } gameEvent_t;
@@ -1397,6 +1398,7 @@ struct edict_s {
     uint32_t summon_ability; /* ability rawcode that created this summoned unit; 0 for ordinary units */
     uint32_t permanent_invisibility_reveal_until; /* Apiv: visible until this server-time deadline after spawn/attack/cast */
     uint16_t forced_visibility_count[WC3_MAX_PLAYER_SLOTS]; /* active unit-specific reveals, indexed by the sight-sharing player */
+    uint32_t shared_vision_players; /* players granted direct sight of this unit */
     uint32_t harvested_lumber;
     uint32_t harvested_gold;
     struct edictMilitia_s {
@@ -2089,6 +2091,7 @@ bool G_LuaTriggerEvaluateHost(handle_t trigger, struct jassTriggerContext_s cons
 bool G_LuaTriggerExecuteHost(handle_t trigger, struct jassTriggerContext_s const *context);
 bool G_LuaTimerExpired(gtimer_t *timer);
 uint32_t G_StringHash(cstring_t text);
+uint32_t G_JassHandleId(handle_t handle);
 bool G_LoadLuaMapScript(wc3Lua_t *lua, cstring_t source, cstring_t chunk_name);
 bool G_LoadLuaMapJass(wc3Lua_t *lua, jass_t *jass, cstring_t source, cstring_t chunk_name);
 edict_t *G_GetPlayerEntityByNumber(uint32_t);
@@ -2221,6 +2224,7 @@ bool G_FowPlayersShareVision(uint32_t viewer, uint32_t owner);
 void G_AddUnitForcedVisibility(edict_t *unit, uint32_t viewer);
 void G_RemoveUnitForcedVisibility(edict_t *unit, uint32_t viewer);
 bool G_UnitIsForcedVisibleToPlayer(edict_t const *unit, uint32_t viewer);
+void G_SetUnitSharedVision(edict_t *unit, uint32_t viewer, bool shared);
 bool S_UnitIsDetectedByPlayer(edict_t const *unit, uint32_t player);
 bool S_UnitIsInvisibleToPlayer(edict_t const *unit, uint32_t player);
 bool S_UnitUsesInvisibilityRenderFlag(edict_t const *unit);
@@ -2645,6 +2649,7 @@ bool G_StartUndeadConstruction(edict_t *builder, edict_t *building);
 bool G_StartNightElfConstruction(edict_t *builder, edict_t *building);
 bool G_StartNightElfOverlayConstruction(edict_t *building);
 void G_RunConstructionFrame(edict_t *building);
+void G_SetConstructionProgress(edict_t *building, int percentage);
 void G_UpdateConstructionAnimation(edict_t *building);
 void G_StopConstruction(edict_t *building);
 bool G_CancelStructureConstruction(edict_t *building);

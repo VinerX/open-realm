@@ -19,7 +19,10 @@ typedef struct {
     void *source;
     void *timer;
     void *region;
+    void *soldUnit;
     int32_t event_value;
+    int32_t event_id;
+    void *enum_destructable;
     char chat_text[256], chat_match[256];
     float point_x, point_y;
     bool has_point;

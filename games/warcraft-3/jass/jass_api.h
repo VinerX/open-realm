@@ -21,6 +21,8 @@ typedef struct jassTriggerContext_s {
     handle_t trigger;
     handle_t unit;
     handle_t source;
+    handle_t sold_unit;
+    int32_t event_id;
     handle_t timer;
     handle_t region;
     int32_t value;

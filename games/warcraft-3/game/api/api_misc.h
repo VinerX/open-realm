@@ -629,10 +629,12 @@ uint32_t GetLearningUnit(jass_t *j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
 }
 uint32_t GetLearnedSkill(jass_t *j) {
-    return jass_pushinteger(j, 0);
+    return jass_pushinteger(j, jass_getcontext(j)->eventValue);
 }
 uint32_t GetLearnedSkillLevel(jass_t *j) {
-    return jass_pushinteger(j, 0);
+    jassContext_t const *context = jass_getcontext(j);
+    return jass_pushinteger(j, context->unit
+        ? (int32_t)G_UnitAbilityLevel(context->unit, (uint32_t)context->eventValue) : 0);
 }
 uint32_t GetRevivableUnit(jass_t *j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->unit, "unit");
@@ -825,7 +827,7 @@ uint32_t GetBuyingUnit(jass_t *j) {
     return jass_pushlighthandle(j, jass_getcontext(j)->source, "unit");
 }
 uint32_t GetSoldUnit(jass_t *j) {
-    return jass_pushlighthandle(j, eventsoldunit, "unit");
+    return jass_pushlighthandle(j, jass_getcontext(j)->soldUnit, "unit");
 }
 uint32_t GetSoldItem(jass_t *j) {
     return jass_pushlighthandle(j, eventsolditem, "item");

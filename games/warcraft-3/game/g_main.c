@@ -1100,6 +1100,7 @@ gameEvent_t *G_PublishEventWithValue(edict_t *edict, EVENTTYPE type, edict_t *so
     evt->edict_spawn_time = edict ? edict->spawn_time : 0;
     evt->edict_spawn_tracked = edict && edict->inuse;
     evt->source = source;
+    evt->sold_unit = NULL;
     evt->source_spawn_time = source ? source->spawn_time : 0;
     evt->source_spawn_tracked = source && source->inuse;
     evt->value = value;

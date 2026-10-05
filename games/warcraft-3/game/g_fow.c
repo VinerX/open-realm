@@ -64,8 +64,15 @@ void G_RemoveUnitForcedVisibility(edict_t *unit, uint32_t viewer) {
         unit->forced_visibility_count[viewer]--;
 }
 
+void G_SetUnitSharedVision(edict_t *unit, uint32_t viewer, bool shared) {
+    if (!unit || viewer >= WC3_MAX_PLAYER_SLOTS) return;
+    if (shared) unit->shared_vision_players |= 1u << viewer;
+    else unit->shared_vision_players &= ~(1u << viewer);
+}
+
 bool G_UnitIsForcedVisibleToPlayer(edict_t const *unit, uint32_t viewer) {
     if (!unit || viewer >= WC3_MAX_PLAYER_SLOTS) return false;
+    if (unit->shared_vision_players & (1u << viewer)) return true;
     FOR_LOOP(owner, WC3_MAX_PLAYER_SLOTS)
         if (unit->forced_visibility_count[owner] && G_FowPlayersShareVision(viewer, owner)) return true;
     return false;

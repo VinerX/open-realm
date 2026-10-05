@@ -1639,6 +1639,22 @@ void G_RunConstructionFrame(edict_t *building) {
     if (building->construction.progress >= duration) G_CompleteConstruction(building);
 }
 
+void G_SetConstructionProgress(edict_t *building, int percentage) {
+    float duration, fraction;
+
+    if (!building || !building->inuse || !G_UnitIsBuilding(building->class_id) ||
+        (!building->construction.active && building->build != building) ||
+        !building->data.UnitBalance) return;
+
+    duration = MAX(1.0f, (float)building->data.UnitBalance->buildTime * 1000.0f);
+    fraction = (float)MAX(0, MIN(percentage, 100)) / 100.0f;
+    building->construction.progress = duration * fraction;
+    G_SetHealth(building, building->health.max_value *
+                (WC3_BUILD_START_LIFE + (1.0f - WC3_BUILD_START_LIFE) * fraction));
+    G_UpdateConstructionAnimation(building);
+    if (fraction >= 1.0f) G_CompleteConstruction(building);
+}
+
 /* Construction teardown releases Human Repair participants and any race-owned
  * worker before the target enters death/completion cleanup; otherwise workers
  * retain pointers to an entity whose construction state no longer exists. */

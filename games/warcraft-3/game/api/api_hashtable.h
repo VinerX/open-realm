@@ -68,7 +68,7 @@ static bool hashtable_is_edict(handle_t h, uint32_t *out_id) {
 }
 
 /* Prefer stable registry ordinals over pointer hashes so GetHandleId survives save/load. */
-static uint32_t hashtable_handle_id(handle_t h) {
+uint32_t G_JassHandleId(handle_t h) {
     uint32_t id;
     uintptr_t p;
     uint32_t slot, generation;
@@ -148,7 +148,7 @@ uint32_t InitHashtable(jass_t *j) {
 }
 
 uint32_t GetHandleId(jass_t *j) {
-    return jass_pushinteger(j, (int32_t)hashtable_handle_id(jass_checkhandle(j, 1, "handle")));
+    return jass_pushinteger(j, (int32_t)G_JassHandleId(jass_checkhandle(j, 1, "handle")));
 }
 
 uint32_t StringHash(jass_t *j) {

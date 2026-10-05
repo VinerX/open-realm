@@ -2530,6 +2530,32 @@ TEST(wc3_building, orc_construction_hides_worker_and_progresses_autonomously) {
     T_ASSERT(building->health.value < building->health.max_value);
 }
 
+TEST(wc3_building, construction_progress_native_updates_state_and_completes_normally) {
+    edict_t *worker, *building;
+    UnitBalance_t balance;
+
+    setup_test_world();
+    worker = alloc_test_unit(MAKEFOURCC('h','p','e','a'), 0, 0);
+    building = alloc_test_unit(MAKEFOURCC('h','b','a','r'), 64, 0);
+    balance = *building->data.UnitBalance;
+    balance.buildTime = 10;
+    building->data.UnitBalance = &balance;
+    building->health.max_value = 1000.0f;
+
+    T_ASSERT(G_StartOrcConstruction(worker, building));
+    G_SetConstructionProgress(building, 50);
+    T_FEQ(building->construction.progress, 5000.0f, 0.001f);
+    T_FEQ(building->health.value, 550.0f, 0.001f);
+    T_ASSERT(building->construction.active);
+    T_ASSERT(worker->build == building);
+
+    G_SetConstructionProgress(building, 100);
+    T_ASSERT(!building->construction.active);
+    T_NULL(building->build);
+    T_ASSERT(!(worker->s.renderfx & RF_HIDDEN));
+    T_FEQ(building->health.value, building->health.max_value, 0.001f);
+}
+
 TEST(wc3_building, orc_build_dispatch_hides_peon_with_shared_repair_ability) {
     gameClient_t *client = &game.clients[0];
     UnitData_t worker_data;

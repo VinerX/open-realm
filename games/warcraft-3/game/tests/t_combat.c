@@ -1508,9 +1508,17 @@ TEST(wc3_combat, hero_skill_progression_uses_candidate_points_level_and_max_rank
     T_EQ((int)G_HeroSkillState(h, holy, &next, &required), HERO_SKILL_AVAILABLE);
     T_EQ((int)next, 1);
     T_EQ((int)required, 1);
+    level.events.write = 0;
+    level.events.read = 0;
     T_ASSERT(G_HeroLearnSkill(h, holy));
     T_EQ((int)G_UnitAbilityLevel(h, holy), 1);
     T_EQ((int)h->hero.skillpoints, 0);
+    T_EQ((int)level.events.write, 2);
+    T_EQ((int)level.events.queue[0].type, EVENT_UNIT_HERO_SKILL);
+    T_EQ(level.events.queue[0].value, (int32_t)holy);
+    T_ASSERT(level.events.queue[0].edict == h);
+    T_EQ((int)level.events.queue[1].type, EVENT_PLAYER_HERO_SKILL);
+    T_EQ(level.events.queue[1].value, (int32_t)holy);
 
     T_EQ((int)G_HeroSkillState(h, holy, &next, &required), HERO_SKILL_NO_POINTS);
     h->hero.skillpoints = 1;

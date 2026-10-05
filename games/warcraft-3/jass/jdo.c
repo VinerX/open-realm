@@ -22,7 +22,7 @@
 #define INF_LOOP_PROTECTION 1000000  /* SC2 Galaxy scripts have large but legitimate loops */
 #define SYNTAX_C_OPERATORS 1 // bitmask; enables Galaxy symbolic logic and shift operators
 #define SYNTAX_INCLUDES    2 // bitmask; enables Galaxy include preprocessing
-#define BZ_JASS_SNAPSHOT_VERSION 7 // format version; persists chat trigger context
+#define BZ_JASS_SNAPSHOT_VERSION 9 // format version; sold units are stored as typed handles
 #define BZ_JASS_SNAPSHOT_MAX_COUNT (1u << 20) // records; bounds allocations and list walks from corrupt snapshots
 #define BZ_JASS_SNAPSHOT_MAX_STRING (1u << 20) // bytes; bounds strings from corrupt snapshots
 
@@ -30,7 +30,9 @@ typedef struct {
     trigger_t *trigger;
     edict_t *unit;
     edict_t *source;
+    edict_t *sold_unit;
     int32_t value;
+    int32_t event_id;
     vec2_t const *point;
     bool has_point;
     handle_t timer;
@@ -1033,9 +1035,11 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
             .trigger = params->trigger,
             .unit = params->unit,
             .source = params->source,
+            .sold_unit = params->sold_unit,
             .timer = params->timer,
             .region = params->region,
             .value = params->value,
+            .event_id = params->event_id,
             .point_x = params->point ? params->point->x : 0.0f,
             .point_y = params->point ? params->point->y : 0.0f,
             .has_point = params->has_point,
@@ -1053,7 +1057,9 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
         tmp_state.context.trigger = params->trigger;
         tmp_state.context.unit = params->unit;
         tmp_state.context.source = params->source;
+        tmp_state.context.soldUnit = params->sold_unit;
         tmp_state.context.eventValue = params->value;
+        tmp_state.context.eventId = params->event_id;
         snprintf(tmp_state.context.chat_text, sizeof(tmp_state.context.chat_text), "%s", params->chat_text ? params->chat_text : "");
         snprintf(tmp_state.context.chat_match, sizeof(tmp_state.context.chat_match), "%s", params->chat_match ? params->chat_match : "");
         tmp_state.context.point = params->point ? *params->point : (vec2_t){ 0.0f, 0.0f };
@@ -1141,7 +1147,9 @@ static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t con
                                   .func = action->func,
                                   .unit = params->unit,
                                   .source = params->source,
+                                  .soldUnit = params->sold_unit,
                                   .eventValue = params->value,
+                                  .eventId = params->event_id,
                                   .point = params->point ? *params->point : (vec2_t){ 0.0f, 0.0f },
                                   .hasPoint = params->has_point,
                                   .playerState = player,
@@ -1202,6 +1210,8 @@ bool jass_calltriggerevent(jass_t *j, trigger_t *trigger, gameEvent_t const *eve
     if (!event) return false;
     return jass_calltriggercontext(j, &(jassTriggerContextParams_t){
         .trigger = trigger, .unit = event->edict, .source = event->source, .value = event->value,
+        .sold_unit = event->sold_unit,
+        .event_id = event->type,
         .point = event->has_point ? &event->point : NULL, .has_point = event->has_point,
         .chat_text = event->type == EVENT_PLAYER_CHAT ? event->chat_text : NULL,
         .chat_match = event->type == EVENT_PLAYER_CHAT && event->responseTo ? event->responseTo->chat_match : NULL,
@@ -2611,11 +2621,13 @@ static bool jass_snapshot_writecontext_handle(jassSnapshot_t *snapshot, cstring_
 static bool jass_snapshot_writecontext(jassSnapshot_t *snapshot, jassContext_t const *context) {
     struct { cstring_t type; handle_t value; } handles[] = {
         { "trigger", context->trigger }, { "unit", context->unit }, { "unit", context->source },
+        { "unit", context->soldUnit },
         { "player", context->playerState }, { "player", context->localPlayerState },
         { "timer", context->timer }, { "region", context->region },
     };
     if (!jass_snapshot_writestr(snapshot, jass_functionname(context->func)) ||
         !jass_snapshot_io(snapshot, (void *)&context->eventValue, sizeof(context->eventValue)) ||
+        !jass_snapshot_io(snapshot, (void *)&context->eventId, sizeof(context->eventId)) ||
         !jass_snapshot_io(snapshot, (void *)&context->point, sizeof(context->point)) ||
         !jass_snapshot_io(snapshot, (void *)&context->hasPoint, sizeof(context->hasPoint)) ||
         !jass_snapshot_io(snapshot, (void *)context->chat_text, sizeof(context->chat_text)) ||
@@ -2630,7 +2642,8 @@ static bool jass_snapshot_writecontext(jassSnapshot_t *snapshot, jassContext_t c
 static bool jass_snapshot_readcontext(jass_t *j, jassSnapshot_t *snapshot, jassContext_t *context) {
     struct { cstring_t type; handle_t *value; } handles[] = {
         { "trigger", (handle_t *)&context->trigger }, { "unit", (handle_t *)&context->unit },
-        { "unit", (handle_t *)&context->source }, { "player", (handle_t *)&context->playerState },
+        { "unit", (handle_t *)&context->source }, { "unit", (handle_t *)&context->soldUnit },
+        { "player", (handle_t *)&context->playerState },
         { "player", (handle_t *)&context->localPlayerState }, { "timer", &context->timer },
         { "region", &context->region },
     };
@@ -2642,6 +2655,7 @@ static bool jass_snapshot_readcontext(jass_t *j, jassSnapshot_t *snapshot, jassC
     SAFE_DELETE(func, jass_free);
     if (has_func && !context->func) return false;
     if (!jass_snapshot_io(snapshot, &context->eventValue, sizeof(context->eventValue)) ||
+        !jass_snapshot_io(snapshot, &context->eventId, sizeof(context->eventId)) ||
         !jass_snapshot_io(snapshot, &context->point, sizeof(context->point)) ||
         !jass_snapshot_io(snapshot, &context->hasPoint, sizeof(context->hasPoint)) ||
         !jass_snapshot_io(snapshot, context->chat_text, sizeof(context->chat_text)) ||

@@ -788,6 +788,7 @@ bool G_ShopPurchaseUnit(edict_t *clent, edict_t *shop, uint32_t unit_id) {
     gameClient_t *client = clent ? clent->client : NULL;
     edict_t *patron;
     edict_t *unit_ent;
+    gameEvent_t *sold_event;
     UnitBalance_t const *unit;
     UnitUI_t const *ui;
     int32_t stock_index;
@@ -853,6 +854,10 @@ bool G_ShopPurchaseUnit(edict_t *clent, edict_t *shop, uint32_t unit_id) {
     shop->stock.units[stock_index].current--;
     G_StartUnitRestock(shop, (uint32_t)stock_index);
     G_InvalidateCommands(client);
+    sold_event = G_PublishEventWithSource(shop, EVENT_UNIT_SELL, unit_ent);
+    if (sold_event) sold_event->sold_unit = unit_ent;
+    sold_event = G_PublishEventWithSource(shop, EVENT_PLAYER_UNIT_SELL, unit_ent);
+    if (sold_event) sold_event->sold_unit = unit_ent;
     return true;
 }
 
