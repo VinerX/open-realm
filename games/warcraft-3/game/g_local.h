@@ -2980,6 +2980,7 @@ bool G_UnitHasActiveOrder(edict_t const *);
 void G_PublishIssuedPointOrder(edict_t *, uint32_t, vec2_t const *, uint32_t, cstring_t);
 void G_PublishIssuedImmediateOrder(edict_t *, uint32_t, uint32_t, cstring_t);
 uint32_t G_GetIssuedOrderId(edict_t const *);
+uint32_t G_GetCurrentOrderId(edict_t const *);
 bool G_GetIssuedOrderPoint(edict_t const *, vec2_t *);
 uint32_t G_OrderId(cstring_t);
 cstring_t G_OrderId2String(uint32_t);

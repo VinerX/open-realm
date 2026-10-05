@@ -37,6 +37,7 @@ This codebase is inspired by **Quake 2** (id Software). The developer is deeply 
 | WC3 retail audio admission, Ghidra/r2 setup, recovered structures and parity gaps | [docs/games/warcraft-3/audio-retail-analysis.md](docs/games/warcraft-3/audio-retail-analysis.md) |
 | WC3 background music, `Music.slk`/skin lookup, `svc_music`, optional FFmpeg streaming | [docs/games/warcraft-3/music.md](docs/games/warcraft-3/music.md) |
 | WC3 data model (SLK, unit stats, combat) | [docs/wc3-data-model.md](docs/wc3-data-model.md) |
+| WC3 current order vs issued-order events, measured Move completion parity | [docs/games/warcraft-3/current-order-parity.md](docs/games/warcraft-3/current-order-parity.md) |
 | WC3 attack damage math, runtime modifiers, armor/type multipliers, projectile impact timing | [docs/games/warcraft-3/attack-damage.md](docs/games/warcraft-3/attack-damage.md) |
 | WC3 JASS native coverage, callback contracts, state ownership | [docs/games/warcraft-3/jass-native-coverage.md](docs/games/warcraft-3/jass-native-coverage.md) |
 | WC3 event-trigger queueing, synchronous `TriggerExecute`, coroutine context | [docs/games/warcraft-3/trigger-events.md](docs/games/warcraft-3/trigger-events.md) |

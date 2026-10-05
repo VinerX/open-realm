@@ -498,7 +498,7 @@ uint32_t GetUnitLevel(jass_t *j) {
 }
 uint32_t GetUnitCurrentOrder(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");
-    return jass_pushinteger(j, whichUnit ? (int32_t)G_GetIssuedOrderId(whichUnit) : 0);
+    return jass_pushinteger(j, whichUnit ? (int32_t)G_GetCurrentOrderId(whichUnit) : 0);
 }
 uint32_t UnitInventorySize(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");

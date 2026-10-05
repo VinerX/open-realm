@@ -596,6 +596,12 @@ uint32_t G_GetIssuedOrderId(edict_t const *self) {
     return issued_order_ids[self->s.number];
 }
 
+uint32_t G_GetCurrentOrderId(edict_t const *self) {
+    uint32_t order = G_GetIssuedOrderId(self);
+    if (order == G_OrderId("move") && !move_is_active_order_walk(self)) return 0;
+    return order;
+}
+
 bool G_GetIssuedOrderPoint(edict_t const *self, vec2_t *point) {
     if (point) *point = (vec2_t){ 0.0f, 0.0f };
     if (!self || self->s.number >= MAX_ENTITIES || !point ||

@@ -1660,7 +1660,7 @@ static int LuaSetUnitUserData(lua_State *L) {
 
 static int LuaGetUnitCurrentOrder(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
-    lua_pushinteger(L, unit ? (lua_Integer)G_GetIssuedOrderId(unit) : 0);
+    lua_pushinteger(L, unit ? (lua_Integer)G_GetCurrentOrderId(unit) : 0);
     return 1;
 }
 

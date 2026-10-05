@@ -1412,6 +1412,46 @@ TEST(wc3_mapscript, lua_issue_point_order_matches_jass_engine_path) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_completed_move_has_no_current_order_but_preserves_issued_event) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+    edict_t *unit = NULL;
+    double order = -1;
+
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function StartParityMove()\n"
+        "parity_unit = CreateUnit(Player(0), unit_id, 32, 32, 0)\n"
+        "assert(IssuePointOrder(parity_unit, 'move', 72, 32))\n"
+        "end\n"
+        "function CurrentParityOrder() return GetUnitCurrentOrder(parity_unit) end\n",
+        "=(completed-move-parity)"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "StartParityMove"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "CurrentParityOrder", &order));
+    T_EQ(order, G_OrderId("move"));
+    FOR_LOOP(i, globals.num_edicts) {
+        if (g_edicts[i].inuse && g_edicts[i].class_id == MAKEFOURCC('h', 'f', 'o', 'o')) unit = &g_edicts[i];
+    }
+    T_NOT_NULL(unit);
+    if (unit) {
+        for (int i = 0; i < 10 && unit->currentmove && unit->currentmove->think &&
+             !strcmp(unit->currentmove->animation, "walk"); i++) unit->currentmove->think(unit);
+        T_STREQ(unit->currentmove->animation, "stand");
+        T_ASSERT(WC3_LuaCallNumber(lua, "CurrentParityOrder", &order));
+        T_EQ(order, 0);
+        T_EQ(G_GetIssuedOrderId(unit), G_OrderId("move"));
+    }
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_unit_user_data_matches_jass_semantics) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua;
