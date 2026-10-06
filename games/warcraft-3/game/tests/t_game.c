@@ -628,6 +628,27 @@ TEST(wc3_game, starting_resource_cheat_requires_permission_at_arm_and_apply) {
     gi.CvarString = old_cvar;
 }
 
+TEST(wc3_game, player_slot_state_tracks_connected_humans_and_used_computers) {
+    mapInfo_t *mapinfo;
+    setup_test_world();
+    mapinfo = (mapInfo_t *)level.mapinfo;
+    mapinfo->players[0].used = true;
+    mapinfo->players[0].playerType = kPlayerTypeHuman;
+    mapinfo->players[1].used = true;
+    mapinfo->players[1].playerType = kPlayerTypeComputer;
+    mapinfo->players[2].used = false;
+    mapinfo->players[2].playerType = kPlayerTypeComputer;
+    game.clients[0].mapplayer = mapinfo->players + 0;
+    game.clients[1].mapplayer = mapinfo->players + 1;
+    game.clients[2].mapplayer = mapinfo->players + 2;
+
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(0)), 0);
+    game.clients[0].connected = true;
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(0)), 1);
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(1)), 1);
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(2)), 0);
+}
+
 TEST(wc3_game, unit_cheats_reject_disabled_missing_and_enemy_selection) {
     cstring_t (*old_cvar)(cstring_t, cstring_t) = gi.CvarString;
     cstring_t god[] = { "god" }, kill[] = { "kill" };

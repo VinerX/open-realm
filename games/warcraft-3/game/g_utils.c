@@ -753,9 +753,9 @@ uint32_t G_GetPlayerController(player_t const *player) {
 uint32_t G_GetPlayerSlotState(player_t const *player) {
     gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
     if (client && client->jass.removed) return 2;
-    if (client && client->mapplayer &&
-        (client->mapplayer->playerType == kPlayerTypeHuman ||
-         client->mapplayer->playerType == kPlayerTypeComputer)) return 1;
+    if (client && client->mapplayer && client->mapplayer->used &&
+        (client->mapplayer->playerType == kPlayerTypeComputer ||
+         (client->mapplayer->playerType == kPlayerTypeHuman && client->connected))) return 1;
     return 0;
 }
 
