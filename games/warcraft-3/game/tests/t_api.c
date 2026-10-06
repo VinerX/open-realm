@@ -30,6 +30,24 @@ void CM_SetupTestPathmap(uint32_t width, uint32_t height, uint8_t const *cells);
 void CM_SetupTestWorldBounds(box2_t const *bounds);
 bool run_test_jass(cstring_t src);
 
+static uint32_t selection_target_callback_count;
+
+static bool selection_target_callback(edict_t *client_entity, edict_t *target) {
+    (void)client_entity;
+    (void)target;
+    selection_target_callback_count++;
+    return true;
+}
+
+static void selection_options_test_write(pfWriteType_t type, void const *data) {
+    (void)type;
+    (void)data;
+}
+
+static void selection_options_test_unicast(edict_t *client_entity) {
+    (void)client_entity;
+}
+
 TEST(wc3_api, animation_enum_converters_are_registered) {
     T_ASSERT(run_test_jass(
         "function main takes nothing returns nothing\n"
@@ -7152,6 +7170,67 @@ TEST(wc3_api, blight_tileset_line_parse_truncates_long_value) {
     T_EQ(raw[sizeof(raw) - 1], (uint8_t)sentinel);
     T_EQ(strlen((cstring_t)raw), (size_t)(MAX_PATHLEN - 1));
     T_ASSERT(!WC3_ParseBlightTilesetLine("[TileSets]", &key, (string_t)raw));
+}
+
+TEST(wc3_api, blz_enable_selections_updates_runtime_state) {
+    void (*old_write)(pfWriteType_t, void const *) = gi.Write;
+    void (*old_unicast)(edict_t *) = gi.unicast;
+    wc3Lua_t *lua;
+    double enabled = -1;
+    edict_t *client_entity, *unit;
+    char unit_number[16];
+    cstring_t select_args[] = { "select", unit_number };
+
+    setup_test_world();
+    FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) game.clients[i].connected = false;
+    gi.Write = selection_options_test_write;
+    gi.unicast = selection_options_test_unicast;
+    level.selection_enabled = true;
+    level.selection_circle_enabled = true;
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) {
+        gi.Write = old_write;
+        gi.unicast = old_unicast;
+        return;
+    }
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function disable_selection_circles() BlzEnableSelections(false, false) end\n"
+        "function enable_selection_circles() BlzEnableSelections(true, true) end\n"
+        "function selection_circles_enabled() return BlzIsSelectionCircleEnabled() and 1 or 0 end\n",
+        "=(selection-options-test)"));
+    T_ASSERT(WC3_LuaCall(lua, "disable_selection_circles"));
+    T_ASSERT(!level.selection_enabled);
+    T_ASSERT(!level.selection_circle_enabled);
+    T_ASSERT(WC3_LuaCallNumber(lua, "selection_circles_enabled", &enabled));
+    T_EQ((int)enabled, 0);
+
+    client_entity = G_GetPlayerEntityByNumber(0);
+    unit = alloc_test_unit(MAKEFOURCC('h', 'p', 'e', 'a'), 32.0f, 32.0f);
+    T_NOT_NULL(client_entity);
+    T_NOT_NULL(unit);
+    if (client_entity && unit) {
+        client_entity->client = &game.clients[0];
+        game.clients[0].connected = false;
+        game.clients[0].ps.number = 0;
+        unit->s.player = 0;
+        snprintf(unit_number, sizeof(unit_number), "%u", (unsigned)unit->s.number);
+        G_ClientCommand(client_entity, 2, select_args);
+        T_ASSERT(!G_IsEntitySelected(&game.clients[0], unit));
+
+        selection_target_callback_count = 0;
+        game.clients[0].menu.on_entity_selected = selection_target_callback;
+        G_ClientCommand(client_entity, 2, select_args);
+        T_EQ(selection_target_callback_count, (uint32_t)1);
+        game.clients[0].menu.on_entity_selected = NULL;
+    }
+
+    T_ASSERT(WC3_LuaCall(lua, "enable_selection_circles"));
+    T_ASSERT(level.selection_enabled);
+    T_ASSERT(level.selection_circle_enabled);
+    WC3_LuaClose(lua);
+    gi.Write = old_write;
+    gi.unicast = old_unicast;
 }
 
 #endif /* BZ_TESTS */

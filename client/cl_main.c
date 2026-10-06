@@ -130,6 +130,8 @@ void CL_ClearState(void) {
     re.RegisterMap(NULL);
 
     memset(&cl, 0, sizeof(struct client_state));
+    cl.selection.enabled = true;
+    cl.selection.circle_enabled = true;
     CL_ResetConfigStringResources();
     CL_ControlGroupsReset();
 

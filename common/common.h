@@ -84,6 +84,7 @@ enum svc_ops {
     svc_console_print,           // [string text] server/game command feedback for the local console
     svc_nop,                     // transport keepalive; no payload or presentation change
     svc_loading_screen,          // [long total] [long offset] [long size] [size bytes of zlib loading layout]
+    svc_selection_options,       // [byte selection enabled] [byte selection circles enabled]
 };
 
 // client to server

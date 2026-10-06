@@ -125,6 +125,8 @@ struct client_state {
     struct {
         rect_t rect;
         bool in_progress;
+        bool enabled;
+        bool circle_enabled;
         uint32_t entity_nums[MAX_SELECTED_ENTITIES];  /* Currently selected entity numbers */
         uint32_t num_selected;                         /* Number of currently selected entities */
     } selection;

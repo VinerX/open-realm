@@ -200,6 +200,7 @@ enum {
     FLAG(RF_BUILDING, 21),       /* WC3 structure; enables building-only presentation */
     FLAG(RF_GROUND_CONFORM, 22), /* presentation: conform entity Z to authored model ground surfaces */
     FLAG(RF_GROUND_SURFACE, 23), /* presentation: model may provide an authored walkable support surface */
+    FLAG(RF_NO_SELECTION_CIRCLE, 24), /* client presentation: retain selection without drawing its ring */
 };
 
 enum {

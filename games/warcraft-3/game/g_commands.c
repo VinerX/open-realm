@@ -241,6 +241,25 @@ void G_SyncClientSelection(gameClient_t *client) {
     Get_Commands_f(clent);
 }
 
+void G_SyncSelectionOptions(edict_t *client_entity) {
+    if (!client_entity || !client_entity->client || !client_entity->client->connected) return;
+    gi.Write(PF_BYTE, &(int32_t){svc_selection_options});
+    gi.Write(PF_BYTE, &(int32_t){level.selection_enabled});
+    gi.Write(PF_BYTE, &(int32_t){level.selection_circle_enabled});
+    gi.unicast(client_entity);
+}
+
+void G_SetSelectionOptions(bool enabled, bool circle_enabled) {
+    if (level.selection_enabled == enabled &&
+        level.selection_circle_enabled == circle_enabled) return;
+    level.selection_enabled = enabled;
+    level.selection_circle_enabled = circle_enabled;
+    FOR_LOOP(i, globals.num_edicts) {
+        edict_t *ent = globals.edicts + i;
+        if (ent->inuse && ent->client) G_SyncSelectionOptions(ent);
+    }
+}
+
 bool G_FocusSelectedUnit(gameClient_t *client, edict_t *ent) {
     uint32_t *focus = G_SelectionFocusSlot(client);
 
@@ -776,6 +795,10 @@ CLIENTCOMMAND(Select) {
             /* Any ordinary selection click replaces building placement. Invalid
              * terrain placement is handled by Point and intentionally stays armed. */
             G_CancelBuildPlacement(clent);
+        }
+        if (!level.selection_enabled) {
+            G_SyncClientSelection(client);
+            return;
         }
         bool cleared = false;
         bool hasunits = false;

@@ -356,6 +356,7 @@ static void V_AddClientEntity(centity_t const *ent) {
     re.equipment = ent->current.equipment;
 #endif
     re.flags = ent->current.renderfx;
+    if (!cl.selection.circle_enabled) re.flags |= RF_NO_SELECTION_CIRCLE;
     if (ent->current.flags & EF_GROUND_ANCHOR) {
         re.flags |= RF_GROUND_ANCHOR;
     }

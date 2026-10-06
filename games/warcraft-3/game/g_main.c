@@ -1335,6 +1335,7 @@ static void G_ClientBegin(edict_t *edict) {
             client->ps.name ? client->ps.name : "");
     level.started = true;
     G_StartScripts();
+    G_SyncSelectionOptions(edict);
 
     UI_ShowGameInterface(edict);
     UI_WriteHoverLayout(edict);

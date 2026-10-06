@@ -902,6 +902,11 @@ static void CL_ParseSetSelection(sizeBuf_t *msg) {
     cl.selection.num_selected = selected;
 }
 
+static void CL_ParseSelectionOptions(sizeBuf_t *msg) {
+    cl.selection.enabled = MSG_ReadByte(msg) != 0;
+    cl.selection.circle_enabled = MSG_ReadByte(msg) != 0;
+}
+
 /* Read the Quake 2 sound packet contract and resolve entity-relative origins
  * from the current client snapshot before handing playback to the mixer. */
 static void CL_ParseSound(sizeBuf_t *msg) {
@@ -1212,6 +1217,9 @@ void CL_ParseServerMessage(sizeBuf_t *msg) {
                 break;
             case svc_set_selection:
                 CL_ParseSetSelection(msg);
+                break;
+            case svc_selection_options:
+                CL_ParseSelectionOptions(msg);
                 break;
             case svc_console_print:
                 CL_ParseConsolePrint(msg);

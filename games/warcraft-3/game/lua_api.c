@@ -3711,6 +3711,16 @@ static int LuaBlzSetAbilityTooltip(lua_State *L) {
     return 0;
 }
 
+static int LuaBlzEnableSelections(lua_State *L) {
+    G_SetSelectionOptions(lua_toboolean(L, 1), lua_toboolean(L, 2));
+    return 0;
+}
+
+static int LuaBlzIsSelectionCircleEnabled(lua_State *L) {
+    lua_pushboolean(L, level.selection_circle_enabled);
+    return 1;
+}
+
 /* Report remaining Reforged natives without an OpenRealm implementation rather
  * than returning nil, which can turn a missing UI feature into a script abort. */
 static int LuaBlzUnsupported(lua_State *L) {
@@ -5018,13 +5028,14 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzFrameGetChild", LuaBlzFrameGetChild);
     WC3_LuaRegisterNative(L, "BlzGetAbilityTooltip", LuaBlzGetAbilityTooltip);
     WC3_LuaRegisterNative(L, "BlzSetAbilityTooltip", LuaBlzSetAbilityTooltip);
+    WC3_LuaRegisterNative(L, "BlzEnableSelections", LuaBlzEnableSelections);
+    WC3_LuaRegisterNative(L, "BlzIsSelectionCircleEnabled", LuaBlzIsSelectionCircleEnabled);
 
     /* Remaining unsupported Reforged natives log WC3_UNSUPPORTED_NATIVE once
      * and return an empty string. */
     static cstring_t const blz_stubs[] = {
         "BlzSetAbilityExtendedTooltip", "BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData",
-        "BlzFrameClick",
-        "BlzEnableSelections", "BlzGetEventAttackType",
+        "BlzFrameClick", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitBaseDamage",
         "BlzGetUnitBooleanField", "BlzGetUnitMaxMana",

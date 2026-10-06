@@ -726,6 +726,8 @@ void G_SpawnEntities(void) {
     G_FowShutdown();
     G_BlightShutdown();
     memset(&level, 0, sizeof(level));
+    level.selection_enabled = true;
+    level.selection_circle_enabled = true;
     G_ResetSelectionSoundState();
     G_ResetHeroPassiveCaches();
     FOR_LOOP(i, WC3_MAX_PLAYER_SLOTS) level.player_leaderboards[i] = -1;

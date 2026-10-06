@@ -2041,6 +2041,8 @@ struct level_locals {
     wc3EnvironmentFog_t environment_fog;
     box2_t camera_bounds; /* map-global camera target rectangle; W3I default, SetCameraBounds may replace it */
     bool started;
+    bool selection_enabled;
+    bool selection_circle_enabled;
     bool scriptsConfigured;
     bool scriptsStarted;
     bool cinematic_debug_result_window; /* per-map debug latch for result-window tracing */
@@ -3304,6 +3306,8 @@ extern struct game_export globals;
 extern struct game_import gi;
 extern struct level_locals level;
 extern struct edict_s *g_edicts;
+void G_SetSelectionOptions(bool enabled, bool circle_enabled);
+void G_SyncSelectionOptions(edict_t *client_entity);
 
 /* Simulation clock reader. Spell-rank parameters named `level` shadow the global in
  * several skill functions, so clock reads go through this instead of `level.time`. */

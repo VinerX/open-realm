@@ -262,7 +262,7 @@ static void R_DrawEntityShadows(bool shad) {
 }
 
 static void R_RenderSelectedCircle(renderEntity_t const *entity, vec2_t const *origin) {
-    if (entity->flags & RF_SELECTED) {
+    if ((entity->flags & RF_SELECTED) && !(entity->flags & RF_NO_SELECTION_CIRCLE)) {
         color32_t color;
         if (entity->flags & RF_HOSTILE) {
             color = MAKE(color32_t, 255, 80, 80, 255);
