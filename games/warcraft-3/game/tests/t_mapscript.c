@@ -1279,6 +1279,32 @@ TEST(wc3_mapscript, blz_unit_mana_regeneration_field_updates_runtime_rate) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, blz_unit_name_field_updates_script_and_hud_name) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double passed = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunUnitNameFieldTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "BlzSetUnitStringFieldBJ(u, unit_name_field, 'Race Capital')\n"
+        "return GetUnitName(u) == 'Race Capital' and 1 or 0\n"
+        "end\n",
+        "lua-blz-unit-name-field-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    WC3_LuaRegisterInteger(lua, "unit_name_field", MAKEFOURCC('u', 'n', 'a', 'm'));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunUnitNameFieldTest", &passed));
+    T_EQ((int)passed, 1);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 

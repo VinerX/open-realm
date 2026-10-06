@@ -1223,6 +1223,11 @@ cstring_t G_UnitName(uint32_t id) {
     return G_LevelString(name);
 }
 
+cstring_t G_UnitDisplayName(edict_t const *unit) {
+    if (!unit) return NULL;
+    return unit->custom_name[0] ? unit->custom_name : G_UnitName(unit->class_id);
+}
+
 static void G_RefreshPauseState(void) { gi.SetPaused(level.script_paused || level.modal_paused); }
 
 /* Quest presentation is local, so only a single connected client may promote
@@ -1524,7 +1529,7 @@ static void G_CustomizeEntity(uint32_t player, edict_t const *ent, entityState_t
             state->stats[ENT_CARGO] = EntityCargoPack(ent->cargo.count, cargo_capacity);
         /* The client has no MAPINFO WTS table; the old path published raw TRIGSTR_* tokens in CS_GENERAL. */
         /* Name remains the hover gate for invulnerable units with no mana bar. */
-        state->name = G_UnitNameConfigstring(G_UnitName(ent->s.class_id));
+        state->name = G_UnitNameConfigstring(G_UnitDisplayName(ent));
         state->hover_value = G_HoverResourceValue(ent);
         if (!ent->invulnerable) state->flags |= EF_HOVER_HEALTH;
         if (ent->mana.max_value > 0.0f) state->flags |= EF_HOVER_MANA;

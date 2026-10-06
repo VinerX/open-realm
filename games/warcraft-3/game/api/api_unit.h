@@ -829,7 +829,7 @@ uint32_t GetUnitRace(jass_t *j) {
 }
 uint32_t GetUnitName(jass_t *j) {
     edict_t *whichUnit = jass_checkhandle(j, 1, "unit");
-    cstring_t name = whichUnit ? G_UnitName(whichUnit->class_id) : NULL;
+    cstring_t name = G_UnitDisplayName(whichUnit);
     return jass_pushstring(j, name ? name : "");
 }
 uint32_t GetUnitFoodUsed(jass_t *j) {

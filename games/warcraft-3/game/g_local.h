@@ -1318,6 +1318,7 @@ struct edict_s {
 
     // keep above in sync with server.h
     uint32_t class_id;
+    char custom_name[128];
     uint32_t variation;
     uint32_t build_project;
     edict_t *build_preview; /* translucent Construction Site Indicator for an accepted build order */
@@ -2126,6 +2127,7 @@ uint32_t G_TargetFlagForType(TARGTYPE);
 cstring_t G_LevelString(cstring_t);
 cstring_t G_MapString(mapInfo_t const *info, cstring_t name);
 cstring_t G_UnitName(uint32_t);
+cstring_t G_UnitDisplayName(edict_t const *);
 float G_Cinefade(void);
 bool G_SkipCutscene(void);
 vec2_t G_ClampCameraPosition(gameClient_t *client, vec2_t const *position);

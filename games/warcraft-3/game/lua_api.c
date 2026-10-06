@@ -1712,8 +1712,32 @@ static int LuaGetUnitTypeId(lua_State *L) {
 
 static int LuaGetUnitName(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
-    cstring_t name = unit ? G_UnitName(unit->class_id) : NULL;
+    cstring_t name = G_UnitDisplayName(unit);
     lua_pushstring(L, name ? name : "");
+    return 1;
+}
+
+static int LuaBlzSetUnitStringFieldBJ(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t const field = LuaUnitRealFieldId(L, 2);
+    cstring_t value = luaL_checkstring(L, 3);
+    if (unit && field == MAKEFOURCC('u', 'n', 'a', 'm'))
+        strlcpy(unit->custom_name, value, sizeof(unit->custom_name));
+    return 0;
+}
+
+static int LuaBlzSetUnitName(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    cstring_t name = luaL_checkstring(L, 2);
+    if (unit) strlcpy(unit->custom_name, name, sizeof(unit->custom_name));
+    return 0;
+}
+
+static int LuaBlzGetUnitStringField(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    uint32_t const field = LuaUnitRealFieldId(L, 2);
+    cstring_t value = field == MAKEFOURCC('u', 'n', 'a', 'm') ? G_UnitDisplayName(unit) : NULL;
+    lua_pushstring(L, value ? value : "");
     return 1;
 }
 
@@ -4665,6 +4689,9 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "ShowUnit", LuaShowUnit);
     WC3_LuaRegisterNative(L, "GetUnitTypeId", LuaGetUnitTypeId);
     WC3_LuaRegisterNative(L, "GetUnitName", LuaGetUnitName);
+    WC3_LuaRegisterNative(L, "BlzSetUnitStringFieldBJ", LuaBlzSetUnitStringFieldBJ);
+    WC3_LuaRegisterNative(L, "BlzSetUnitName", LuaBlzSetUnitName);
+    WC3_LuaRegisterNative(L, "BlzGetUnitStringField", LuaBlzGetUnitStringField);
     WC3_LuaRegisterNative(L, "GetHandleId", LuaGetHandleId);
     WC3_LuaRegisterNative(L, "GetOwningPlayer", LuaGetOwningPlayer);
     WC3_LuaRegisterNative(L, "GetUnitState", LuaGetUnitState);
@@ -4958,11 +4985,10 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitBaseDamage",
         "BlzGetUnitBooleanField", "BlzGetUnitMaxMana",
-        "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
+        "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
         "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
         "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime",
         "BlzSetUnitBaseDamage", "BlzSetUnitIntegerFieldBJ", "BlzSetUnitMaxMana",
-        "BlzSetUnitName", "BlzSetUnitStringFieldBJ",
         "BlzSetUnitWeaponBooleanFieldBJ", "BlzSetUnitWeaponIntegerFieldBJ",
         "BlzUnitCancelTimedLife",
         "BlzUnitDisableAbility", "BlzUnitHideAbility", "BlzUnitInterruptAttack",

@@ -731,7 +731,7 @@ static void WriteSimpleUnitHeader(edict_t *ent, cstring_t display_name, bool is_
         UI_SetHidden(unit_action_label, true);
     }
     UI_SetText(hud.simple.SimpleNameValue, "%s", display_name ? display_name : "");
-    unit_name = G_UnitName(ent->class_id);
+    unit_name = G_UnitDisplayName(ent);
 
     /* Warsmash shows this timer only for a single unit owned by the local
      * player. UI_SendInfoPanel already guarantees single-selection here; keep
@@ -809,7 +809,7 @@ uint32_t UI_WriteBuildingQueueShell(edict_t *ent, cstring_t action_key, bool sho
     if (!ent) return 0;
     if (!hud.simple.SimpleInfoPanelBuildingDetail) return 0;
 
-    name = G_UnitName(ent->class_id);
+    name = G_UnitDisplayName(ent);
     UI_SetText(hud.simple.SimpleBuildingNameValue, "%s", name);
     UI_SetText(hud.simple.SimpleBuildingDescriptionValue, "%s", "");
     UI_SetHidden(hud.simple.SimpleBuildingDescriptionValue, true);
@@ -826,7 +826,7 @@ void UI_WriteSingleInfo(edict_t *ent, gameClient_t *viewer) {
     UnitBalance_t const *balance = ent->data.UnitBalance;
     UnitWeapons_t const *weapons = ent->data.UnitWeapons;
     cstring_t name = G_LevelString(G_UnitProfile(ent->class_id)->properNames);
-    cstring_t unit_name = G_UnitName(ent->class_id);
+    cstring_t unit_name = G_UnitDisplayName(ent);
     bool const is_hero = balance->strength > 0 || balance->agility > 0 || balance->intelligence > 0;
     uint32_t level = is_hero && ent->hero.level > 0 ? ent->hero.level
                                                  : MAX(1, balance->level);
@@ -881,7 +881,7 @@ void UI_WriteSingleInfo(edict_t *ent, gameClient_t *viewer) {
                     uiFrame_t frame;
                     char command[64];
                     cstring_t art = FindConfigValue(GetClassName(occupant->class_id), STR_ART);
-                    cstring_t tip = G_UnitName(occupant->class_id);
+                    cstring_t tip = G_UnitDisplayName(occupant);
 
                     if (!art || !*art) {
                         fprintf(stderr, "UI_WC3: missing cargo art for unit %s\n", GetClassName(occupant->class_id));
