@@ -13,6 +13,9 @@
 
 #include "../shared/shared.h"
 
+#define WC3_MAX_SYNC_PREFIX_LENGTH 64
+#define WC3_MAX_SYNC_DATA_LENGTH 256
+
 #ifdef _WIN32
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp

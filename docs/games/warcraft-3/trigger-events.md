@@ -61,6 +61,29 @@ slots. When JASS is executing under a local-player context, only that connected
 client view is changed. Disconnected placeholder clients must never acquire
 selection bits or generate selection events.
 
+## Synchronized map data
+
+OpenRealm implements `BlzTriggerRegisterPlayerSyncEvent`, `BlzSendSyncData`,
+`BlzGetTriggerSyncPrefix`, and `BlzGetTriggerSyncData` for local map execution.
+Registrations match the sending player, exact prefix, and `fromServer` flag.
+The event callback receives the prefix and payload in its trigger context; the
+two getters are meaningful only while that callback is running. Prefixes are
+limited to 63 bytes plus the terminator, and payloads to 255 bytes plus the
+terminator.
+
+`BlzSendSyncData` currently publishes to OpenRealm's authoritative local event
+queue. It does not yet implement client-to-server or server-to-client network
+transport, so passing a single-player bridge test is not evidence of multiplayer
+sync safety or parity. In particular, do not run arbitrary bridge Lua as
+unsynchronized client-local mutations.
+
+The Lua callback crosses both `libgame` and `libjass`. After changing
+`jassTriggerContext_t`, rebuild both libraries before running the native test;
+the test executable must load the matching `libjass.dll` and
+`libgame-wc3-test.dll` from `build/bin`. A stale JASS DLL has an incompatible
+trigger-context layout and can appear as empty or corrupted sync strings.
+Focused coverage is `wc3_api.blz_sync_events_match_sender_prefix_and_expose_context`.
+
 ## Attacked events
 
 An attack event is emitted when an actual unit attack swing starts, not when an

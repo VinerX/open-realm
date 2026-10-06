@@ -659,6 +659,69 @@ static int LuaTriggerRegisterPlayerEvent(lua_State *L) {
     return 1;
 }
 
+static int LuaBlzTriggerRegisterPlayerSyncEvent(lua_State *L) {
+    trigger_t *trigger = lua_touserdata(L, 1);
+    player_t *player = lua_touserdata(L, 2);
+    cstring_t prefix = luaL_checkstring(L, 3);
+    event_t *event;
+
+    if (!trigger || trigger->lua_vm != level.lua_vm || !player)
+        return luaL_error(L, "BlzTriggerRegisterPlayerSyncEvent: invalid Lua trigger or player");
+    if (!prefix[0] || strlen(prefix) >= WC3_MAX_SYNC_PREFIX_LENGTH)
+        return luaL_error(L, "BlzTriggerRegisterPlayerSyncEvent: invalid prefix length");
+    event = G_MakeEvent(EVENT_PLAYER_SYNC_DATA);
+    if (!event) return luaL_error(L, "BlzTriggerRegisterPlayerSyncEvent: event registry is full");
+    G_SetPlayerEventSubject(event, PLAYER_ENT(player));
+    event->trigger = trigger;
+    event->sync_from_server = lua_toboolean(L, 4);
+    strlcpy(event->sync_prefix, prefix, sizeof(event->sync_prefix));
+    lua_pushlightuserdata(L, G_EventHandle(event));
+    return 1;
+}
+
+static int LuaBlzSendSyncData(lua_State *L) {
+    cstring_t prefix = luaL_checkstring(L, 1);
+    cstring_t data = luaL_checkstring(L, 2);
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    player_t *sender = currentplayer;
+    edict_t *source = context.unit;
+    edict_t *player_entity;
+    gameEvent_t *event;
+
+    if (!prefix[0] || strlen(prefix) >= WC3_MAX_SYNC_PREFIX_LENGTH ||
+        strlen(data) >= WC3_MAX_SYNC_DATA_LENGTH) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    if (source) {
+        sender = source->client ? &source->client->ps : G_GetPlayerByNumber(source->s.player);
+    }
+    if (!sender) sender = G_GetPlayerByNumber(0);
+    if (!sender) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    player_entity = G_GetPlayerEntityByNumber(sender->number);
+    if (!player_entity || !player_entity->inuse) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    event = G_PublishEventWithValue(player_entity, EVENT_PLAYER_SYNC_DATA, NULL, 0);
+    if (event) {
+        strlcpy(event->sync_prefix, prefix, sizeof(event->sync_prefix));
+        strlcpy(event->sync_data, data, sizeof(event->sync_data));
+        event->sync_from_server = false;
+    }
+    lua_pushboolean(L, event != NULL);
+    return 1;
+}
+
+static int LuaBlzGetTriggerSyncPrefix(lua_State *L) {
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushstring(L, context.sync_prefix);
+    return 1;
+}
+
 static int LuaTriggerRegisterDeathEvent(lua_State *L) {
     trigger_t *trigger = lua_touserdata(L, 1);
     edict_t *widget = lua_touserdata(L, 2);
@@ -1950,7 +2013,13 @@ static wc3LuaTriggerContext_t LuaTriggerContextFromJass(jassTriggerContext_t con
         .point_x = context ? context->point_x : 0.0f,
         .point_y = context ? context->point_y : 0.0f,
         .has_point = context ? context->has_point : false,
+        .sync_prefix = "",
+        .sync_data = "",
     };
+    if (context) {
+        snprintf(result.sync_prefix, sizeof(result.sync_prefix), "%s", context->sync_prefix);
+        snprintf(result.sync_data, sizeof(result.sync_data), "%s", context->sync_data);
+    }
     snprintf(result.chat_text, sizeof(result.chat_text), "%s", context && context->chat_text ? context->chat_text : "");
     snprintf(result.chat_match, sizeof(result.chat_match), "%s", context && context->chat_match ? context->chat_match : "");
     return result;
@@ -4005,8 +4074,8 @@ static int LuaBlzFrameGetChild(lua_State *L) {
 }
 
 static int LuaBlzGetTriggerSyncData(lua_State *L) {
-    LuaReportUnsupportedNative("BlzGetTriggerSyncData");
-    lua_pushstring(L, "");
+    wc3LuaTriggerContext_t context = WC3_LuaGetTriggerContext(level.lua_vm);
+    lua_pushstring(L, context.sync_data);
     return 1;
 }
 
@@ -5006,6 +5075,9 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "PreloadGenStart", LuaNoop);
     WC3_LuaRegisterNative(L, "PreloadGenEnd", LuaNoop);
     WC3_LuaRegisterNative(L, "BlzGetTriggerSyncData", LuaBlzGetTriggerSyncData);
+    WC3_LuaRegisterNative(L, "BlzGetTriggerSyncPrefix", LuaBlzGetTriggerSyncPrefix);
+    WC3_LuaRegisterNative(L, "BlzTriggerRegisterPlayerSyncEvent", LuaBlzTriggerRegisterPlayerSyncEvent);
+    WC3_LuaRegisterNative(L, "BlzSendSyncData", LuaBlzSendSyncData);
 
     WC3_LuaRegisterNative(L, "BlzGetFrameByName", LuaBlzGetFrameByName);
     WC3_LuaRegisterNative(L, "BlzCreateFrame", LuaBlzCreateFrame);
@@ -5034,7 +5106,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     /* Remaining unsupported Reforged natives log WC3_UNSUPPORTED_NATIVE once
      * and return an empty string. */
     static cstring_t const blz_stubs[] = {
-        "BlzSetAbilityExtendedTooltip", "BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData",
+        "BlzSetAbilityExtendedTooltip",
         "BlzFrameClick", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitBaseDamage",

@@ -211,6 +211,8 @@ static bool run_test_jass_impl(cstring_t src, cstring_t expected) {
         .SaveHandle       = G_SaveJassHandle,
         .LoadHandle       = G_LoadJassHandle,
         .VariableChanged  = G_JassVariableChanged,
+        .LuaTriggerEvaluate = G_LuaTriggerEvaluateHost,
+        .LuaTriggerExecute = G_LuaTriggerExecuteHost,
     ));
     level.vm = jass_newstate();
 

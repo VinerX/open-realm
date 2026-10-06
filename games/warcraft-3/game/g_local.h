@@ -450,6 +450,7 @@ typedef enum {
 
     /* Player-unit damaged mirrors EVENT_UNIT_DAMAGED (52) at retail id 308. */
     EVENT_PLAYER_UNIT_DAMAGED = 308,
+    EVENT_PLAYER_SYNC_DATA = 309, /* OpenRealm sync-data transport event; matched by sender and prefix */
 
     EVENT_UNIT_IN_RANGE = 92,
 } EVENTTYPE;
@@ -875,6 +876,9 @@ typedef struct gameevent_s {
     edict_t *sold_unit;
     event_t *responseTo;
     char chat_text[256];
+    char sync_prefix[WC3_MAX_SYNC_PREFIX_LENGTH];
+    char sync_data[WC3_MAX_SYNC_DATA_LENGTH];
+    bool sync_from_server;
 } gameEvent_t;
 
 typedef struct {
@@ -1776,6 +1780,8 @@ struct gevent_s {
     cstring_t variable;
     char chat_match[256];
     bool chat_exact;
+    char sync_prefix[WC3_MAX_SYNC_PREFIX_LENGTH];
+    bool sync_from_server;
     bool inuse;
     uint32_t handle_generation;
     uint8_t generation_exhausted;

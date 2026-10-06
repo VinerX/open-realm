@@ -30,6 +30,8 @@ typedef struct jassTriggerContext_s {
     bool has_point;
     bool timer_pending;
     cstring_t chat_text, chat_match;
+    char sync_prefix[WC3_MAX_SYNC_PREFIX_LENGTH];
+    char sync_data[WC3_MAX_SYNC_DATA_LENGTH];
 } jassTriggerContext_t;
 
 struct jass_module {

@@ -119,6 +119,12 @@ static void G_ExecuteEvent(gameEvent_t *evt) {
     FOR_EACH_EVENT(e) {
         if (!G_EventSubjectIsCurrent(e)) continue;
         switch (e->type) {
+            case EVENT_PLAYER_SYNC_DATA:
+                if (evt->type == EVENT_PLAYER_SYNC_DATA && e->subject == subject &&
+                    e->sync_from_server == evt->sync_from_server &&
+                    !strcmp(e->sync_prefix, evt->sync_prefix))
+                    jass_calltriggerevent(level.vm, e->trigger, evt);
+                break;
             case EVENT_PLAYER_MOUSE_DOWN:
             case EVENT_PLAYER_MOUSE_UP:
             case EVENT_PLAYER_MOUSE_MOVE:

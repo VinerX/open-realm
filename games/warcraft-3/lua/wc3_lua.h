@@ -11,6 +11,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "common/shared.h"
 
 typedef struct wc3Lua_s wc3Lua_t;
 typedef struct {
@@ -24,6 +25,8 @@ typedef struct {
     int32_t event_id;
     void *enum_destructable;
     char chat_text[256], chat_match[256];
+    char sync_prefix[WC3_MAX_SYNC_PREFIX_LENGTH];
+    char sync_data[WC3_MAX_SYNC_DATA_LENGTH];
     float point_x, point_y;
     bool has_point;
 } wc3LuaTriggerContext_t;

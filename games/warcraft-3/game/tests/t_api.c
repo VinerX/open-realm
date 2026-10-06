@@ -7233,4 +7233,63 @@ TEST(wc3_api, blz_enable_selections_updates_runtime_state) {
     gi.unicast = old_unicast;
 }
 
+TEST(wc3_api, blz_sync_events_match_sender_prefix_and_expose_context) {
+    player_t *saved_currentplayer = currentplayer;
+    wc3Lua_t *saved_lua_vm = level.lua_vm;
+    jass_t *saved_vm = level.vm;
+    wc3Lua_t *lua;
+    double result = 0;
+
+    setup_test_world();
+    T_ASSERT(run_test_jass("function main takes nothing returns nothing\nendfunction\n"));
+    currentplayer = test_player(0);
+    g_edicts[0].inuse = true;
+    g_edicts[0].client = &game.clients[0];
+    game.clients[0].connected = true;
+    game.clients[0].ps.number = 0;
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) {
+        currentplayer = saved_currentplayer;
+        return;
+    }
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "sync_seen=false; sync_player_seen=false; sync_prefix_seen=false; sync_data_seen=false; sync_mismatch=false\n"
+        "function register_sync_events()\n"
+        " local t=CreateTrigger()\n"
+        " BlzTriggerRegisterPlayerSyncEvent(t,Player(0),'23RaceEval',false)\n"
+        " TriggerAddAction(t,function() sync_seen=true; sync_player_seen=GetTriggerPlayer()==Player(0); sync_prefix_seen=BlzGetTriggerSyncPrefix()=='23RaceEval'; sync_data_seen=BlzGetTriggerSyncData()=='eval|7|1|1|abcd' end)\n"
+        " local other=CreateTrigger()\n"
+        " BlzTriggerRegisterPlayerSyncEvent(other,Player(0),'other',false)\n"
+        " TriggerAddAction(other,function() sync_mismatch=true end)\n"
+        "end\n"
+        "function send_sync_test() return BlzSendSyncData('23RaceEval','eval|7|1|1|abcd') and 1 or 0 end\n"
+        "function sync_result() return sync_seen and 1 or 0 end\n"
+        "function sync_player_result() return sync_player_seen and 1 or 0 end\n"
+        "function sync_prefix_result() return sync_prefix_seen and 1 or 0 end\n"
+        "function sync_data_result() return sync_data_seen and 1 or 0 end\n"
+        "function mismatch_result() return sync_mismatch and 1 or 0 end\n",
+        "=(sync-event-test)"));
+    T_ASSERT(WC3_LuaCall(lua, "register_sync_events"));
+    T_ASSERT(WC3_LuaCallNumber(lua, "send_sync_test", &result));
+    T_EQ((int)result, 1);
+    G_RunEvents();
+    T_ASSERT(WC3_LuaCallNumber(lua, "sync_result", &result));
+    T_EQ((int)result, 1);
+    T_ASSERT(WC3_LuaCallNumber(lua, "sync_player_result", &result));
+    T_EQ((int)result, 1);
+    T_ASSERT(WC3_LuaCallNumber(lua, "sync_prefix_result", &result));
+    T_EQ((int)result, 1);
+    T_ASSERT(WC3_LuaCallNumber(lua, "sync_data_result", &result));
+    T_EQ((int)result, 1);
+    T_ASSERT(WC3_LuaCallNumber(lua, "mismatch_result", &result));
+    T_EQ((int)result, 0);
+    WC3_LuaClose(lua);
+    level.lua_vm = saved_lua_vm;
+    if (level.vm && level.vm != saved_vm) jass_close(level.vm);
+    level.vm = saved_vm;
+    currentplayer = saved_currentplayer;
+}
+
 #endif /* BZ_TESTS */

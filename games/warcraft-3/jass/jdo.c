@@ -39,6 +39,7 @@ typedef struct {
     handle_t region;
     bool timer_pending;
     cstring_t chat_text, chat_match;
+    cstring_t sync_prefix, sync_data;
 } jassTriggerContextParams_t;
 
 #define assert_type(var, type) do { if (!jass_checktype(var, type)) jass_rterror(j, "invalid native argument: expected " #type); } while (0)
@@ -1046,6 +1047,8 @@ static bool jass_evaluatetriggercontext(jass_t *j, jassTriggerContextParams_t co
             .timer_pending = params->timer_pending,
             .chat_text = params->chat_text, .chat_match = params->chat_match,
         };
+        snprintf(context.sync_prefix, sizeof(context.sync_prefix), "%s", params->sync_prefix ? params->sync_prefix : "");
+        snprintf(context.sync_data, sizeof(context.sync_data), "%s", params->sync_data ? params->sync_data : "");
         return jass_host.LuaTriggerEvaluate &&
             jass_host.LuaTriggerEvaluate(params->trigger, &context);
     }
@@ -1130,12 +1133,15 @@ static void jass_executetriggercontext(jass_t *j, jassTriggerContextParams_t con
             .timer = params->timer,
             .region = params->region,
             .value = params->value,
+            .event_id = params->event_id,
             .point_x = params->point ? params->point->x : 0.0f,
             .point_y = params->point ? params->point->y : 0.0f,
             .has_point = params->has_point,
             .timer_pending = params->timer_pending,
             .chat_text = params->chat_text, .chat_match = params->chat_match,
         };
+        snprintf(context.sync_prefix, sizeof(context.sync_prefix), "%s", params->sync_prefix ? params->sync_prefix : "");
+        snprintf(context.sync_data, sizeof(context.sync_data), "%s", params->sync_data ? params->sync_data : "");
         if (jass_host.LuaTriggerExecute)
             jass_host.LuaTriggerExecute(params->trigger, &context);
         return;
@@ -1215,6 +1221,8 @@ bool jass_calltriggerevent(jass_t *j, trigger_t *trigger, gameEvent_t const *eve
         .point = event->has_point ? &event->point : NULL, .has_point = event->has_point,
         .chat_text = event->type == EVENT_PLAYER_CHAT ? event->chat_text : NULL,
         .chat_match = event->type == EVENT_PLAYER_CHAT && event->responseTo ? event->responseTo->chat_match : NULL,
+        .sync_prefix = event->type == EVENT_PLAYER_SYNC_DATA ? event->sync_prefix : NULL,
+        .sync_data = event->type == EVENT_PLAYER_SYNC_DATA ? event->sync_data : NULL,
         .region = event->responseTo && (event->type == EVENT_GAME_ENTER_REGION || event->type == EVENT_GAME_LEAVE_REGION)
             ? event->responseTo->region : NULL });
 }
