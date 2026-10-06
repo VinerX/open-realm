@@ -25,6 +25,7 @@ void CM_ReadAbilities(handle_t archive);
 void CM_SetupTestWorldBounds(box2_t const *);
 void CM_SetupTestPathmap(uint32_t, uint32_t, uint8_t const *);
 void G_RegisterLuaMapConfigNatives(wc3Lua_t *lua);
+void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *lua);
 
 static cstring_t const kMinimalMapScript =
     "function config takes nothing returns nothing\n"
@@ -33,6 +34,96 @@ static cstring_t const kMinimalMapScript =
     "endfunction\n";
 
 static void mapscript_ignore_error(cstring_t message) { (void)message; }
+
+TEST(wc3_mapscript, blz_frame_native_updates_named_hud_frame) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    frameDef_t *frame = NULL;
+    frameDef_t saved = {0};
+
+    FOR_LOOP(i, MAX_UI_CLASSES) {
+        if (i && !frames[i].inuse) {
+            frame = frames + i;
+            saved = *frame;
+            break;
+        }
+    }
+    if (frame) frame = UI_Spawn(FT_FRAME, NULL);
+
+    T_NOT_NULL(lua);
+    T_NOT_NULL(frame);
+    if (!lua || !frame) {
+        if (lua) WC3_LuaClose(lua);
+        return;
+    }
+    snprintf(frame->Name, sizeof(frame->Name), "LuaFrameNativeTest");
+    G_RegisterLuaMapRuntimeNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "local frame = BlzGetFrameByName('LuaFrameNativeTest', 0)\n"
+        "assert(frame ~= nil)\n"
+        "BlzFrameSetSize(frame, 0.25, 0.125)\n"
+        "BlzFrameSetText(frame, 'parity')\n"
+        "BlzFrameSetAbsPoint(frame, 6, 0.595, 0.005)\n"
+        "BlzFrameSetVisible(frame, false)\n",
+        "blz-frame-native.lua"));
+    T_FEQ(frame->Width, 0.25f, 0.0001f);
+    T_FEQ(frame->Height, 0.125f, 0.0001f);
+    T_STREQ(frame->Text, "parity");
+    T_FEQ(frame->Points.x[FPP_MIN].offset, 0.595f, 0.0001f);
+    T_FEQ(frame->Points.y[FPP_MAX].offset, 0.005f, 0.0001f);
+    T_ASSERT(frame->hidden);
+    *frame = saved;
+    WC3_LuaClose(lua);
+}
+
+TEST(wc3_mapscript, blz_frame_create_by_type_attaches_context_named_child) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    frameDef_t *slots[5] = {0};
+    frameDef_t saved[5] = {0};
+    frameDef_t *created = NULL;
+    uint32_t slot_count = 0;
+
+    FOR_LOOP(i, MAX_UI_CLASSES) {
+        if (!i || frames[i].inuse) continue;
+        slots[slot_count] = frames + i;
+        saved[slot_count] = frames[i];
+        if (++slot_count == sizeof(slots) / sizeof(slots[0])) break;
+    }
+    T_NOT_NULL(lua);
+    T_EQ(slot_count, sizeof(slots) / sizeof(slots[0]));
+    if (!lua || slot_count != sizeof(slots) / sizeof(slots[0])) {
+        if (lua) WC3_LuaClose(lua);
+        return;
+    }
+    frameDef_t *owner = UI_Spawn(FT_FRAME, NULL);
+    snprintf(owner->Name, sizeof(owner->Name), "LuaFrameOwnerNativeTest");
+    frameDef_t *template = UI_Spawn(FT_BACKDROP, NULL);
+    snprintf(template->Name, sizeof(template->Name), "LuaFrameTemplateNativeTest");
+    template->Width = 0.20f;
+    template->Height = 0.10f;
+    frameDef_t *template_child = UI_Spawn(FT_TEXT, template);
+    snprintf(template_child->Name, sizeof(template_child->Name), "LuaFrameTemplateChildNativeTest");
+    G_RegisterLuaMapRuntimeNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "local owner = BlzGetFrameByName('LuaFrameOwnerNativeTest', 0)\n"
+        "local frame = BlzCreateFrameByType('BACKDROP', 'LuaFrameCreatedNativeTest', owner, 'LuaFrameTemplateNativeTest', 0)\n"
+        "assert(frame ~= nil)\n"
+        "assert(BlzGetFrameByName('LuaFrameCreatedNativeTest', 0) == frame)\n"
+        "assert(BlzGetFrameByName('LuaFrameTemplateChildNativeTest', 0) == BlzFrameGetChild(frame, 0))\n"
+        "BlzFrameSetSize(frame, 0.20, 0.10)\n"
+        "BlzFrameSetScale(frame, 0.5)\n",
+        "blz-frame-create.lua"));
+    created = UI_FindFrame("LuaFrameCreatedNativeTest");
+    T_NOT_NULL(created);
+    if (created) {
+        T_EQ(created->Parent, owner);
+        T_EQ(created->Type, FT_BACKDROP);
+        T_FEQ(created->Width * created->Scale, 0.10f, 0.0001f);
+        T_FEQ(created->Height * created->Scale, 0.05f, 0.0001f);
+        T_NOT_NULL(UI_FindChildFrame(created, "LuaFrameTemplateChildNativeTest"));
+    }
+    FOR_LOOP(i, sizeof(slots) / sizeof(slots[0])) *slots[i] = saved[i];
+    WC3_LuaClose(lua);
+}
 
 TEST(wc3_mapscript, lua_main_failure_is_latched_once) {
     mapInfo_t info = { .scriptKind = WC3_SCRIPT_LUA };

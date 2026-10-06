@@ -60,6 +60,7 @@ typedef struct {
     PATHSTR deferred_key[HUD_DEFERRED_IMAGES]; /* symbolic keys behind HUD_DEFERRED_IMAGE_BASE handles */
     ResourceBar_t res;
     UpperButtonBar_t upper;
+    frameDef_t *command_bar;
     UINAME upper_cmds[4];
     InfoPanelUnitDetail_t unit;
     InfoPanelBuildingDetail_t building;
@@ -170,6 +171,8 @@ void UI_WriteHoverLayout(edict_t *ent);
 /* Command buttons (hud_commands.c) */
 void UI_WriteCommandButton(cstring_t code, bool research, uint32_t level);
 void UI_WriteCommandButtonFrame(gameCommandButton_t const *button);
+bool UI_WriteCommandBarRoot(void);
+void UI_ClearCommandBarRoot(void);
 void UI_FormatTooltip(cstring_t code, cstring_t tip, cstring_t ubertip, float manacost, string_t out, uint32_t out_size);
 uint32_t UI_ClassIdFromCode(cstring_t code);
 void UI_WriteBuildQueue(edict_t *ent);

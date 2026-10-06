@@ -3561,6 +3561,255 @@ static int LuaBlzUnsupported(lua_State *L) {
     return 1;
 }
 
+static frameDef_t *LuaGetFrame(lua_State *L, int index) {
+    return lua_touserdata(L, index);
+}
+
+extern frameDef_t *FindFrameTemplate(cstring_t name);
+
+static frameDef_t *LuaCreateFrame(cstring_t name, frameDef_t *owner, FRAMETYPE type,
+                                  cstring_t inherit, lua_Integer context) {
+    frameDef_t *frame;
+    frame = UI_FindFrameContext(name, (int32_t)context);
+    if (frame && frame->dynamic) return frame;
+
+    frameDef_t *template = inherit && *inherit ? FindFrameTemplate(inherit) : NULL;
+    if (template) {
+        frame = UI_CloneFrameTree(template, owner);
+        if (frame && type != FT_NONE) frame->Type = type;
+    } else {
+        frame = UI_Spawn(type, owner);
+    }
+    if (frame) {
+        frameDef_t const *tree[MAX_UI_CLASSES];
+        uint32_t count = UI_CollectFrameTree(frame, tree, MAX_UI_CLASSES);
+        FOR_LOOP(i, count) {
+            ((frameDef_t *)tree[i])->dynamic = true;
+            ((frameDef_t *)tree[i])->createContext = (int32_t)context;
+        }
+        strlcpy(frame->Name, name, sizeof(frame->Name));
+    }
+    return frame;
+}
+
+static int LuaBlzCreateFrame(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    frameDef_t *owner = LuaGetFrame(L, 2);
+    lua_Integer context = luaL_optinteger(L, 4, 0);
+    frameDef_t *template = FindFrameTemplate(name);
+    frameDef_t *frame = LuaCreateFrame(name, owner, template ? template->Type : FT_FRAME, name, context);
+    if (frame) lua_pushlightuserdata(L, frame); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaBlzCreateFrameByType(lua_State *L) {
+    static cstring_t const names[] = {
+        "BACKDROP", "BUTTON", "CHECKBOX", "FRAME", "GLUEBUTTON", "GLUETEXTBUTTON",
+        "SIMPLEFRAME", "TEXT", "TEXTAREA", "TEXTBUTTON", "TEXTURE", NULL
+    };
+    static FRAMETYPE const types[] = {
+        FT_BACKDROP, FT_BUTTON, FT_CHECKBOX, FT_FRAME, FT_GLUEBUTTON, FT_GLUETEXTBUTTON,
+        FT_SIMPLEFRAME, FT_TEXT, FT_TEXTAREA, FT_TEXTBUTTON, FT_TEXTURE
+    };
+    cstring_t type_name = luaL_checkstring(L, 1);
+    cstring_t name = luaL_checkstring(L, 2);
+    frameDef_t *owner = LuaGetFrame(L, 3);
+    cstring_t inherit = luaL_optstring(L, 4, "");
+    lua_Integer context = luaL_optinteger(L, 5, 0);
+    FRAMETYPE type = FT_NONE;
+    for (uint32_t i = 0; names[i]; ++i) {
+        if (!strcmp(names[i], type_name)) { type = types[i]; break; }
+    }
+    frameDef_t *frame = type == FT_NONE ? NULL : LuaCreateFrame(name, owner, type, inherit, context);
+    if (frame) lua_pushlightuserdata(L, frame); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaBlzGetOriginFrame(lua_State *L) {
+    lua_Integer type = luaL_checkinteger(L, 1);
+    frameDef_t *frame = NULL;
+    if (type == 0) frame = UI_FindFrame("ConsoleUI");
+    else if (type == 11) frame = UI_FindFrame("Tooltip");
+    else if (type == 12) frame = UI_FindFrame("UberTooltip");
+    else if (type == 17) frame = UI_FindFrame("WorldFrame");
+    if (!frame && (type == 11 || type == 12 || type == 17)) {
+        cstring_t name = type == 11 ? "Tooltip" : type == 12 ? "UberTooltip" : "WorldFrame";
+        frameDef_t *root = UI_FindFrame("ConsoleUI");
+        frame = UI_Spawn(FT_FRAME, root);
+        if (frame) {
+            strlcpy(frame->Name, name, sizeof(frame->Name));
+            UI_SetAllPoints(frame);
+        }
+    }
+    if (frame) lua_pushlightuserdata(L, frame); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaBlzLoadTOCFile(lua_State *L) {
+    cstring_t path = luaL_checkstring(L, 1);
+    handle_t raw = NULL;
+    int size = UI_FdfReadFile(path, &raw);
+    bool loaded = size >= 0 && raw;
+    if (loaded) {
+        char *text = UI_FdfAlloc((long)size + 1);
+        if (!text) loaded = false;
+        else {
+            memcpy(text, raw, (size_t)size);
+            text[size] = '\0';
+            for (char *line = text; *line;) {
+                char *end = line;
+                while (*end && *end != '\r' && *end != '\n') ++end;
+                char saved = *end;
+                *end = '\0';
+                while (*line == ' ' || *line == '\t') ++line;
+                if (*line && *line != '/' && !UI_EnsureFDF(line)) loaded = false;
+                if (!saved) break;
+                *end = saved;
+                line = end + 1;
+                if (saved == '\r' && *line == '\n') ++line;
+            }
+            UI_FdfFree(text);
+        }
+        UI_FdfFreeFile(raw);
+    }
+    lua_pushboolean(L, loaded);
+    return 1;
+}
+
+static UIFRAMEPOINT LuaFramePoint(lua_State *L, int index) {
+    lua_Integer point = luaL_checkinteger(L, index);
+    static UIFRAMEPOINT const points[] = {
+        FRAMEPOINT_TOPLEFT, FRAMEPOINT_TOP, FRAMEPOINT_TOPRIGHT,
+        FRAMEPOINT_LEFT, FRAMEPOINT_CENTER, FRAMEPOINT_RIGHT,
+        FRAMEPOINT_BOTTOMLEFT, FRAMEPOINT_BOTTOM, FRAMEPOINT_BOTTOMRIGHT,
+    };
+    return point >= 0 && point < (lua_Integer)(sizeof(points) / sizeof(points[0]))
+        ? points[point] : FRAMEPOINT_TOPLEFT;
+}
+
+static int LuaBlzGetFrameByName(lua_State *L) {
+    cstring_t name = luaL_checkstring(L, 1);
+    frameDef_t *frame = UI_FindFrameContext(name, (int32_t)luaL_optinteger(L, 2, 0));
+    if (frame) lua_pushlightuserdata(L, frame); else lua_pushnil(L);
+    return 1;
+}
+
+static int LuaBlzFrameSetText(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) UI_SetText(frame, "%s", luaL_checkstring(L, 2));
+    return 0;
+}
+
+static int LuaBlzFrameSetScale(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    float scale = (float)luaL_checknumber(L, 2);
+    if (frame && scale >= 0.0f) frame->Scale = scale;
+    return 0;
+}
+
+static int LuaBlzFrameSetTooltip(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    frameDef_t *tooltip = LuaGetFrame(L, 2);
+    if (frame && tooltip) {
+        frame->Tip = tooltip->Text;
+        frame->Ubertip = tooltip->Ubertip;
+    }
+    return 0;
+}
+
+static int LuaBlzFrameSetTextAlignment(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    lua_Integer vertical = luaL_checkinteger(L, 2);
+    lua_Integer horizontal = luaL_checkinteger(L, 3);
+    if (frame) {
+        if (vertical >= 0 && vertical <= 2)
+            frame->Font.Justification.Vertical = (uiFontJustificationV_t)vertical;
+        if (horizontal >= 0 && horizontal <= 2)
+            frame->Font.Justification.Horizontal = (uiFontJustificationH_t)horizontal;
+    }
+    return 0;
+}
+
+static int LuaBlzFrameSetLevel(lua_State *L) {
+    (void)L;
+    return 0;
+}
+
+static int LuaBlzFrameSetSize(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) UI_SetSize(frame, (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
+static int LuaBlzFrameSetPoint(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    frameDef_t *relative = LuaGetFrame(L, 3);
+    if (frame) UI_SetPoint(frame, LuaFramePoint(L, 2), relative, LuaFramePoint(L, 4),
+                           (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6));
+    return 0;
+}
+
+static int LuaBlzFrameSetAbsPoint(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    UIFRAMEPOINT point = LuaFramePoint(L, 2);
+    if (frame) UI_SetPoint(frame, point, NULL, point,
+                           (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4));
+    return 0;
+}
+
+static int LuaBlzFrameSetAllPoints(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    frameDef_t *relative = LuaGetFrame(L, 2);
+    if (frame) {
+        UI_SetPoint(frame, FRAMEPOINT_TOPLEFT, relative, FRAMEPOINT_TOPLEFT, 0, 0);
+        UI_SetPoint(frame, FRAMEPOINT_BOTTOMRIGHT, relative, FRAMEPOINT_BOTTOMRIGHT, 0, 0);
+    }
+    return 0;
+}
+
+static int LuaBlzFrameSetEnable(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) UI_SetEnabled(frame, lua_toboolean(L, 2) != 0);
+    return 0;
+}
+
+static int LuaBlzFrameSetVisible(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) UI_SetHidden(frame, lua_toboolean(L, 2) == 0);
+    return 0;
+}
+
+static int LuaBlzFrameClearAllPoints(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) {
+        memset(&frame->Points, 0, sizeof(frame->Points));
+        memset(&frame->SetPoint, 0, sizeof(frame->SetPoint));
+        frame->AnyPointsSet = false;
+    }
+    return 0;
+}
+
+static int LuaBlzFrameSetTexture(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    if (frame) UI_SetTexture(frame, luaL_checkstring(L, 2), lua_toboolean(L, 4) != 0);
+    return 0;
+}
+
+static int LuaBlzFrameGetChild(lua_State *L) {
+    frameDef_t *frame = LuaGetFrame(L, 1);
+    lua_Integer index = luaL_checkinteger(L, 2);
+    frameDef_t *child = NULL;
+    if (frame && index >= 0) {
+        lua_Integer child_index = 0;
+        FOR_LOOP(i, MAX_UI_CLASSES) {
+            if (frames[i].Parent != frame) continue;
+            if (child_index++ == index) { child = frames + i; break; }
+        }
+    }
+    if (child) lua_pushlightuserdata(L, child); else lua_pushnil(L);
+    return 1;
+}
+
 static int LuaBlzGetTriggerSyncData(lua_State *L) {
     LuaReportUnsupportedNative("BlzGetTriggerSyncData");
     lua_pushstring(L, "");
@@ -4554,16 +4803,32 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "PreloadGenEnd", LuaNoop);
     WC3_LuaRegisterNative(L, "BlzGetTriggerSyncData", LuaBlzGetTriggerSyncData);
 
+    WC3_LuaRegisterNative(L, "BlzGetFrameByName", LuaBlzGetFrameByName);
+    WC3_LuaRegisterNative(L, "BlzCreateFrame", LuaBlzCreateFrame);
+    WC3_LuaRegisterNative(L, "BlzCreateFrameByType", LuaBlzCreateFrameByType);
+    WC3_LuaRegisterNative(L, "BlzGetOriginFrame", LuaBlzGetOriginFrame);
+    WC3_LuaRegisterNative(L, "BlzLoadTOCFile", LuaBlzLoadTOCFile);
+    WC3_LuaRegisterNative(L, "BlzFrameSetText", LuaBlzFrameSetText);
+    WC3_LuaRegisterNative(L, "BlzFrameSetScale", LuaBlzFrameSetScale);
+    WC3_LuaRegisterNative(L, "BlzFrameSetTooltip", LuaBlzFrameSetTooltip);
+    WC3_LuaRegisterNative(L, "BlzFrameSetTextAlignment", LuaBlzFrameSetTextAlignment);
+    WC3_LuaRegisterNative(L, "BlzFrameSetLevel", LuaBlzFrameSetLevel);
+    WC3_LuaRegisterNative(L, "BlzFrameSetSize", LuaBlzFrameSetSize);
+    WC3_LuaRegisterNative(L, "BlzFrameSetPoint", LuaBlzFrameSetPoint);
+    WC3_LuaRegisterNative(L, "BlzFrameSetAbsPoint", LuaBlzFrameSetAbsPoint);
+    WC3_LuaRegisterNative(L, "BlzFrameSetAllPoints", LuaBlzFrameSetAllPoints);
+    WC3_LuaRegisterNative(L, "BlzFrameSetEnable", LuaBlzFrameSetEnable);
+    WC3_LuaRegisterNative(L, "BlzFrameSetVisible", LuaBlzFrameSetVisible);
+    WC3_LuaRegisterNative(L, "BlzFrameClearAllPoints", LuaBlzFrameClearAllPoints);
+    WC3_LuaRegisterNative(L, "BlzFrameSetTexture", LuaBlzFrameSetTexture);
+    WC3_LuaRegisterNative(L, "BlzFrameGetChild", LuaBlzFrameGetChild);
+
     /* Reforged Blz* UI/sync/tooltip natives: registered as reporting stubs that
      * log WC3_UNSUPPORTED_NATIVE once and yield nil. */
     static cstring_t const blz_stubs[] = {
-        "BlzGetFrameByName", "BlzCreateFrame", "BlzCreateFrameByType", "BlzGetOriginFrame",
-        "BlzLoadTOCFile", "BlzGetAbilityTooltip", "BlzSetAbilityTooltip",
+        "BlzGetAbilityTooltip", "BlzSetAbilityTooltip",
         "BlzSetAbilityExtendedTooltip", "BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData",
-        "BlzFrameSetText", "BlzFrameSetSize", "BlzFrameSetPoint", "BlzFrameSetAbsPoint",
-        "BlzFrameSetAllPoints", "BlzFrameSetEnable", "BlzFrameSetScale", "BlzFrameSetVisible",
-        "BlzFrameSetLevel", "BlzFrameSetTexture", "BlzFrameSetTooltip", "BlzFrameSetTextAlignment",
-        "BlzFrameClearAllPoints", "BlzFrameClick", "BlzFrameGetChild",
+        "BlzFrameClick",
         "BlzEnableSelections", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitArmor", "BlzGetUnitBaseDamage",

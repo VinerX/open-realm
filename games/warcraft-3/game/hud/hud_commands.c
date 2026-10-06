@@ -8,6 +8,21 @@
 
 #include "hud_local.h"
 
+static uint32_t command_bar_parent;
+
+bool UI_WriteCommandBarRoot(void) {
+    frameDef_t *root = UI_FindFrame("CommandBarFrame");
+    command_bar_parent = 0;
+    if (!root || root->hidden) return false;
+    UI_WriteFrameWithChildren(root, NULL);
+    command_bar_parent = UI_FindFrameNumber("CommandBarFrame");
+    return command_bar_parent != 0;
+}
+
+void UI_ClearCommandBarRoot(void) {
+    command_bar_parent = 0;
+}
+
 uint32_t UI_ClassIdFromCode(cstring_t code) {
     uint32_t class_id = 0;
 
@@ -116,8 +131,16 @@ static void UI_WriteCommandButtonNumber(float x, float y, float w, float h, uint
     label.font = gi.FontIndex("Fonts\\FRIZQT__.TTF", HUD_FONT_SIZE);
     label.textalignx = FONT_JUSTIFYRIGHT;
     label.textaligny = FONT_JUSTIFYBOTTOM;
-    UI_SetFrameRect(&frame, x + 0.001f, y + 0.001f, w - 0.002f, h - 0.002f);
-    UI_WriteProxyFrame(&frame, &label, sizeof(label));
+    if (command_bar_parent) {
+        UI_SetFramePointRelative(&frame.points.x[FPP_MIN], FPP_MIN, command_bar_parent, x + 0.001f, false);
+        UI_SetFramePointRelative(&frame.points.y[FPP_MIN], FPP_MIN, command_bar_parent, y + 0.001f, true);
+        frame.size.width = w - 0.002f;
+        frame.size.height = h - 0.002f;
+        UI_WriteProxyFrameToParent(&frame, &label, sizeof(label), command_bar_parent);
+    } else {
+        UI_SetFrameRect(&frame, x + 0.001f, y + 0.001f, w - 0.002f, h - 0.002f);
+        UI_WriteProxyFrame(&frame, &label, sizeof(label));
+    }
 }
 
 /* Autocast sparkle has no FDF frame; anchor the authored model to the command button. */
@@ -169,8 +192,8 @@ void UI_WriteCommandButtonFrame(gameCommandButton_t const *button) {
     if (!button) {
         return;
     }
-    float const x = 0.6175f + (float)button->x * 0.0434f;
-    float const y = 0.4660f + (float)button->y * 0.0440f;
+    float const x = (command_bar_parent ? 0.0225f : 0.6175f) + (float)button->x * 0.0434f;
+    float const y = (command_bar_parent ? 0.0110f : 0.4660f) + (float)button->y * 0.0440f;
     memset(&frame, 0, sizeof(frame));
     memset(&state, 0, sizeof(state));
     frame.flags.type = FT_COMMANDBUTTON;
@@ -190,8 +213,16 @@ void UI_WriteCommandButtonFrame(gameCommandButton_t const *button) {
              button->command);
     frame.onclick = button->disabled ? NULL : onclick;
     frame.text = button->disabled || !button->alternate[0] ? NULL : button->alternate;
-    UI_SetFrameRect(&frame, x, y, 0.039f, 0.039f);
-    UI_WriteProxyFrame(&frame, &state, sizeof(state));
+    if (command_bar_parent) {
+        UI_SetFramePointRelative(&frame.points.x[FPP_MIN], FPP_MIN, command_bar_parent, x, false);
+        UI_SetFramePointRelative(&frame.points.y[FPP_MIN], FPP_MIN, command_bar_parent, y, true);
+        frame.size.width = 0.039f;
+        frame.size.height = 0.039f;
+        UI_WriteProxyFrameToParent(&frame, &state, sizeof(state), command_bar_parent);
+    } else {
+        UI_SetFrameRect(&frame, x, y, 0.039f, 0.039f);
+        UI_WriteProxyFrame(&frame, &state, sizeof(state));
+    }
     UI_WriteAutocastIndicator(button, frame.number);
     UI_WriteCommandButtonNumber(x, y, 0.039f, 0.039f, button->number);
 }

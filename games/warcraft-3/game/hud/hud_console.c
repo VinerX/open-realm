@@ -262,6 +262,17 @@ void UI_LoadHudConsole(void) {
     UI_EnsureFDF("UI\\FrameDef\\GlobalStrings.fdf");
     if (!ConsoleUI_Load(&hud.console)) return;
     UI_SetAllPoints(hud.console.ConsoleUI);
+    hud.command_bar = UI_FindFrame("CommandBarFrame");
+    if (!hud.command_bar) {
+        hud.command_bar = UI_Spawn(FT_FRAME, hud.console.ConsoleUI);
+        if (hud.command_bar) {
+            snprintf(hud.command_bar->Name, sizeof(hud.command_bar->Name), "CommandBarFrame");
+            UI_SetSize(hud.command_bar, 0.180f, 0.140f);
+            UI_SetPoint(hud.command_bar, FRAMEPOINT_BOTTOMLEFT, NULL, FRAMEPOINT_BOTTOMLEFT, 0.595f, 0.005f);
+        }
+    } else if (!hud.command_bar->Parent) {
+        UI_SetParent(hud.command_bar, hud.console.ConsoleUI);
+    }
     UI_CollectConsoleWideChrome();
     ResourceBar_Load(&hud.res);
     UI_SetParent(hud.res.ResourceBarFrame, hud.console.ConsoleUI);

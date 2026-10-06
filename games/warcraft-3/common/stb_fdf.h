@@ -167,6 +167,7 @@ struct uiFrameDef_s {
     UINAME OnClick;
     cstring_t Text, Tip, Ubertip;
     float Width, Height;
+    float Scale;
     color32_t Color;
     BLEND_MODE AlphaMode;
     uint32_t DecorateFileNames: 1;
@@ -174,6 +175,8 @@ struct uiFrameDef_s {
     uint32_t AnyPointsSet: 1;
     uint32_t hidden: 1;
     uint32_t disabled: 1;
+    uint32_t dynamic: 1;
+    int32_t createContext;
     uint32_t TextLength;
     uint32_t Stat;
     string_t DynamicText;
@@ -481,6 +484,7 @@ cstring_t peek_token(wordExtractor_t *p);
 bool eat_token(wordExtractor_t *p, cstring_t value);
 void parser_error(wordExtractor_t *parser);
 frameDef_t *UI_FindFrame(cstring_t name);
+frameDef_t *UI_FindFrameContext(cstring_t name, int32_t context);
 frameDef_t *UI_FindFrameByNumber(uint32_t number);
 frameDef_t *UI_FindChildFrame(frameDef_t *frame, cstring_t name);
 frameDef_t *UI_FindChildFrameType(frameDef_t *frame, FRAMETYPE type);
@@ -686,12 +690,24 @@ static inline uint32_t UI_DecodeFramePointY(uint32_t framepoint) {
 /* ---- Frame lookup --------------------------------------------------------- */
 
 frameDef_t *UI_FindFrame(cstring_t name) {
+    frameDef_t *found = NULL;
     FOR_LOOP(i, MAX_UI_CLASSES) {
-        if (!strcmp(frames[i].Name, name)) {
-            return frames + i;
-        }
+        if (!frames[i].inuse || strcmp(frames[i].Name, name)) continue;
+        if (!found || frames[i].dynamic) found = frames + i;
     }
-    return NULL;
+    return found;
+}
+
+frameDef_t *UI_FindFrameContext(cstring_t name, int32_t context) {
+    frameDef_t *static_frame = NULL;
+    frameDef_t *dynamic_frame = NULL;
+    FOR_LOOP(i, MAX_UI_CLASSES) {
+        frameDef_t *frame = frames + i;
+        if (!frame->inuse || strcmp(frame->Name, name)) continue;
+        if (frame->dynamic && frame->createContext == context) dynamic_frame = frame;
+        else if (!frame->dynamic && context == 0 && !static_frame) static_frame = frame;
+    }
+    return dynamic_frame ? dynamic_frame : static_frame;
 }
 
 frameDef_t *UI_FindFrameByNumber(uint32_t number) {
@@ -762,6 +778,7 @@ void UI_InitFrame(frameDef_t *frame, FRAMETYPE type) {
     frame->inuse = true;
     frame->Type = type;
     frame->Color = COLOR32_WHITE;
+    frame->Scale = 1.0f;
     frame->Text = frame->TextStorage;
     switch (type) {
         case FT_TEXTURE:

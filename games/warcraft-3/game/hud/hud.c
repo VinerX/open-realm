@@ -81,8 +81,8 @@ static void UI_CopyFrameBase(uiFrame_t *dest, frameDef_t const *src) {
     dest->number = FindFrameNumber(src, 0);
     dest->parent = FindFrameNumber(src->Parent, 0);
     dest->color = src->Color;
-    dest->size.width = src->Width;
-    dest->size.height = src->Height;
+    dest->size.width = src->Width * src->Scale;
+    dest->size.height = src->Height * src->Scale;
     dest->tex.index = UI_LiveImage(src->Texture.Image);
     dest->tex.index2 = UI_LiveImage(src->Texture.Image2);
     dest->flags.type = src->Type;

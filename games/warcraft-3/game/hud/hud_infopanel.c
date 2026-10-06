@@ -1044,6 +1044,11 @@ void Get_Commands_f(edict_t *ent) {
         UI_ClearLayer(ent, LAYER_COMMANDBAR);
         return;
     }
+    frameDef_t *command_bar = UI_FindFrame("CommandBarFrame");
+    if (command_bar && command_bar->hidden) {
+        UI_ClearLayer(ent, LAYER_COMMANDBAR);
+        return;
+    }
 
     /* Command tooltip formatting is player-sensitive for research because the
      * next upgrade level determines gold/lumber cost. Keep the same current-
@@ -1052,6 +1057,7 @@ void Get_Commands_f(edict_t *ent) {
     previous_ui_client = ui_current_client;
     UI_SetCurrentClient(ent->client);
     UI_WriteStart(LAYER_COMMANDBAR);
+    UI_WriteCommandBarRoot();
     count = (G_CanUseItemShop(ent->client, selected) || G_CanUseUnitShop(ent->client, selected))
         ? G_GetShopButtons(&(shopItemButtonsParams_t){
             .client = ent->client, .shop = selected, .buttons = buttons, .max_buttons = 12 })
@@ -1061,6 +1067,7 @@ void Get_Commands_f(edict_t *ent) {
     }
     if (count) UI_WriteTooltipFrame();
     UI_WriteEnd(ent);
+    UI_ClearCommandBarRoot();
     UI_SetCurrentClient(previous_ui_client);
 }
 
