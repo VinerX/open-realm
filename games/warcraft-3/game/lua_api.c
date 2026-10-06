@@ -3667,10 +3667,52 @@ static int LuaNoop(lua_State *L) {
     return 0;
 }
 
-/* Blz* frame/sync/tooltip natives belong to the Reforged UI layer OpenRealm does
- * not implement.  Report each name once and return an empty string: several
- * getters feed string operations such as #tooltip, so a nil would turn a missing
- * UI feature into a script abort instead of a reported gap. */
+/* The Legion bridge uses mutable tooltips as a mailbox; keep it private to this
+ * map VM and separate values by ability and level. */
+static char lua_ability_tooltip_store_key;
+
+static void LuaPushAbilityTooltipStore(lua_State *L) {
+    lua_pushlightuserdata(L, &lua_ability_tooltip_store_key);
+    lua_rawget(L, LUA_REGISTRYINDEX);
+    if (lua_istable(L, -1)) return;
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushlightuserdata(L, &lua_ability_tooltip_store_key);
+    lua_pushvalue(L, -2);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+}
+
+static void LuaAbilityTooltipKey(lua_State *L, int level_arg, char *key, size_t size) {
+    uint32_t code = (uint32_t)luaL_checkinteger(L, 1);
+    int32_t level = (int32_t)luaL_checkinteger(L, level_arg);
+    snprintf(key, size, "%08x:%d", code, level);
+}
+
+static int LuaBlzGetAbilityTooltip(lua_State *L) {
+    char key[32];
+    LuaAbilityTooltipKey(L, 2, key, sizeof(key));
+    LuaPushAbilityTooltipStore(L);
+    lua_pushstring(L, key);
+    lua_rawget(L, -2);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        lua_pushstring(L, "");
+    }
+    return 1;
+}
+
+static int LuaBlzSetAbilityTooltip(lua_State *L) {
+    char key[32];
+    LuaAbilityTooltipKey(L, 3, key, sizeof(key));
+    LuaPushAbilityTooltipStore(L);
+    lua_pushstring(L, key);
+    lua_pushvalue(L, 2);
+    lua_rawset(L, -3);
+    return 0;
+}
+
+/* Report remaining Reforged natives without an OpenRealm implementation rather
+ * than returning nil, which can turn a missing UI feature into a script abort. */
 static int LuaBlzUnsupported(lua_State *L) {
     cstring_t name = luaL_checkstring(L, lua_upvalueindex(1));
     LuaReportUnsupportedNative(name);
@@ -4974,11 +5016,12 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzFrameClearAllPoints", LuaBlzFrameClearAllPoints);
     WC3_LuaRegisterNative(L, "BlzFrameSetTexture", LuaBlzFrameSetTexture);
     WC3_LuaRegisterNative(L, "BlzFrameGetChild", LuaBlzFrameGetChild);
+    WC3_LuaRegisterNative(L, "BlzGetAbilityTooltip", LuaBlzGetAbilityTooltip);
+    WC3_LuaRegisterNative(L, "BlzSetAbilityTooltip", LuaBlzSetAbilityTooltip);
 
-    /* Reforged Blz* UI/sync/tooltip natives: registered as reporting stubs that
-     * log WC3_UNSUPPORTED_NATIVE once and yield nil. */
+    /* Remaining unsupported Reforged natives log WC3_UNSUPPORTED_NATIVE once
+     * and return an empty string. */
     static cstring_t const blz_stubs[] = {
-        "BlzGetAbilityTooltip", "BlzSetAbilityTooltip",
         "BlzSetAbilityExtendedTooltip", "BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData",
         "BlzFrameClick",
         "BlzEnableSelections", "BlzGetEventAttackType",

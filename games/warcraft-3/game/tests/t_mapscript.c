@@ -167,6 +167,21 @@ TEST(wc3_mapscript, blz_frame_create_by_type_attaches_context_named_child) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, blz_ability_tooltip_round_trips_per_ability_level) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    G_RegisterLuaMapRuntimeNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "BlzSetAbilityTooltip(FourCC('A0UK'), 'bridge payload', 1)\n"
+        "BlzSetAbilityTooltip(FourCC('A0UK'), 'other level', 2)\n"
+        "assert(BlzGetAbilityTooltip(FourCC('A0UK'), 1) == 'bridge payload')\n"
+        "assert(BlzGetAbilityTooltip(FourCC('A0UK'), 2) == 'other level')\n"
+        "assert(BlzGetAbilityTooltip(FourCC('A0HL'), 1) == '')\n",
+        "blz-ability-tooltip.lua"));
+    WC3_LuaClose(lua);
+}
+
 TEST(wc3_mapscript, lua_main_failure_is_latched_once) {
     mapInfo_t info = { .scriptKind = WC3_SCRIPT_LUA };
     wc3Lua_t *lua = WC3_LuaNewState();
