@@ -378,8 +378,12 @@ BZ_SIMPLE_SPELL_PROC(AbilityStarfall) {
     starfall_think(thinker);
 }
 
-/* CAbilityChannel remains a non-spell ability for ad-hoc testing. */
-BZ_COMMAND_PROC(AbilityChannel) {
-    UI_AddCancelButton(clent);
-    S_SpellCursorSplat(clent, 200.0f);
+BZ_ABILITY_PROC(CAbilityChannel) {
+    if (!call || !call->item) return false;
+    if (msg == A_COMMAND && call->client) {
+        spell_cmd(call->client);
+        return true;
+    }
+    if (msg == A_VALIDATE || msg == A_EXECUTE) return true;
+    return CAbilitySimpleSpell(ent, msg, call);
 }

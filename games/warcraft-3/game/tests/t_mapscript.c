@@ -434,17 +434,43 @@ TEST(wc3_mapscript, lua_player_controller_reads_shared_state) {
 TEST(wc3_mapscript, lua_player_slot_state_reads_shared_state) {
     player_t *player = G_GetPlayerByNumber(0);
     gameClient_t *client = PLAYER_CLIENT(player);
+    gameClient_t *computer_client = PLAYER_CLIENT(G_GetPlayerByNumber(1));
+    gameClient_t *empty_client = PLAYER_CLIENT(G_GetPlayerByNumber(2));
+    mapInfo_t *mapinfo = (mapInfo_t *)level.mapinfo;
     bool previous_removed = client->jass.removed;
+    bool previous_connected = client->connected;
+    mapPlayer_t const *previous_mapplayer = client->mapplayer;
+    mapPlayer_t const *previous_computer_mapplayer = computer_client->mapplayer;
+    mapPlayer_t const *previous_empty_mapplayer = empty_client->mapplayer;
     wc3Lua_t *lua = WC3_LuaNewState();
 
     T_NOT_NULL(lua);
     if (!lua) return;
+    mapinfo->players[0].used = true;
+    mapinfo->players[0].playerType = kPlayerTypeHuman;
+    mapinfo->players[1].used = true;
+    mapinfo->players[1].playerType = kPlayerTypeComputer;
+    mapinfo->players[2].used = false;
+    mapinfo->players[2].playerType = kPlayerTypeComputer;
+    client->mapplayer = mapinfo->players;
+    computer_client->mapplayer = mapinfo->players + 1;
+    empty_client->mapplayer = mapinfo->players + 2;
+    client->connected = false;
+    T_EQ(G_GetPlayerSlotState(player), 0);
+    client->connected = true;
+    T_EQ(G_GetPlayerSlotState(player), 1);
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(1)), 1);
+    T_EQ(G_GetPlayerSlotState(G_GetPlayerByNumber(2)), 0);
     client->jass.removed = true;
     T_ASSERT(G_LoadLuaMapScript(lua,
         "function RunSlotStateTest() assert(GetPlayerSlotState(Player(0)) == 2) end\n",
         "player-slot-state-test.lua"));
     T_ASSERT(WC3_LuaCall(lua, "RunSlotStateTest"));
     client->jass.removed = previous_removed;
+    client->connected = previous_connected;
+    client->mapplayer = previous_mapplayer;
+    computer_client->mapplayer = previous_computer_mapplayer;
+    empty_client->mapplayer = previous_empty_mapplayer;
     WC3_LuaClose(lua);
 }
 

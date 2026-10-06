@@ -1715,6 +1715,19 @@ static void ApplyMapAbilityMod(mapAbilityOverride_t *override, unitModification_
         if (UnitModificationString(mod) && (slot = MapAbilityOverrideLevel(override, mod->level)))
             slot->targs = (cstring_t)mod->data;
         return;
+    case MAKEFOURCC('N','c','l','1'):
+        if ((mod->type == mod_real || mod->type == mod_unreal) &&
+            (slot = MapAbilityOverrideLevel(override, mod->level)))
+            slot->channel_followthrough = *(float const *)mod->data;
+        return;
+    case MAKEFOURCC('N','c','l','2'):
+        if (mod->type == mod_int && (slot = MapAbilityOverrideLevel(override, mod->level)))
+            slot->channel_target_type = *(uint32_t const *)mod->data;
+        return;
+    case MAKEFOURCC('N','c','l','6'):
+        if (UnitModificationString(mod) && (slot = MapAbilityOverrideLevel(override, mod->level)))
+            slot->channel_order = (cstring_t)mod->data;
+        return;
     case MAKEFOURCC('a','m','c','s'):
     case MAKEFOURCC('a','c','a','s'):
     case MAKEFOURCC('a','d','u','r'):

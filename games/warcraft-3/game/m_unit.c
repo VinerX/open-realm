@@ -564,6 +564,41 @@ cstring_t G_OrderId2String(uint32_t id) {
     return GetClassName(id);
 }
 
+static uint32_t unit_channel_spell_for_order(edict_t const *unit, uint32_t code, cstring_t order) {
+    char const *name = GetClassName(code);
+    ability_t const *spell;
+    abilityLevel_t const *level;
+    if (!code || !G_ActorHasSkill((edict_t *)unit, name) || !G_UnitAbilityLevel(unit, code)) return 0;
+    spell = S_SpellAbilityForCode(code);
+    if (!spell || spell->proc != CAbilityChannel) return 0;
+    level = G_AbilityLevel(code, S_SpellLevel((edict_t *)unit, code));
+    return level->channel_order && !strcmp(level->channel_order, order) ? code : 0;
+}
+
+static uint32_t unit_channel_spell_code_for_order(edict_t const *unit, cstring_t order) {
+    uint32_t code;
+    if (!unit || !order) return 0;
+    if (unit->data.UnitAbilities && unit->data.UnitAbilities->abilList) {
+        PARSE_LIST(unit->data.UnitAbilities->abilList, token, parse_segment) {
+            if (strlen(token) != 4) continue;
+            memcpy(&code, token, sizeof(code));
+            code = unit_channel_spell_for_order(unit, code, order);
+            if (code) return code;
+        }
+    }
+    FOR_LOOP(i, ARRAY_COUNT(unit->abilities.added)) {
+        code = unit->abilities.added[i];
+        code = unit_channel_spell_for_order(unit, code, order);
+        if (code) return code;
+    }
+    FOR_LOOP(i, MAX_HERO_ABILITIES) {
+        code = unit->heroabilities[i].code;
+        code = unit_channel_spell_for_order(unit, code, order);
+        if (code) return code;
+    }
+    return 0;
+}
+
 static uint32_t unit_spell_code_for_order(edict_t const *unit, cstring_t order) {
     if (!unit || !order) return 0;
     ability_t const *ordered = FindAbilityByOrder(order);
@@ -572,6 +607,8 @@ static uint32_t unit_spell_code_for_order(edict_t const *unit, cstring_t order) 
         memcpy(&code, ordered->classname, MIN(sizeof(code), strlen(ordered->classname)));
         if (G_UnitAbilityLevel(unit, code) && S_SpellAbilityForCode(code)) return code;
     }
+    uint32_t const channel_code = unit_channel_spell_code_for_order(unit, order);
+    if (channel_code) return channel_code;
     FOR_LOOP(i, sizeof(unit_order_defs) / sizeof(unit_order_defs[0])) {
         uint32_t const code = unit_order_defs[i].ability;
         uint32_t const level = code ? G_UnitAbilityLevel(unit, code) : 0;

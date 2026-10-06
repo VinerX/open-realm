@@ -478,6 +478,7 @@ typedef enum {
 } abilityNumber_t;
 uint32_t S_SpellCurrentCode(edict_t *clent, uint32_t fallback);
 ability_t const *S_SpellAbilityForCode(uint32_t code);
+spellTargetType_t S_SpellTargetType(uint32_t code, uint32_t level);
 uint32_t S_SpellLevel(edict_t *caster, uint32_t code);
 float S_SpellNumber(uint32_t code, abilityNumber_t field, uint32_t level);
 cstring_t S_SpellString(uint32_t code, cstring_t field, uint32_t level);

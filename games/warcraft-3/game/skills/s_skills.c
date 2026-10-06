@@ -53,7 +53,7 @@ static ability_t abilitylist[] = {
     { "ANpa", CAbilityParasiteCampaign, AB_SPELL, SPELL_TARGET_UNIT },  /* Parasite */
     { "Acny", CAbilityCyclone, AB_SPELL, SPELL_TARGET_UNIT },  /* Cyclone (naga; code=Acyc) */
     { "Ahnl", CAbilitySummoningRitual, AB_SPELL },  /* Summoning Ritual */
-    { "ANcl", CAbilityChannel, AB_COMMAND },  /* Channel */
+    { "ANcl", CAbilityChannel, AB_SPELL | AB_CHANNEL, SPELL_TARGET_NONE },  /* Channel */
     { "Arsq", CAbilitySummonQuilbeastCampaign, AB_SPELL },  /* Summon Quilbeast */
     { "Arsg", CAbilitySummonMisha, AB_SPELL },  /* Summon Misha */
     { "Arsp", CAbilityStampedeCampaign, AB_SPELL, SPELL_TARGET_POINT },  /* Stampede */

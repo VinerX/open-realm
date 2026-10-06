@@ -112,6 +112,15 @@ ability_t const *S_SpellAbilityForCode(uint32_t code) {
     return ability && (ability->flags & AB_SPELL) && ability->proc ? ability : NULL;
 }
 
+spellTargetType_t S_SpellTargetType(uint32_t code, uint32_t level) {
+    ability_t const *ability = S_SpellAbilityForCode(code);
+    if (ability && ability->proc == CAbilityChannel) {
+        uint32_t target_type = G_AbilityLevel(code, level)->channel_target_type;
+        if (target_type <= SPELL_TARGET_UNIT_OR_POINT) return (spellTargetType_t)target_type;
+    }
+    return ability ? ability->target_type : SPELL_TARGET_NONE;
+}
+
 uint32_t S_SpellLevel(edict_t *caster, uint32_t code) {
     if (!caster) {
         return 1;
@@ -639,9 +648,38 @@ static void spell_publish_effect(edict_t *caster, uint32_t code, spellTarget_t t
     gameEventPointParams_t params = MAKE(gameEventPointParams_t, .edict = caster,
                                          .source = source, .value = (int32_t)code, .point = point);
 
+    ability_t const *ability = S_SpellAbilityForCode(code);
+    if (ability && ability->proc == CAbilityChannel) {
+        params.type = EVENT_PLAYER_UNIT_SPELL_CAST;
+        G_PublishEventWithPoint(&params);
+        params.type = EVENT_UNIT_SPELL_CAST;
+        G_PublishEventWithPoint(&params);
+    }
     params.type = EVENT_PLAYER_UNIT_SPELL_EFFECT;
     G_PublishEventWithPoint(&params);
     params.type = EVENT_UNIT_SPELL_EFFECT;
+    G_PublishEventWithPoint(&params);
+}
+
+static void spell_publish_channel_finish(edict_t *caster, uint32_t code, uint32_t level, spellTarget_t target) {
+    ability_t const *ability = S_SpellAbilityForCode(code);
+    if (!ability || ability->proc != CAbilityChannel) return;
+    edict_t *source = target.type == SPELL_TARGET_UNIT ? target.entity : NULL;
+    vec2_t const *point = target.type == SPELL_TARGET_POINT ? &target.point : NULL;
+    gameEventPointParams_t params = MAKE(gameEventPointParams_t, .edict = caster,
+                                         .source = source, .value = (int32_t)code, .point = point);
+    bool const finish_first = G_AbilityLevel(code, level)->channel_followthrough <= 0.0f;
+    EVENTTYPE first_player = finish_first ? EVENT_PLAYER_UNIT_SPELL_FINISH : EVENT_PLAYER_UNIT_SPELL_ENDCAST;
+    EVENTTYPE first_unit = finish_first ? EVENT_UNIT_SPELL_FINISH : EVENT_UNIT_SPELL_ENDCAST;
+    EVENTTYPE second_player = finish_first ? EVENT_PLAYER_UNIT_SPELL_ENDCAST : EVENT_PLAYER_UNIT_SPELL_FINISH;
+    EVENTTYPE second_unit = finish_first ? EVENT_UNIT_SPELL_ENDCAST : EVENT_UNIT_SPELL_FINISH;
+    params.type = first_player;
+    G_PublishEventWithPoint(&params);
+    params.type = first_unit;
+    G_PublishEventWithPoint(&params);
+    params.type = second_player;
+    G_PublishEventWithPoint(&params);
+    params.type = second_unit;
     G_PublishEventWithPoint(&params);
 }
 
@@ -687,13 +725,14 @@ void S_SpellUnitTargetApproachThink(edict_t *thinker) {
     ability_t const *spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
     edict_t *source_item = thinker ? thinker->spell_item : NULL;
-    uint32_t level;
+    uint32_t level = S_SpellLevel(caster, code);
     float range;
     spellTarget_t st;
 
     if (!caster || !caster->inuse || M_IsDead(caster) || !target || !spell ||
         !spell_item_source_valid(caster, source_item, thinker->spell_item_spawn_time) ||
-        (spell->target_type != SPELL_TARGET_UNIT && spell->target_type != SPELL_TARGET_UNIT_OR_POINT)) {
+        (S_SpellTargetType(code, level) != SPELL_TARGET_UNIT &&
+         S_SpellTargetType(code, level) != SPELL_TARGET_UNIT_OR_POINT)) {
         G_FreeEdict(thinker);
         return;
     }
@@ -703,7 +742,6 @@ void S_SpellUnitTargetApproachThink(edict_t *thinker) {
         G_FreeEdict(thinker);
         return;
     }
-    level = S_SpellLevel(caster, code);
     range = S_SpellRange(code, level);
     st = MAKE(spellTarget_t, .type = SPELL_TARGET_UNIT, .entity = target);
 
@@ -836,6 +874,7 @@ static void spell_no_target_execute(edict_t *clent) {
     spell_publish_effect(caster, code, st);
     if (spell_message(caster, A_EXECUTE, &item, &st) && source_item)
         G_CompleteItemUse(caster, source_item);
+    spell_publish_channel_finish(caster, code, level, st);
 }
 
 bool S_CastNoTargetSpell(edict_t *caster, uint32_t code) {
@@ -846,8 +885,8 @@ bool S_CastNoTargetSpell(edict_t *caster, uint32_t code) {
     if (!caster || !code || !G_UnitAbilityLevel(caster, code) || S_UnitPolymorphed(caster)) return false;
     spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
-    if (!spell || spell->target_type != SPELL_TARGET_NONE || !S_AbilityHasCommand(spell)) return false;
     level = S_SpellLevel(caster, code);
+    if (!spell || S_SpellTargetType(code, level) != SPELL_TARGET_NONE || !S_AbilityHasCommand(spell)) return false;
     if (!spell_validate(NULL, caster, code, level, NULL, 0)) return false;
     if (!spell_message(caster, A_VALIDATE, &item, &target)) return false;
 
@@ -855,6 +894,7 @@ bool S_CastNoTargetSpell(edict_t *caster, uint32_t code) {
     if (spell->flags & AB_CHANNEL) spell_begin_channel(caster, code);
     spell_publish_effect(caster, code, target);
     spell_message(caster, A_EXECUTE, &item, &target);
+    spell_publish_channel_finish(caster, code, level, target);
     return true;
 }
 
@@ -867,10 +907,10 @@ bool S_CastPointTargetSpell(edict_t *caster, uint32_t code, vec2_t const *point)
     if (!caster || !point || !code || !G_UnitAbilityLevel(caster, code) || S_UnitPolymorphed(caster)) return false;
     spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
-    if (!spell || (spell->target_type != SPELL_TARGET_POINT &&
-                   spell->target_type != SPELL_TARGET_UNIT_OR_POINT) ||
-        !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
     level = S_SpellLevel(caster, code);
+    if (!spell || (S_SpellTargetType(code, level) != SPELL_TARGET_POINT &&
+                   S_SpellTargetType(code, level) != SPELL_TARGET_UNIT_OR_POINT) ||
+        !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
     range = S_SpellRange(code, level);
     spellPointValidateParams_t val = MAKE(spellPointValidateParams_t,
                                           .caster = caster, .code = code, .level = level,
@@ -898,9 +938,9 @@ bool S_CastUnitTargetSpell(edict_t *caster, uint32_t code, edict_t *unit) {
     spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
     if (!spell) return false;
-    if (spell->target_type != SPELL_TARGET_UNIT) return false;
-    if (!S_AbilityHasCommand(spell)) return false;
     level = S_SpellLevel(caster, code);
+    if (S_SpellTargetType(code, level) != SPELL_TARGET_UNIT) return false;
+    if (!S_AbilityHasCommand(spell)) return false;
     if (!spell_validate(NULL, caster, code, level, unit, S_SpellRange(code, level))) return false;
     if (!S_SpellAllowsTarget(code, caster, unit)) return false;
     if (!spell_message(caster, A_VALIDATE, &item, &target)) return false;
@@ -921,10 +961,10 @@ bool S_IssueUnitTargetSpell(edict_t *caster, uint32_t code, edict_t *unit) {
     if (!caster || !unit || !code || !G_UnitAbilityLevel(caster, code) || S_UnitPolymorphed(caster)) return false;
     spell = S_SpellAbilityForCode(code);
     abilityitem_t item = { .code = code, .ability = spell };
-    if (!spell || (spell->target_type != SPELL_TARGET_UNIT &&
-                   spell->target_type != SPELL_TARGET_UNIT_OR_POINT) ||
-        !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
     level = S_SpellLevel(caster, code);
+    if (!spell || (S_SpellTargetType(code, level) != SPELL_TARGET_UNIT &&
+                   S_SpellTargetType(code, level) != SPELL_TARGET_UNIT_OR_POINT) ||
+        !S_AbilityHasCommand(spell) || (spell->flags & AB_TOGGLE)) return false;
     range = S_SpellRange(code, level);
     if (!spell_validate(NULL, caster, code, level, unit, 0.0f) ||
         !S_SpellAllowsTarget(code, caster, unit)) return false;
@@ -963,7 +1003,7 @@ void spell_cmd(edict_t *clent) {
     }
 
 
-    switch (spell->target_type) {
+    switch (S_SpellTargetType(code, S_SpellLevel(caster, code))) {
     case SPELL_TARGET_NONE:
         spell_no_target_execute(clent);
         break;

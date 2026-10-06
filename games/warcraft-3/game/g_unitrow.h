@@ -278,7 +278,9 @@ typedef struct {
     float cast, dur, heroDur, cool, cost, area, range;
     abilityDataValue_t data[9];
     uint32_t unitID;
-    cstring_t buffID, efctID;
+    cstring_t buffID, efctID, channel_order;
+    float channel_followthrough;
+    uint32_t channel_target_type;
 } abilityLevel_t;
 
 typedef struct {

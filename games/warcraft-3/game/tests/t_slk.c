@@ -311,17 +311,22 @@ TEST(wc3_slk, map_w3a_custom_rawcode_inherits_mechanics_and_authored_level) {
     uint32_t const id = MAKEFOURCC('A','0','0','Y'), parent = MAKEFOURCC('A','O','c','l');
     float damage = 300.0f, parent_damage = 125.0f, reduction = 0.0f, area = 600.0f;
     uint32_t bounces = 12;
+    uint32_t channel_target = SPELL_TARGET_POINT;
+    float channel_followthrough = 0.3f;
     unitModification_t mods[] = {
         { .modID = MAKEFOURCC('O','c','l','1'), .type = mod_unreal, .level = 5, .dataPointer = 1, .data = &damage },
         { .modID = MAKEFOURCC('O','c','l','2'), .type = mod_int, .level = 5, .dataPointer = 2, .data = &bounces },
         { .modID = MAKEFOURCC('O','c','l','3'), .type = mod_unreal, .level = 5, .dataPointer = 3, .data = &reduction },
         { .modID = MAKEFOURCC('a','a','r','e'), .type = mod_unreal, .level = 5, .data = &area },
+        { .modID = MAKEFOURCC('N','c','l','2'), .type = mod_int, .level = 1, .data = &channel_target },
+        { .modID = MAKEFOURCC('N','c','l','1'), .type = mod_unreal, .level = 1, .data = &channel_followthrough },
+        { .modID = MAKEFOURCC('N','c','l','6'), .type = mod_string, .level = 1, .data = "vengeance" },
     };
     unitModification_t parent_mod = {
         .modID = MAKEFOURCC('O','c','l','1'), .type = mod_unreal, .level = 3, .dataPointer = 1, .data = &parent_damage
     };
     unitData_t originals[] = {
-        { .originalUnitID = id, .numbeOfModifications = 4, .modifications = mods },
+        { .originalUnitID = id, .numbeOfModifications = sizeof(mods) / sizeof(mods[0]), .modifications = mods },
         { .originalUnitID = parent, .numbeOfModifications = 1, .modifications = &parent_mod },
     };
     mapInfo_t mapinfo = { .num_originalAbilities = 2, .originalAbilities = originals };
@@ -344,6 +349,9 @@ TEST(wc3_slk, map_w3a_custom_rawcode_inherits_mechanics_and_authored_level) {
     T_FEQ(G_AbilityLevel(id, 5)->area, area, 0.001f);
     T_FEQ(G_AbilityLevel(id, 5)->range, 800.0f, 0.001f);
     T_STREQ(G_AbilityLevel(id, 5)->targs, "air,ground,enemy");
+    T_EQ(G_AbilityLevel(id, 1)->channel_target_type, channel_target);
+    T_FEQ(G_AbilityLevel(id, 1)->channel_followthrough, channel_followthrough, 0.001f);
+    T_STREQ(G_AbilityLevel(id, 1)->channel_order, "vengeance");
     T_FEQ(G_AbilityLevel(id, 1)->data[0].number, 85.0f, 0.001f);
     T_FEQ(G_AbilityLevel(id, 3)->data[0].number, parent_damage, 0.001f);
     item = S_AbilityItem(id);
@@ -1036,6 +1044,56 @@ TEST(wc3_slk, map_item_data_overrides_stock_fields_and_custom_inheritance) {
     T_EQ(G_ItemData(base_id)->stockRegen, saved_stock_regen);
     T_EQ(G_ItemData(base_id)->stockStart, saved_stock_start);
     T_EQ(G_ItemData(base_id)->goldcost, saved_gold);
+}
+
+TEST(wc3_slk, map_channel_custom_order_casts_through_shared_spell_pipeline) {
+    static const char ability_slk[] =
+        "ID;PWXL;N;EBB;Y2;X3\n"
+        "C;Y1;X1;K\"alias\"\nC;Y1;X2;K\"code\"\nC;Y1;X3;K\"levels\"\n"
+        "C;Y2;X1;K\"ANcl\"\nC;Y2;X2;K\"ANcl\"\nC;Y2;X3;K\"1\"\nE\n";
+    uint32_t const base = MAKEFOURCC('A','N','c','l');
+    uint32_t const code = MAKEFOURCC('A','0','C','1');
+    uint32_t target_type = SPELL_TARGET_NONE;
+    float followthrough = 0.0f;
+    unitModification_t mods[] = {
+        { .modID = MAKEFOURCC('N','c','l','1'), .type = mod_unreal, .level = 1, .data = &followthrough },
+        { .modID = MAKEFOURCC('N','c','l','2'), .type = mod_int, .level = 1, .data = &target_type },
+        { .modID = MAKEFOURCC('N','c','l','6'), .type = mod_string, .level = 1, .data = "vengeance" },
+    };
+    unitData_t custom = {
+        .originalUnitID = base, .newUnitID = code,
+        .numbeOfModifications = sizeof(mods) / sizeof(mods[0]), .modifications = mods
+    };
+    mapInfo_t mapinfo = { .num_userCreatedAbilities = 1, .userCreatedAbilities = &custom };
+    UnitAbilities_t unit_abilities = { .abilList = "A0C1" };
+    slkTestData_t *rows = parse_slk_string(ability_slk);
+    slkTestData_t *old;
+    edict_t *unit, *order_unit;
+
+    setup_test_world();
+    old = G_SetSLKRows("AbilityData", rows);
+    G_SetMapAbilityOverrides(&mapinfo);
+    unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    unit->data.UnitAbilities = &unit_abilities;
+    unit->svflags |= SVF_MONSTER;
+    unit->health.value = unit->health.max_value = 100.0f;
+
+    T_EQ(G_AbilityCode(code), base);
+    T_ASSERT(S_AbilityItem(code).ability && S_AbilityItem(code).ability->proc == CAbilityChannel);
+    T_EQ(S_SpellTargetType(code, 1), SPELL_TARGET_NONE);
+    T_ASSERT(G_ActorHasSkill(unit, "A0C1"));
+    T_EQ(G_UnitAbilityLevel(unit, code), 1);
+    T_STREQ(G_AbilityLevel(code, 1)->channel_order, "vengeance");
+    T_ASSERT(S_CastNoTargetSpell(unit, code));
+    order_unit = alloc_test_unit(MAKEFOURCC('h','f','o','o'), 0, 0);
+    order_unit->data.UnitAbilities = &unit_abilities;
+    order_unit->svflags |= SVF_MONSTER;
+    order_unit->health.value = order_unit->health.max_value = 100.0f;
+    T_ASSERT(unit_issueimmediateorder(order_unit, "vengeance"));
+
+    G_SetMapAbilityOverrides(NULL);
+    G_SetSLKRows("AbilityData", old);
+    free_slk_rows(rows);
 }
 
 TEST(wc3_slk, map_custom_unit_ui_overrides_model_and_scale) {
