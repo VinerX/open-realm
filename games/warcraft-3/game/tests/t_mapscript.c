@@ -431,6 +431,30 @@ TEST(wc3_mapscript, lua_player_controller_reads_shared_state) {
     WC3_LuaClose(lua);
 }
 
+TEST(wc3_mapscript, lua_player_controller_respects_lobby_computer_slot) {
+    player_t *player = G_GetPlayerByNumber(0);
+    gameClient_t *client = PLAYER_CLIENT(player);
+    mapPlayer_t const *previous_mapplayer = client->mapplayer;
+    uint32_t previous_controller = client->jass.controller;
+    mapPlayer_t lobby_player = { .used = true, .playerType = kPlayerTypeComputer, .lobbyControllerLocked = true };
+    wc3Lua_t *lua = WC3_LuaNewState();
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    client->mapplayer = &lobby_player;
+    client->jass.controller = 1;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunLobbyControllerTest()\n"
+        "SetPlayerController(Player(0), ConvertMapControl(0))\n"
+        "assert(GetPlayerController(Player(0)) == 1)\n"
+        "end\n",
+        "player-lobby-controller-test.lua"));
+    T_ASSERT(WC3_LuaCall(lua, "RunLobbyControllerTest"));
+    client->mapplayer = previous_mapplayer;
+    client->jass.controller = previous_controller;
+    WC3_LuaClose(lua);
+}
+
 TEST(wc3_mapscript, lua_player_slot_state_reads_shared_state) {
     player_t *player = G_GetPlayerByNumber(0);
     gameClient_t *client = PLAYER_CLIENT(player);

@@ -86,6 +86,7 @@ typedef struct mapPlayer_s {
     uint32_t enemyLowPrioritiesFlags; // 1.32+
     uint32_t enemyHighPrioritiesFlags; // 1.32+
     uint32_t color; // runtime only; war3map.w3i records are parsed field-by-field above
+    bool lobbyControllerLocked; // runtime only; an active lobby owns human/computer control selection
 } mapPlayer_t;
 
 typedef struct {

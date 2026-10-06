@@ -80,7 +80,7 @@ uint32_t SetPlayerRaceSelectable(jass_t *j) {
 uint32_t SetPlayerController(jass_t *j) {
     player_t *player = jass_checkhandle(j, 1, "player");
     uint32_t *control = jass_checkhandle(j, 2, "mapcontrol");
-    if (player && control) PLAYER_CLIENT(player)->jass.controller = *control;
+    if (player && control) G_SetPlayerController(player, *control);
     return 0;
 }
 uint32_t SetPlayerName(jass_t *j) {

@@ -354,6 +354,35 @@ void SV_LobbySetConfig(uint32_t speed, uint32_t slots, cstring_t map_name) {
     svs.lobby.revision++;
 }
 
+void SV_LobbySetLocalComputerCount(uint32_t computer_count) {
+    lobbySlot_t *slot;
+
+    if (!svs.lobby.active) {
+        return;
+    }
+    computer_count = MIN(computer_count, MAX_PLAYERS - 1);
+    SV_LobbySetConfig(2, computer_count + 1, SV_LobbyBaseName(svs.lobby.map_path));
+    memset(svs.lobby.slots, 0, sizeof(svs.lobby.slots));
+    FOR_LOOP(i, computer_count + 1) {
+        slot = &svs.lobby.slots[i];
+        slot->visible = true;
+        slot->client = MAX_CLIENTS;
+        slot->map_player = i;
+        slot->type = i == 0 ? LOBBY_SLOT_HUMAN : LOBBY_SLOT_COMPUTER;
+        slot->race = kPlayerRaceHuman;
+        slot->team = i == 0 ? 0 : 1;
+        slot->color = i;
+        if (i == 0) {
+            snprintf(slot->name, sizeof(slot->name), "Player");
+        } else {
+            snprintf(slot->name, sizeof(slot->name), "Computer%u", (unsigned)i);
+        }
+    }
+    SV_LobbyAssignClient(0, true);
+    svs.lobby.revision++;
+    SV_LobbyBroadcastSetup();
+}
+
 void SV_LobbySetSlot(uint32_t slotnum, lobbySlot_t const *config) {
     lobbySlot_t old;
     lobbySlot_t *slot;
@@ -414,6 +443,7 @@ void SV_ApplyLobbySettings(mapInfo_t *info) {
             info->players[i].playerType != kPlayerTypeNeutral &&
             info->players[i].playerType != kPlayerTypeRescuable) {
             info->players[i].playerType = kPlayerTypeNone;
+            info->players[i].lobbyControllerLocked = false;
             SV_LobbyClearPlayerTeams(info, i);
         }
     }
@@ -444,6 +474,7 @@ void SV_ApplyLobbySettings(mapInfo_t *info) {
                 (unsigned)slot->color,
                 slot->name);
         player->playerType = type;
+        player->lobbyControllerLocked = type == kPlayerTypeHuman || type == kPlayerTypeComputer;
         player->playerRace = slot->race;
         player->color = slot->color % MAX_CLIENTS;
         if (slot->name[0]) {

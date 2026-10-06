@@ -7,6 +7,7 @@ void SV_Init(void);
 void SV_Frame(uint32_t msec);
 void SV_InitGameProgs(void);
 void SV_Map(cstring_t mapFilename);
+void SV_LobbySetLocalComputerCount(uint32_t computer_count);
 bool SV_GetSaveMap(cstring_t name, string_t map, uint32_t map_size);
 bool SV_IsActive(void);
 bool SV_IsLoading(void);

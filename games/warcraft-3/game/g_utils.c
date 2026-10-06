@@ -750,6 +750,16 @@ uint32_t G_GetPlayerController(player_t const *player) {
     return player ? PLAYER_CLIENT(player)->jass.controller : 5;
 }
 
+bool G_SetPlayerController(player_t *player, uint32_t controller) {
+    gameClient_t *client;
+
+    if (!player) return false;
+    client = PLAYER_CLIENT(player);
+    if (client->mapplayer && client->mapplayer->lobbyControllerLocked) return false;
+    client->jass.controller = controller;
+    return true;
+}
+
 uint32_t G_GetPlayerSlotState(player_t const *player) {
     gameClient_t *client = player ? PLAYER_CLIENT(player) : NULL;
     if (client && client->jass.removed) return 2;

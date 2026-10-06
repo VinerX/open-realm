@@ -1,7 +1,28 @@
 # SDD ledger — plan: docs/superpowers/plans/2026-10-06-legion-startup-parity.md
 
-Task 1: in progress
+Task 1: implemented; pending rebuild in a toolchain-complete shell
 - Baseline evidence: `wc3-parity/artifacts/legion-ui03/visual/stderr.log` shows local map load progressing at 0% through 62 seconds, map registration from ~66 to ~107 seconds, followed by `CL_Disconnect: Connection to host timed out.`
 - Root cause: `CL_TIMEOUT_MSEC` is 10000; `CL_CheckTimeout()` only consults packet time. `CL_LoadingFrame()` services the in-process listen server once per load step but does not signal its liveness to the timeout check.
 - Full-map observer also recorded 24 playing slots and multiboard errors from an older binary (`10ecaa24...`). Slot fix exists in baseline commit `55cd3a44`; rerun with current binary before deciding if this remains a defect.
 - Current user-mode map and race preference question is pending asynchronously; proceed with one standard race and several authored computer slots meanwhile.
+- Code adds a bounded local-load grace period (30 seconds after last loading/render-registration frame); dedicated/remote sessions retain the 10-second packet timeout. Regression tests cover loading vs active state and local-render registration.
+- Visual confirmation: full map run `legionui09` completed at exit 0 with 2 actual framebuffer screenshots and no timeout. Current rendered OpenRealm binary SHA-256 is `4b88334ac3c5b2f603d341e557abdfcb7c4fda08dbb106b94cbe99340736b4fb`.
+- Tooling `run_legion_probe.py --visual` now selects a visible local client (`dedicated=0`, `vid_hidden=0`); focused Python tests pass. Current toolchain shell lacks `gcc`, so a fresh native build could not be rerun after removing the temporary diagnostic print.
+
+Task 2: root cause narrowed; full interactive path still in progress
+- Direct `+map` starts only local human slot 0; slots 1–23 report `PLAYER_SLOT_STATE_EMPTY`, so Legion's own `aiStart()` has no computer players to process.
+- Running via the OpenRealm lobby with slot 0 human and all map-authored playable slots computer applies correctly before `G_LoadMap`: live observer sees players 0–15 `PLAYING` (1–15 are computers), while 16–23 are unused in the map. This is the correct route for AI parity.
+- Lobby-to-map run initialized Lua and sent `begin`, but the post-load console script did not resume; run timed out before screenshot/button actions. Investigate the deferred console/client first-snapshot path or add a supported startup-lobby option before relying on this runner.
+- `A0HL` direct button probe did emit CAST/EFFECT/FINISH/ENDCAST on the normal direct-start run; its gameplay outcome is not yet verified.
+- Visual screenshot shows the race-selection panel and authored icons, with layout cut off at 1080px. Native app automation reports no desktop applications, so current proof is via OpenRealm's own screenshot command.
+
+Task 2 update — offline lobby seeding and live race-selection run
+- Added the explicit `sv_local_computers` startup option. It seeds one local human plus a bounded number of computer lobby slots before the normal early `+map` path; OpenRealm was rebuilt successfully with the UCRT64 GCC toolchain.
+- Live rendered run `wc3-parity/artifacts/legionui12/openrealm` completed with exit 0. Server logs confirm map-authored player slots 0–15 were configured (slot 0 human, 1–15 computer); Legion Lua reports 16 playing slots after selection. Slots 16–23 remain empty because the map does not author them.
+- The normal ability sequence is `A0UK` then `A0HL`: both emitted CAST/EFFECT/FINISH/ENDCAST; `A0HL` created six Night Elf wisps for player 0. The counter `udg_PlayersCount` reached 16.
+- Root cause for the earlier false controller snapshot: Legion's standard `92_map_setup.lua` calls `SetPlayerController(..., MAP_CONTROL_USER)` for all 24 players after OpenRealm applies the lobby. Added a runtime-only lobby ownership flag to map players and routed both JASS/Lua setters through `G_SetPlayerController`, preserving an active lobby's human/computer choice while leaving no-lobby maps unchanged.
+- Fresh live run `wc3-parity/artifacts/legionui22/openrealm` used binary SHA-256 `09e2c811cfd78bddcec16bd70e12c43ef8002b9c0c4aaec44cc6b87dbf34759c`. At t15, all players 1–15 report `GetPlayerController=1`, `udg_AiControl=true`, and 9 units (players 3 and 5 have 12); the lobby timer is 0 and player count is 16. At t20 those counts remain stable. Final screenshot `shot0003.jpg` shows the income timer and player-color minimap markers, confirming transition into the match with initialized computer armies.
+- Screenshots under `wc3-parity/artifacts/legionui12/openrealm/screenshots/` show the selection screen, but large UI/world areas are black. Stderr identifies unsupported `BlzFrame*` natives used by the map, including `BlzCreateFrame`, `BlzFrameSetPoint`, and `BlzFrameSetTexture`; this is a concrete UI parity gap.
+- Visual runner now uses `+set com_frame_limit 0` for rendered probes and waits three rendered frames after the final screenshot request; headless probes keep the 1000-frame cap. The cap had truncated older long-wait captures around t55.
+- Major regions of the final match screenshot remain black; logs identify unsupported map-used `BlzFrame*` natives as an independent interface gap. Race selection and lobby-to-AI startup now have end-to-end OpenRealm evidence, while visual UI parity remains the next implementation target.
+- Python tests pass 5/5 and both engine targets compile. The focused C test host still idles before printing results even for a single named test; live game logs and screenshot are the runtime evidence for controller/AI startup.

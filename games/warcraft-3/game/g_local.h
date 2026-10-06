@@ -2965,6 +2965,7 @@ void G_ForceEnumPlayers(uint32_t *, int32_t, forcePlayerFilter_t, void *);
 uint32_t G_GetGameSpeed(void);
 bool G_PlayerFogEnabled(player_t const *, bool);
 uint32_t G_GetPlayerController(player_t const *);
+bool G_SetPlayerController(player_t *, uint32_t);
 uint32_t G_GetPlayerSlotState(player_t const *);
 bool G_PlayerTreatsPlayerAsAlly(uint32_t, uint32_t);
 

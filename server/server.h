@@ -141,6 +141,7 @@ client_t *SV_FindClientByAddr(netadr_t const *from);
 void SV_DirectConnect(netadr_t const *from, cstring_t userinfo);
 void SV_ConnectionlessPacket(netadr_t const *from, sizeBuf_t *msg);
 void SV_LobbySetConfig(uint32_t speed, uint32_t slots, cstring_t map_name);
+void SV_LobbySetLocalComputerCount(uint32_t computer_count);
 void SV_LobbySetSlot(uint32_t slot, lobbySlot_t const *config);
 void SV_LobbyInit(cstring_t mapFilename);
 void SV_LobbyClientInit(client_t *cl, cstring_t userinfo);

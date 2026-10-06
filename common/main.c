@@ -524,6 +524,10 @@ int main(int argc, string_t argv[]) {
             /* Save-only startup has already prepared its map above; the late load command restores it. */
             if (!SV_IsActive()) {
                 SV_Init();
+                if (Cvar_Integer("sv_local_computers", 0) > 0) {
+                    SV_StartLobby(map);
+                    SV_LobbySetLocalComputerCount((uint32_t)Cvar_Integer("sv_local_computers", 0));
+                }
                 CL_BeginLoadingMap(map);
                 SCR_UpdateScreen(0);
                 SV_Map(map);

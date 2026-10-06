@@ -844,7 +844,9 @@ TEST(server_net, lobby_team_selection_expands_map_forces) {
     T_ASSERT((info.teams[0].playerMasks & (1u << 1)) == 0);
     T_ASSERT((info.teams[3].playerMasks & (1u << 1)) != 0);
     T_EQ(info.players[0].playerRace, kPlayerRaceOrc);
+    T_ASSERT(info.players[0].lobbyControllerLocked);
     T_EQ(info.players[1].playerType, kPlayerTypeComputer);
+    T_ASSERT(info.players[1].lobbyControllerLocked);
     T_EQ(info.players[1].playerRace, kPlayerRaceUndead);
     T_EQ(info.players[1].color, 7);
     T_STREQ(info.players[0].playerName, "Host");
@@ -852,6 +854,45 @@ TEST(server_net, lobby_team_selection_expands_map_forces) {
     SV_Shutdown();
     SAFE_DELETE(info.teams, MemFree);
     test_mapinfo = NULL;
+}
+
+TEST(server_net, local_startup_lobby_assigns_one_human_and_requested_computers) {
+    reset_server_state(MAX_PLAYERS);
+    SV_LobbyInit("Maps\\Melee\\Legion.w3x");
+    svs.num_clients = 1;
+    svs.clients[0].state = cs_connected;
+    SV_LobbyClientInit(&svs.clients[0], "\\name\\Host");
+
+    SV_LobbySetLocalComputerCount(3);
+
+    T_EQ(svs.lobby.slot_count, 4);
+    T_EQ(svs.lobby.slots[0].type, LOBBY_SLOT_HUMAN);
+    T_ASSERT(svs.lobby.slots[0].occupied);
+    T_EQ(svs.lobby.slots[0].client, 0);
+    T_EQ(svs.lobby.slots[0].map_player, 0);
+    T_EQ(svs.clients[0].playernum, 0);
+    FOR_LOOP(i, 3) {
+        lobbySlot_t const *slot = &svs.lobby.slots[i + 1];
+        T_ASSERT(slot->visible);
+        T_ASSERT(!slot->occupied);
+        T_EQ(slot->type, LOBBY_SLOT_COMPUTER);
+        T_EQ(slot->map_player, i + 1);
+        T_EQ(slot->team, 1);
+    }
+    T_ASSERT(!svs.lobby.slots[4].visible);
+}
+
+TEST(server_net, local_startup_lobby_computer_count_is_bounded) {
+    reset_server_state(MAX_PLAYERS);
+    SV_LobbyInit("Legion.w3x");
+    svs.num_clients = 1;
+    svs.clients[0].state = cs_connected;
+    SV_LobbyClientInit(&svs.clients[0], "\\name\\Host");
+
+    SV_LobbySetLocalComputerCount(MAX_PLAYERS + 10);
+
+    T_EQ(svs.lobby.slot_count, MAX_PLAYERS);
+    T_EQ(svs.lobby.slots[MAX_PLAYERS - 1].type, LOBBY_SLOT_COMPUTER);
 }
 
 TEST(server_net, local_map_uses_loopback_without_udp) {

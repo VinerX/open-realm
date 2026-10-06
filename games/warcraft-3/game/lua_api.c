@@ -2485,7 +2485,7 @@ static int LuaSetPlayerController(lua_State *L) {
     player_t *player = lua_touserdata(L, 1);
     uint32_t *controller = lua_touserdata(L, 2);
     uint32_t value = controller ? *controller : (uint32_t)luaL_checkinteger(L, 2);
-    if (player) PLAYER_CLIENT(player)->jass.controller = value;
+    G_SetPlayerController(player, value);
     return 0;
 }
 
