@@ -290,6 +290,70 @@ static int LuaBlzSetUnitArmor(lua_State *L) {
     return 0;
 }
 
+static uint32_t LuaUnitRealFieldId(lua_State *L, int index) {
+    void *field = lua_touserdata(L, index);
+    return field ? (uint32_t)(uintptr_t)field : (uint32_t)luaL_checkinteger(L, index);
+}
+
+static float LuaBlzGetUnitRealFieldValue(edict_t *unit, uint32_t field) {
+    if (!unit) return 0.0f;
+    switch (field) {
+        case MAKEFOURCC('u', 'h', 'p', 'c'): return unit->health.max_value;
+        case MAKEFOURCC('u', 'm', 'p', 'r'):
+            return unit->data.UnitBalance->manaRegen + unit->mana_regen_bonus;
+        case MAKEFOURCC('u', 'f', 'y', 'h'): return unit->unitinfo.FlyHeight;
+        case MAKEFOURCC('u', 'm', 'v', 'r'): return unit->unitinfo.TurnSpeed;
+        case MAKEFOURCC('u', 's', 'c', 'a'): return unit->s.scale;
+        case MAKEFOURCC('u', 's', 'i', 'r'): return unit->runtime.sight_radius.day;
+        default: return 0.0f;
+    }
+}
+
+static bool LuaBlzSetUnitRealFieldValue(edict_t *unit, uint32_t field, float value) {
+    if (!unit) return false;
+    switch (field) {
+        case MAKEFOURCC('u', 'h', 'p', 'c'):
+            unit->health.max_value = value;
+            return true;
+        case MAKEFOURCC('u', 'm', 'p', 'r'):
+            unit->mana_regen_bonus += value -
+                (unit->data.UnitBalance->manaRegen + unit->mana_regen_bonus);
+            return true;
+        case MAKEFOURCC('u', 'f', 'y', 'h'):
+            unit->unitinfo.FlyHeight = value;
+            return true;
+        case MAKEFOURCC('u', 'm', 'v', 'r'):
+            unit->unitinfo.TurnSpeed = value;
+            return true;
+        case MAKEFOURCC('u', 's', 'c', 'a'):
+            unit->s.scale = value;
+            return true;
+        case MAKEFOURCC('u', 's', 'i', 'r'):
+            unit->runtime.sight_radius.day = value;
+            unit->runtime.sight_radius.night = value;
+            return true;
+        default: return false;
+    }
+}
+
+static int LuaBlzGetUnitRealField(lua_State *L) {
+    lua_pushnumber(L, LuaBlzGetUnitRealFieldValue(lua_touserdata(L, 1), LuaUnitRealFieldId(L, 2)));
+    return 1;
+}
+
+static int LuaBlzSetUnitRealField(lua_State *L) {
+    bool set = LuaBlzSetUnitRealFieldValue(lua_touserdata(L, 1), LuaUnitRealFieldId(L, 2),
+                                           (float)luaL_checknumber(L, 3));
+    lua_pushboolean(L, set);
+    return 1;
+}
+
+static int LuaBlzSetUnitRealFieldBJ(lua_State *L) {
+    LuaBlzSetUnitRealFieldValue(lua_touserdata(L, 1), LuaUnitRealFieldId(L, 2),
+                                (float)luaL_checknumber(L, 3));
+    return 0;
+}
+
 static int LuaUnitSetConstructionProgress(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     G_SetConstructionProgress(unit, (int)luaL_checkinteger(L, 2));
@@ -4532,6 +4596,9 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "BlzSetUnitMaxHP", LuaBlzSetUnitMaxHP);
     WC3_LuaRegisterNative(L, "BlzGetUnitArmor", LuaBlzGetUnitArmor);
     WC3_LuaRegisterNative(L, "BlzSetUnitArmor", LuaBlzSetUnitArmor);
+    WC3_LuaRegisterNative(L, "BlzGetUnitRealField", LuaBlzGetUnitRealField);
+    WC3_LuaRegisterNative(L, "BlzSetUnitRealField", LuaBlzSetUnitRealField);
+    WC3_LuaRegisterNative(L, "BlzSetUnitRealFieldBJ", LuaBlzSetUnitRealFieldBJ);
     WC3_LuaRegisterNative(L, "UnitSetConstructionProgress", LuaUnitSetConstructionProgress);
     WC3_LuaRegisterNative(L, "BlzGetUnitAbilityCooldownRemaining", LuaBlzGetUnitAbilityCooldownRemaining);
     WC3_LuaRegisterNative(L, "BlzStartUnitAbilityCooldown", LuaBlzStartUnitAbilityCooldown);
@@ -4890,12 +4957,12 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
         "BlzEnableSelections", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
         "BlzGetUnitBaseDamage",
-        "BlzGetUnitBooleanField", "BlzGetUnitMaxMana", "BlzGetUnitRealField",
+        "BlzGetUnitBooleanField", "BlzGetUnitMaxMana",
         "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
         "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
         "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime",
         "BlzSetUnitBaseDamage", "BlzSetUnitIntegerFieldBJ", "BlzSetUnitMaxMana",
-        "BlzSetUnitName", "BlzSetUnitRealFieldBJ", "BlzSetUnitStringFieldBJ",
+        "BlzSetUnitName", "BlzSetUnitStringFieldBJ",
         "BlzSetUnitWeaponBooleanFieldBJ", "BlzSetUnitWeaponIntegerFieldBJ",
         "BlzUnitCancelTimedLife",
         "BlzUnitDisableAbility", "BlzUnitHideAbility", "BlzUnitInterruptAttack",

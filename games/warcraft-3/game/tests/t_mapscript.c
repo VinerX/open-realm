@@ -1253,6 +1253,32 @@ TEST(wc3_mapscript, blz_unit_armor_reads_and_updates_combat_armor) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, blz_unit_mana_regeneration_field_updates_runtime_rate) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double regen = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunManaRegenFieldTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "BlzSetUnitRealFieldBJ(u, mana_regen_field, 300.0)\n"
+        "return BlzGetUnitRealField(u, mana_regen_field)\n"
+        "end\n",
+        "lua-blz-unit-real-field-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    WC3_LuaRegisterInteger(lua, "mana_regen_field", MAKEFOURCC('u', 'm', 'p', 'r'));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunManaRegenFieldTest", &regen));
+    T_FEQ((float)regen, 300.0f, 0.001f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
