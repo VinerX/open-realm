@@ -1202,6 +1202,32 @@ TEST(wc3_mapscript, lua_set_unit_state_and_rect_center_reuse_shared_helpers) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, blz_unit_max_hp_reads_and_updates_shared_health_state) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double max_hp = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunMaxHpTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "assert(BlzGetUnitMaxHP(u) > 0)\n"
+        "BlzSetUnitMaxHP(u, 900)\n"
+        "return BlzGetUnitMaxHP(u)\n"
+        "end\n",
+        "lua-blz-unit-max-hp-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunMaxHpTest", &max_hp));
+    T_FEQ((float)max_hp, 900.0f, 0.001f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
