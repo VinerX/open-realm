@@ -274,6 +274,22 @@ static int LuaBlzSetUnitMaxHP(lua_State *L) {
     return 0;
 }
 
+static int LuaBlzGetUnitArmor(lua_State *L) {
+    lua_pushnumber(L, G_UnitArmorValue(lua_touserdata(L, 1)));
+    return 1;
+}
+
+static int LuaBlzSetUnitArmor(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    float armor = (float)luaL_checknumber(L, 2);
+    if (unit) {
+        float const delta = armor - G_UnitArmorValue(unit);
+        unit->armor_value += delta;
+        unit->permanent_armor_bonus += delta;
+    }
+    return 0;
+}
+
 static int LuaUnitSetConstructionProgress(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     G_SetConstructionProgress(unit, (int)luaL_checkinteger(L, 2));
@@ -4514,6 +4530,8 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "SetUnitState", LuaSetUnitState);
     WC3_LuaRegisterNative(L, "BlzGetUnitMaxHP", LuaBlzGetUnitMaxHP);
     WC3_LuaRegisterNative(L, "BlzSetUnitMaxHP", LuaBlzSetUnitMaxHP);
+    WC3_LuaRegisterNative(L, "BlzGetUnitArmor", LuaBlzGetUnitArmor);
+    WC3_LuaRegisterNative(L, "BlzSetUnitArmor", LuaBlzSetUnitArmor);
     WC3_LuaRegisterNative(L, "UnitSetConstructionProgress", LuaUnitSetConstructionProgress);
     WC3_LuaRegisterNative(L, "BlzGetUnitAbilityCooldownRemaining", LuaBlzGetUnitAbilityCooldownRemaining);
     WC3_LuaRegisterNative(L, "BlzStartUnitAbilityCooldown", LuaBlzStartUnitAbilityCooldown);
@@ -4871,11 +4889,11 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
         "BlzFrameClick",
         "BlzEnableSelections", "BlzGetEventAttackType",
         "BlzSetEventDamage", "BlzGetUnitAbilityCooldown",
-        "BlzGetUnitArmor", "BlzGetUnitBaseDamage",
+        "BlzGetUnitBaseDamage",
         "BlzGetUnitBooleanField", "BlzGetUnitMaxMana", "BlzGetUnitRealField",
         "BlzGetUnitStringField", "BlzGetUnitWeaponBooleanField", "BlzGetUnitWeaponIntegerField",
         "BlzPlaySpecialEffect", "BlzSetSpecialEffectColor",
-        "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime", "BlzSetUnitArmor",
+        "BlzSetSpecialEffectScale", "BlzSetSpecialEffectTime",
         "BlzSetUnitBaseDamage", "BlzSetUnitIntegerFieldBJ", "BlzSetUnitMaxMana",
         "BlzSetUnitName", "BlzSetUnitRealFieldBJ", "BlzSetUnitStringFieldBJ",
         "BlzSetUnitWeaponBooleanFieldBJ", "BlzSetUnitWeaponIntegerFieldBJ",

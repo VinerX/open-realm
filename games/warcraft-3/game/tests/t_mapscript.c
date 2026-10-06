@@ -1228,6 +1228,31 @@ TEST(wc3_mapscript, blz_unit_max_hp_reads_and_updates_shared_health_state) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, blz_unit_armor_reads_and_updates_combat_armor) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua = WC3_LuaNewState();
+    double armor = 0.0;
+
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    reset_entities();
+    setup_test_world();
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunArmorTest()\n"
+        "local u = BlzCreateUnitWithSkin(Player(0), unit_id, 32.0, 32.0, 0.0, unit_id)\n"
+        "BlzSetUnitArmor(u, 30.0)\n"
+        "return BlzGetUnitArmor(u)\n"
+        "end\n",
+        "lua-blz-unit-armor-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('H', 'p', 'a', 'l'));
+    T_ASSERT(WC3_LuaCallNumber(lua, "RunArmorTest", &armor));
+    T_FEQ((float)armor, 30.0f, 0.001f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 static bool mapscript_pack_mpq(cstring_t path, cstring_t member, cstring_t text) {
     handle_t archive = NULL;
 
