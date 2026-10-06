@@ -3809,7 +3809,13 @@ static int LuaBlzFrameClearAllPoints(lua_State *L) {
 
 static int LuaBlzFrameSetTexture(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
-    if (frame) UI_SetTexture(frame, luaL_checkstring(L, 2), lua_toboolean(L, 4) != 0);
+    if (frame && frame->Type == FT_BACKDROP) {
+        frame->Backdrop.Background = UI_LoadTexture(luaL_checkstring(L, 2), false);
+        frame->Backdrop.BlendAll = lua_toboolean(L, 4) != 0;
+    } else if (frame) {
+        UI_SetTexture(frame, luaL_checkstring(L, 2), false);
+        if (lua_toboolean(L, 4)) frame->AlphaMode = BLEND_MODE_BLEND;
+    }
     LuaInvalidateFrame(frame);
     return 0;
 }

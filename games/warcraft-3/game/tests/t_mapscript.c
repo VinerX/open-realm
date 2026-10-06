@@ -35,6 +35,48 @@ static cstring_t const kMinimalMapScript =
 
 static void mapscript_ignore_error(cstring_t message) { (void)message; }
 
+static int mapscript_test_image_index(cstring_t path) {
+    return path && *path ? 37 : 0;
+}
+
+TEST(wc3_mapscript, blz_frame_set_texture_sets_backdrop_art) {
+    wc3Lua_t *lua = WC3_LuaNewState();
+    frameDef_t *frame = NULL;
+    frameDef_t saved = {0};
+    int (*old_image_index)(cstring_t) = gi.ImageIndex;
+
+    FOR_LOOP(i, MAX_UI_CLASSES) {
+        if (i && !frames[i].inuse) {
+            frame = frames + i;
+            saved = *frame;
+            break;
+        }
+    }
+    if (frame) frame = UI_Spawn(FT_BACKDROP, NULL);
+
+    T_NOT_NULL(lua);
+    T_NOT_NULL(frame);
+    if (!lua || !frame) {
+        if (lua) WC3_LuaClose(lua);
+        gi.ImageIndex = old_image_index;
+        return;
+    }
+    snprintf(frame->Name, sizeof(frame->Name), "LuaFrameBackdropTextureTest");
+    gi.ImageIndex = mapscript_test_image_index;
+    G_RegisterLuaMapRuntimeNatives(lua);
+    T_ASSERT(WC3_LuaLoadBuffer(lua,
+        "local frame = BlzGetFrameByName('LuaFrameBackdropTextureTest', 0)\n"
+        "BlzFrameSetTexture(frame, 'UI\\\\CommandCard.dds', 0, true)\n",
+        "blz-frame-backdrop-texture.lua"));
+    T_EQ(frame->Backdrop.Background, 37);
+    T_ASSERT(frame->Backdrop.BlendAll);
+    T_EQ(frame->Texture.Image, 0);
+
+    *frame = saved;
+    gi.ImageIndex = old_image_index;
+    WC3_LuaClose(lua);
+}
+
 TEST(wc3_mapscript, blz_frame_native_updates_named_hud_frame) {
     wc3Lua_t *lua = WC3_LuaNewState();
     frameDef_t *frame = NULL;
