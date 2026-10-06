@@ -1478,7 +1478,8 @@ void G_RefreshResourceBar(edict_t *ent) {
     lumber_rate = (int32_t)ps->stats[PLAYERSTATE_LUMBER_UPKEEP_RATE];
 
     if (ent->client->quest_until <= level.time) ent->client->quest_until = 0;
-    if (ent->client->quest_until == ent->client->resourcebar.quest_until &&
+    if (!ent->client->resourcebar.dirty &&
+        ent->client->quest_until == ent->client->resourcebar.quest_until &&
         ent->client->canvas == ent->client->resourcebar.canvas &&
         gold        == ent->client->resourcebar.gold        &&
         lumber      == ent->client->resourcebar.lumber      &&
@@ -1494,6 +1495,7 @@ void G_RefreshResourceBar(edict_t *ent) {
     UI_WriteEnd(ent);
 
     ent->client->resourcebar.quest_until = ent->client->quest_until;
+    ent->client->resourcebar.dirty       = false;
     ent->client->resourcebar.canvas      = ent->client->canvas;
     ent->client->resourcebar.gold        = gold;
     ent->client->resourcebar.lumber      = lumber;
@@ -1501,6 +1503,12 @@ void G_RefreshResourceBar(edict_t *ent) {
     ent->client->resourcebar.food_cap    = food_c;
     ent->client->resourcebar.gold_rate   = gold_rate;
     ent->client->resourcebar.lumber_rate = lumber_rate;
+}
+
+void G_InvalidateConsoleLayout(void) {
+    FOR_LOOP(i, game.max_clients) {
+        if (game.clients[i].connected) game.clients[i].resourcebar.dirty = true;
+    }
 }
 
 /* Reserved player edicts are connected clients, not inuse world units. */

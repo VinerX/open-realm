@@ -601,6 +601,7 @@ struct client_s {
         int32_t gold_rate;
         int32_t lumber_rate;
         uint32_t quest_until;
+        bool dirty;
         UICANVASCLASS canvas; /* class the console chrome was last authored for */
     } resourcebar;
     /* Persistent Hero/idle-worker HUD is rebuilt only after gameplay marks it
@@ -2693,6 +2694,7 @@ void G_RefreshResourceBar(edict_t *);
 void G_AccumulatePlayerFood(gameClient_t *client);
 void G_InitClientUIState(gameClient_t *client);
 void G_UpdateClientResourceBars(void);
+void G_InvalidateConsoleLayout(void);
 bool G_UnitIsIdleWorker(edict_t const *ent);
 bool G_UnitShowsIdleWorkerShortcut(gameClient_t *client, edict_t const *ent);
 bool G_UnitShowsHeroShortcut(gameClient_t *client, edict_t const *ent);

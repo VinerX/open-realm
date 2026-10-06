@@ -3567,6 +3567,10 @@ static frameDef_t *LuaGetFrame(lua_State *L, int index) {
 
 extern frameDef_t *FindFrameTemplate(cstring_t name);
 
+static void LuaInvalidateFrame(frameDef_t *frame) {
+    if (frame) G_InvalidateConsoleLayout();
+}
+
 static frameDef_t *LuaCreateFrame(cstring_t name, frameDef_t *owner, FRAMETYPE type,
                                   cstring_t inherit, lua_Integer context) {
     frameDef_t *frame;
@@ -3588,6 +3592,7 @@ static frameDef_t *LuaCreateFrame(cstring_t name, frameDef_t *owner, FRAMETYPE t
             ((frameDef_t *)tree[i])->createContext = (int32_t)context;
         }
         strlcpy(frame->Name, name, sizeof(frame->Name));
+        LuaInvalidateFrame(frame);
     }
     return frame;
 }
@@ -3639,6 +3644,8 @@ static int LuaBlzGetOriginFrame(lua_State *L) {
         if (frame) {
             strlcpy(frame->Name, name, sizeof(frame->Name));
             UI_SetAllPoints(frame);
+            frame->dynamic = true;
+            LuaInvalidateFrame(frame);
         }
     }
     if (frame) lua_pushlightuserdata(L, frame); else lua_pushnil(L);
@@ -3697,6 +3704,7 @@ static int LuaBlzGetFrameByName(lua_State *L) {
 static int LuaBlzFrameSetText(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     if (frame) UI_SetText(frame, "%s", luaL_checkstring(L, 2));
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3704,6 +3712,7 @@ static int LuaBlzFrameSetScale(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     float scale = (float)luaL_checknumber(L, 2);
     if (frame && scale >= 0.0f) frame->Scale = scale;
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3714,6 +3723,7 @@ static int LuaBlzFrameSetTooltip(lua_State *L) {
         frame->Tip = tooltip->Text;
         frame->Ubertip = tooltip->Ubertip;
     }
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3727,6 +3737,7 @@ static int LuaBlzFrameSetTextAlignment(lua_State *L) {
         if (horizontal >= 0 && horizontal <= 2)
             frame->Font.Justification.Horizontal = (uiFontJustificationH_t)horizontal;
     }
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3738,6 +3749,7 @@ static int LuaBlzFrameSetLevel(lua_State *L) {
 static int LuaBlzFrameSetSize(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     if (frame) UI_SetSize(frame, (float)luaL_checknumber(L, 2), (float)luaL_checknumber(L, 3));
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3746,6 +3758,7 @@ static int LuaBlzFrameSetPoint(lua_State *L) {
     frameDef_t *relative = LuaGetFrame(L, 3);
     if (frame) UI_SetPoint(frame, LuaFramePoint(L, 2), relative, LuaFramePoint(L, 4),
                            (float)luaL_checknumber(L, 5), (float)luaL_checknumber(L, 6));
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3754,6 +3767,7 @@ static int LuaBlzFrameSetAbsPoint(lua_State *L) {
     UIFRAMEPOINT point = LuaFramePoint(L, 2);
     if (frame) UI_SetPoint(frame, point, NULL, point,
                            (float)luaL_checknumber(L, 3), (float)luaL_checknumber(L, 4));
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3763,6 +3777,7 @@ static int LuaBlzFrameSetAllPoints(lua_State *L) {
     if (frame) {
         UI_SetPoint(frame, FRAMEPOINT_TOPLEFT, relative, FRAMEPOINT_TOPLEFT, 0, 0);
         UI_SetPoint(frame, FRAMEPOINT_BOTTOMRIGHT, relative, FRAMEPOINT_BOTTOMRIGHT, 0, 0);
+        LuaInvalidateFrame(frame);
     }
     return 0;
 }
@@ -3770,12 +3785,14 @@ static int LuaBlzFrameSetAllPoints(lua_State *L) {
 static int LuaBlzFrameSetEnable(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     if (frame) UI_SetEnabled(frame, lua_toboolean(L, 2) != 0);
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
 static int LuaBlzFrameSetVisible(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     if (frame) UI_SetHidden(frame, lua_toboolean(L, 2) == 0);
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
@@ -3785,6 +3802,7 @@ static int LuaBlzFrameClearAllPoints(lua_State *L) {
         memset(&frame->Points, 0, sizeof(frame->Points));
         memset(&frame->SetPoint, 0, sizeof(frame->SetPoint));
         frame->AnyPointsSet = false;
+        LuaInvalidateFrame(frame);
     }
     return 0;
 }
@@ -3792,6 +3810,7 @@ static int LuaBlzFrameClearAllPoints(lua_State *L) {
 static int LuaBlzFrameSetTexture(lua_State *L) {
     frameDef_t *frame = LuaGetFrame(L, 1);
     if (frame) UI_SetTexture(frame, luaL_checkstring(L, 2), lua_toboolean(L, 4) != 0);
+    LuaInvalidateFrame(frame);
     return 0;
 }
 
