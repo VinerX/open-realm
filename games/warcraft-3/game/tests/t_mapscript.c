@@ -1661,6 +1661,38 @@ TEST(wc3_mapscript, lua_create_unit_and_ability_helpers_use_shared_engine) {
     reset_entities();
 }
 
+TEST(wc3_mapscript, lua_set_unit_time_scale_matches_jass_engine_path) {
+    wc3Lua_t *previous_lua = level.lua_vm;
+    wc3Lua_t *lua;
+    edict_t *unit = NULL;
+    reset_entities();
+    setup_test_world();
+    lua = WC3_LuaNewState();
+    T_NOT_NULL(lua);
+    if (!lua) return;
+    level.lua_vm = lua;
+    T_ASSERT(G_LoadLuaMapScript(lua,
+        "function RunTimeScaleTest()\n"
+        "local u = CreateUnit(Player(0), unit_id, 32, 32, 0)\n"
+        "SetUnitTimeScale(u, 0.25)\n"
+        "SetUnitTimeScale(u, -1)\n"
+        "end\n",
+        "lua-unit-time-scale-test.lua"));
+    WC3_LuaRegisterInteger(lua, "unit_id", MAKEFOURCC('h', 'f', 'o', 'o'));
+    T_ASSERT(WC3_LuaCall(lua, "RunTimeScaleTest"));
+    for (int i = 0; i < globals.num_edicts; ++i) {
+        if (g_edicts[i].inuse && g_edicts[i].class_id == MAKEFOURCC('h', 'f', 'o', 'o')) {
+            unit = &g_edicts[i];
+            break;
+        }
+    }
+    T_NOT_NULL(unit);
+    if (unit) T_EQ(unit->animation_speed, 0.0f);
+    level.lua_vm = previous_lua;
+    WC3_LuaClose(lua);
+    reset_entities();
+}
+
 TEST(wc3_mapscript, lua_issue_immediate_order_matches_jass_engine_path) {
     wc3Lua_t *previous_lua = level.lua_vm;
     wc3Lua_t *lua;

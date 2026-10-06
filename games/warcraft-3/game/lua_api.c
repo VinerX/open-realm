@@ -1162,6 +1162,13 @@ static int LuaSetUnitFlyHeight(lua_State *L) {
     return 0;
 }
 
+static int LuaSetUnitTimeScale(lua_State *L) {
+    edict_t *unit = lua_touserdata(L, 1);
+    float time_scale = (float)luaL_checknumber(L, 2);
+    if (unit) unit->animation_speed = MAX(0.0f, time_scale);
+    return 0;
+}
+
 static int LuaGetUnitMoveSpeed(lua_State *L) {
     edict_t *unit = lua_touserdata(L, 1);
     lua_pushnumber(L, unit ? unit->unitinfo.MoveSpeed : 0.0f);
@@ -4630,6 +4637,7 @@ void G_RegisterLuaMapRuntimeNatives(wc3Lua_t *L) {
     WC3_LuaRegisterNative(L, "GetUnitFlyHeight", LuaGetUnitFlyHeight);
     WC3_LuaRegisterNative(L, "GetUnitDefaultFlyHeight", LuaGetUnitDefaultFlyHeight);
     WC3_LuaRegisterNative(L, "SetUnitFlyHeight", LuaSetUnitFlyHeight);
+    WC3_LuaRegisterNative(L, "SetUnitTimeScale", LuaSetUnitTimeScale);
     WC3_LuaRegisterNative(L, "GetUnitFoodMade", LuaGetUnitFoodMade);
     WC3_LuaRegisterNative(L, "GetUnitLevel", LuaGetUnitLevel);
     WC3_LuaRegisterNative(L, "GetHeroLevel", LuaGetHeroLevel);
