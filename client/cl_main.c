@@ -36,6 +36,7 @@ struct client_static cls;
 struct client_state cl;
 
 #define CL_TIMEOUT_MSEC 10000
+#define CL_LOCAL_LOAD_TIMEOUT_MSEC 30000
 #define CL_LOADING_PUMP_MSEC 16 // milliseconds; one 60 Hz platform pump; bounds checkpoint overhead during loading
 
 typedef struct { cstring_t name; xcommand_t call; } clMenuCommand_t;
@@ -44,7 +45,13 @@ typedef enum { CL_MENU_UNLOADED, CL_MENU_READY, CL_MENU_SUSPENDED } clMenuLife_t
 static clMenuLife_t cl_menu_life;
 
 static uint32_t cl_last_packet_time = 0;
+static uint32_t cl_last_local_load_frame_time = 0;
 static uint32_t cl_realtime = 0;
+static bool CL_ConnectionTimedOut(uint32_t packet_now, uint32_t last_packet,
+                                  uint32_t local_now, uint32_t last_local_load_frame,
+                                  bool local_server_active);
+static bool CL_IsLocalMapLoadActive(bool dedicated, bool server_loading,
+                                    bool server_active, bool client_loading);
 
 typedef enum {
     CL_MENU_ACTION_NONE,
@@ -750,6 +757,21 @@ TEST(client_loading, progress_is_clamped_and_monotonic) {
     cls.disable_screen = saved_disable_screen;
 }
 
+TEST(client_session, local_map_loading_liveness_is_bounded_and_not_a_packet) {
+    T_ASSERT(!CL_ConnectionTimedOut(30000, 1000, 71000, 70000, true));
+    T_ASSERT(CL_ConnectionTimedOut(30000, 1000, 101000, 70000, true));
+    T_ASSERT(CL_ConnectionTimedOut(30000, 1000, 71000, 70000, false));
+    T_ASSERT(!CL_ConnectionTimedOut(30000, 0, 71000, 70000, true));
+}
+
+TEST(client_session, local_client_map_registration_keeps_load_liveness) {
+    T_ASSERT(CL_IsLocalMapLoadActive(false, true, false, false));
+    T_ASSERT(CL_IsLocalMapLoadActive(false, false, true, true));
+    T_ASSERT(!CL_IsLocalMapLoadActive(false, false, false, true));
+    T_ASSERT(!CL_IsLocalMapLoadActive(true, true, true, true));
+    T_ASSERT(!CL_IsLocalMapLoadActive(false, false, true, false));
+}
+
 static uint32_t cl_test_menu_calls;
 static void CL_TestMenuCommand(void) { cl_test_menu_calls++; }
 TEST(client_session, menu_commands_cannot_enter_loading_or_active_world) {
@@ -1097,8 +1119,12 @@ void CL_LoadingFrame(void) {
     static uint32_t last_pump;
     uint32_t now;
 
-    if (!scr_initialized || Cvar_Integer("dedicated", 0)) return;
+    if (Cvar_Integer("dedicated", 0)) return;
     now = SDL_GetTicks();
+    if (CL_IsLocalMapLoadActive(false, SV_IsLoading(), SV_IsActive(),
+                                 cl.playerstate.client_ui_state == CLIENT_UI_LOADING))
+        cl_last_local_load_frame_time = now;
+    if (!scr_initialized) return;
     if (cl.playerstate.client_ui_state == CLIENT_UI_LOADING &&
         now - cl.loading_last_report_msec >= 1000) {
         cl.loading_last_report_msec = now;
@@ -1122,11 +1148,29 @@ void CL_SendCmd(void) {
     Netchan_Transmit(NS_CLIENT, &cls.netchan);
 }
 
+static bool CL_ConnectionTimedOut(uint32_t packet_now, uint32_t last_packet,
+                                  uint32_t local_now, uint32_t last_local_load_frame,
+                                  bool local_server_active) {
+    if (last_packet == 0 || packet_now - last_packet <= CL_TIMEOUT_MSEC) return false;
+    return !local_server_active || last_local_load_frame == 0 ||
+           local_now - last_local_load_frame > CL_LOCAL_LOAD_TIMEOUT_MSEC;
+}
+
+static bool CL_IsLocalMapLoadActive(bool dedicated, bool server_loading,
+                                    bool server_active, bool client_loading) {
+    return !dedicated && (server_loading || (server_active && client_loading));
+}
+
 static void CL_CheckTimeout(void) {
     if (cls.state < ca_connected || cl_last_packet_time == 0) {
         return;
     }
-    if (cl_realtime - cl_last_packet_time <= CL_TIMEOUT_MSEC) {
+    uint32_t const local_now = SDL_GetTicks();
+    bool const local_server_active = CL_IsLocalMapLoadActive(
+        Cvar_Integer("dedicated", 0), SV_IsLoading(), SV_IsActive(),
+        cl.playerstate.client_ui_state == CLIENT_UI_LOADING);
+    if (!CL_ConnectionTimedOut(cl_realtime, cl_last_packet_time, local_now,
+                               cl_last_local_load_frame_time, local_server_active)) {
         return;
     }
     CL_Disconnect("Connection to host timed out.", true);

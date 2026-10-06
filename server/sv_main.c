@@ -9,6 +9,9 @@
  * Entry point called from the platform main loop: SV_Frame().
  */
 #include "server.h"
+#ifdef BZ_TESTS
+#include "shared/test.h"
+#endif
 
 //#define PRINT_ANIMATIONS
 
@@ -21,6 +24,30 @@ struct server_static svs;
 bool SV_IsActive(void) {
     return svs.initialized && (sv.state == ss_lobby || sv.state == ss_game);
 }
+
+bool SV_IsLoading(void) {
+    return svs.initialized && sv.state == ss_loading;
+}
+
+#ifdef BZ_TESTS
+TEST(server_state, loading_state_is_distinct_from_active_game) {
+    serverState_t saved_state = sv.state;
+    bool saved_initialized = svs.initialized;
+
+    svs.initialized = true;
+    sv.state = ss_loading;
+    T_ASSERT(SV_IsLoading());
+    T_ASSERT(!SV_IsActive());
+    sv.state = ss_game;
+    T_ASSERT(!SV_IsLoading());
+    T_ASSERT(SV_IsActive());
+    svs.initialized = false;
+    T_ASSERT(!SV_IsLoading());
+
+    sv.state = saved_state;
+    svs.initialized = saved_initialized;
+}
+#endif
 
 /* Store one server-owned configstring and force reliable client resynchronization. */
 void SV_SetConfigString(uint32_t index, cstring_t value, uint32_t len) {
