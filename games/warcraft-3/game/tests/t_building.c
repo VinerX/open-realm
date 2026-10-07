@@ -1795,6 +1795,20 @@ TEST(wc3_building, command_button_geometry_matches_warcraft_grid) {
     gi.ImageIndex = old_image_index;
 }
 
+TEST(wc3_building, negative_authored_button_position_hides_ability) {
+    uint32_t x = UINT_MAX, y = UINT_MAX;
+
+    T_EQ(G_ParseCommandButtonPosition("-11,0", &x, &y), COMMAND_BUTTON_POSITION_HIDDEN);
+    T_EQ(G_ParseCommandButtonPosition("2,-11", &x, &y), COMMAND_BUTTON_POSITION_HIDDEN);
+    T_EQ(G_ParseCommandButtonPosition("2,1", &x, &y), COMMAND_BUTTON_POSITION_AUTHORED);
+    T_EQ(x, 2);
+    T_EQ(y, 1);
+    T_EQ(G_ParseCommandButtonPosition("8,1", &x, &y), COMMAND_BUTTON_POSITION_AUTHORED);
+    T_EQ(x, 3);
+    T_EQ(y, 1);
+    T_EQ(G_ParseCommandButtonPosition("", &x, &y), COMMAND_BUTTON_POSITION_DEFAULT);
+}
+
 TEST(wc3_building, command_button_number_draws_bottom_right_overlay) {
     void (*old_write)(pfWriteType_t, void const *) = gi.Write;
     int (*old_image_index)(cstring_t) = gi.ImageIndex;

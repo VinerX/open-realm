@@ -2619,6 +2619,12 @@ void G_ResourceGainEvent(edict_t *source, uint32_t resource_state, int32_t amoun
 // hud/hud_unit.c
 uint8_t G_GetCommandButtons(edict_t *ent, gameCommandButton_t *buttons, uint8_t max_buttons);
 bool G_BuildCommandButton(edict_t *ent, cstring_t code, bool research, uint32_t level, gameCommandButton_t *button);
+typedef enum {
+    COMMAND_BUTTON_POSITION_DEFAULT,
+    COMMAND_BUTTON_POSITION_AUTHORED,
+    COMMAND_BUTTON_POSITION_HIDDEN
+} commandButtonPositionResult_t;
+commandButtonPositionResult_t G_ParseCommandButtonPosition(cstring_t buttonpos, uint32_t *x, uint32_t *y);
 bool G_BuildAllEnabled(void);
 bool G_WorkerCanBuild(edict_t *worker, uint32_t building_id);
 bool G_ProducerCanTrain(edict_t *producer, uint32_t unit_id);

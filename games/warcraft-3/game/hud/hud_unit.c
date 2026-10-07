@@ -156,6 +156,16 @@ static cstring_t G_UIArtPath(cstring_t art) {
     return Theme_String(art, art);
 }
 
+commandButtonPositionResult_t G_ParseCommandButtonPosition(cstring_t buttonpos, uint32_t *x, uint32_t *y) {
+    int parsed_x, parsed_y;
+
+    if (!buttonpos || sscanf(buttonpos, "%d,%d", &parsed_x, &parsed_y) != 2) return COMMAND_BUTTON_POSITION_DEFAULT;
+    if (parsed_x < 0 || parsed_y < 0) return COMMAND_BUTTON_POSITION_HIDDEN;
+    if (x) *x = MIN((uint32_t)parsed_x, 3);
+    if (y) *y = MIN((uint32_t)parsed_y, 2);
+    return COMMAND_BUTTON_POSITION_AUTHORED;
+}
+
 static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool research, uint32_t level, int toggle_state, gameCommandButton_t *button) {
     char command_code[256];
     char art_level[256];
@@ -217,6 +227,7 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
                              G_ResearchField(STR_UBERTIP, research && !upgrade_research));
     hotkey = FindConfigValue(art_code, toggle_on ? STR_UNHOTKEY :
                             G_ResearchField(STR_HOTKEY, research && !upgrade_research));
+    if (G_ParseCommandButtonPosition(buttonpos, &x, &y) == COMMAND_BUTTON_POSITION_HIDDEN) return false;
     if (unitProfile) {
         if ((!art || !*art) && unitProfile->art) art = unitProfile->art;
         if ((!tip || !*tip) && unitProfile->tip) tip = unitProfile->tip;
@@ -226,10 +237,6 @@ static bool G_BuildCommandButtonState(edict_t *ent, cstring_t code, bool researc
     }
     UI_CopyString(art_level, sizeof(art_level), research ? G_StringForLevel(art, level) : art);
     art_path = G_UIArtPath(art_level);
-
-    if (buttonpos && *buttonpos) {
-        sscanf(buttonpos, "%u,%u", &x, &y);
-    }
 
     UI_CopyString(button->art, sizeof(button->art), art_path);
     UI_CopyString(button->tooltip, sizeof(button->tooltip), G_CleanTooltipString(tip, level));
