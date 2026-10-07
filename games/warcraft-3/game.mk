@@ -166,6 +166,25 @@ $(eval $(call app_schema,$(BINARY),$(SHARED_LIB) $(JASS_LIB) $(CASC_LIB) $(SHEET
 GAME_WC3_TEST_LIB := $(LIB_DIR)/libgame-wc3-test$(LIB_EXT)
 WC3_TEST_BINARY   := $(BIN_DIR)/openwarcraft3-tests$(EXE_EXT)
 
+# Windows resolves imported DLLs beside the executable before consulting PATH.
+# Keep the runnable bin/ modules synchronized with lib/ after source changes.
+ifeq ($(OS),Windows_NT)
+WC3_RUNTIME_DLLS := $(SHARED_LIB) $(JASS_LIB) $(SHEET_LIB) $(GAME_LIB) $(MENU_LIB) $(RENDERER_LIB)
+WC3_RUNTIME_STAMP := $(BIN_DIR)/.wc3-runtime.stamp
+WC3_TEST_RUNTIME_STAMP := $(BIN_DIR)/.wc3-test-runtime.stamp
+
+$(WC3_RUNTIME_STAMP): $(WC3_RUNTIME_DLLS) | $(BIN_DIR)
+	@cp $^ $(BIN_DIR)/
+	@touch $@
+
+$(WC3_TEST_RUNTIME_STAMP): $(WC3_RUNTIME_DLLS) $(GAME_WC3_TEST_LIB) | $(BIN_DIR)
+	@cp $^ $(BIN_DIR)/
+	@touch $@
+
+$(BINARY): $(WC3_RUNTIME_STAMP)
+$(WC3_TEST_BINARY): $(WC3_TEST_RUNTIME_STAMP)
+endif
+
 $(eval $(call unity_lib_schema,$(GAME_WC3_TEST_LIB),$(GAME_BASE_DEPS) $(JASS_LIB) $(LUA53_LIB) $(LUA53_SRCS) $(SHEET_LIB) $(WORLD_CORE_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(WC3_LUA_HEADERS) $(call CSRC,$(WC3_GAME_DIR)) $(WC3_LUA_SRCS),game-wc3-test,$(WC3_GAME_DIR) $(WC3_DIR)/common $(WC3_LUA_DIR),! -name 'world_w3.c' ! -name 'fs_casc.c' ! -path '*/lua/tests/*',$(WC3_FDF_CFLAGS) $(LUA53_CFLAGS) -DBZ_TESTS,common/mpq.c,-lsheet -lshared -ljass -llua53 $(LIBS) -lm -lz))
 $(eval $(call app_schema,$(WC3_TEST_BINARY),$(SHARED_LIB) $(JASS_LIB) $(CASC_LIB) $(SHEET_LIB) $(GAME_WC3_TEST_LIB) $(RENDERER_LIB) $(MENU_LIB) $(APP_SRCS) $(filter-out $(WC3_DIR)/common/fs_casc.c,$(WC3_COMMON_SRCS)) $(CLIENT_HEADERS) $(COMMON_HEADERS) $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c,openwarcraft3-tests,$(WC3_FDF_CFLAGS) $(CASC_CFLAGS) -DBZ_CLIENT_WORLD -DBZ_TESTS,-lsheet -lshared -ljass -lgame-wc3-test -lrenderer -lmenu $(LIBS) $(WC3_FFMPEG_LIBS) $(CASC_LINK_LIBS),$(WC3_DIR)/common/world_w3.c $(WC3_DIR)/common/fs_casc.c $(WC3_TEST_DIR)/test_coordinates.c $(WC3_TEST_DIR)/test_fs.c))
 

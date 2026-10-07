@@ -44,11 +44,30 @@ Do not return fabricated success from a missing native.
   group fix passed that scenario at step 201 with zero initialization errors
   and an empty region. The same run still logs player tech-state capacity
   exhaustion at 256 entries; native coverage and playability remain incomplete.
-- Custom `UISetup` currently cannot run: the `BlzFrame*` functions are reporting
-  stubs. Its guard requires `ConsoleUIBackdrop` and `UpperButtonBarFrame`, so
-  default HUD rendering is not proof of custom frame support. Retail child
-  indices and origin frames need explicit contracts against the native frame
-  hierarchy; do not invent aliases just to get past the guard.
+- At the 508 checkpoint, custom `UISetup` could not run because its required
+  frame natives were reporting stubs. A later 1.6.509 OpenRealm run on
+  2026-10-07 logged `DeferredUISetup` and both `UISetup` passes succeeding, with
+  `ConsoleUIBackdrop` and `UpperButtonBarFrame` present. This proves those
+  startup frame queries work; it does not prove visual parity. The captured HUD
+  still has a mostly black world and empty-looking lower panels, and Retail
+  captures at the same state are still needed to attribute the remaining gap.
+
+## Live 1.6.509 startup checkpoint (2026-10-07)
+
+The full map ran in a visible OpenRealm process with 15 local computer slots
+through 90 seconds of simulation. The observer recorded all 15 computer
+players, initialized start units, zero map initialization errors, and CAST /
+EFFECT / FINISH / ENDCAST events for `A0UK` and `A0HL`. The probe used console
+button commands, so this verifies ability dispatch and map callbacks, not mouse
+click selection parity. The final screenshot shows AI markers and units on the
+minimap, while most of the world view remains dark; this may be limited vision
+and needs a matched Retail frame before changing fog or rendering behavior.
+
+The run exposed no `BlzEnableSelections` unsupported-native warning. Its focused
+Lua API regression passed 14/14 assertions; `SetUnitTimeScale` passed 5/5 in
+both Classic and TFT. The map observer and screenshots are retained in the
+ignored `wc3-parity/artifacts/legionui46/` run directory. These checks do not
+establish full UI, race-selection, or AI-order parity.
 
 ## Chat contract
 

@@ -15,6 +15,13 @@ From PowerShell, `tools/build-windows.ps1` builds the native executable and
 writes a runnable folder to `dist\windows` by default. Override `-MsysRoot`
 and `-PackageDir` when MSYS2 or the package belongs in a different location.
 
+During development, Windows loads imported modules from `build/bin` beside the
+executable before searching `PATH`. The Warcraft build targets therefore stage
+the current game DLLs from `build/lib` into `build/bin` before relinking either
+the client or its headless test executable. When diagnosing a build, compare
+those copies; a successful library build alone does not prove the executable is
+using it.
+
 ## What a runnable Windows folder must contain
 
 A clean Windows install has no MSYS2, and Windows resolves DLLs from the
