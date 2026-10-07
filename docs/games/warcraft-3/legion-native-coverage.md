@@ -59,9 +59,12 @@ through 90 seconds of simulation. The observer recorded all 15 computer
 players, initialized start units, zero map initialization errors, and CAST /
 EFFECT / FINISH / ENDCAST events for `A0UK` and `A0HL`. The probe used console
 button commands, so this verifies ability dispatch and map callbacks, not mouse
-click selection parity. The final screenshot shows AI markers and units on the
-minimap, while most of the world view remains dark; this may be limited vision
-and needs a matched Retail frame before changing fog or rendering behavior.
+click selection parity. The t90 screenshot shows AI markers and units on the
+minimap, while most of the world view remains dark. A separate early frame
+with the race selector selected shows terrain around the unit against black
+fog beyond it, supporting limited vision as the cause of the dark field. The
+lower command grid still appears empty and needs a matched Retail capture before
+changing frame or rendering behavior.
 
 The run exposed no `BlzEnableSelections` unsupported-native warning. Its focused
 Lua API regression passed 14/14 assertions; `SetUnitTimeScale` passed 5/5 in
